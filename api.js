@@ -7,7 +7,8 @@
  *
  * 数据源：
  *   1. 东方财富 push2 / push2his（实时报价、分时、日 K）
- *   2. 新浪财经 hq.sinajs.cn（报价兜底；美股盘前/盘后涨跌幅）
+ *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器侧常因 Referer 校验失败）
+ *   3. Yahoo Finance chart（美股盘前/盘后涨跌幅；浏览器经 CORS 中继）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -237,7 +238,134 @@
   }
 
   /**
-   * 用新浪美股数据补齐东方财富报价中的盘前/盘后涨跌幅（preChange）
+   * 浏览器跨域拉取 JSON：先直连，失败再用 jina 中继（Yahoo 无 CORS；新浪需 Referer）
+   */
+  async function fetchJsonWithCorsFallback(url) {
+    try {
+      const resp = await fetch(url, {
+        headers: { Accept: "application/json" }
+      });
+      if (resp.ok) return await resp.json();
+    } catch (_) {
+      // 走中继
+    }
+
+    const relay = "https://r.jina.ai/" + url;
+    const resp2 = await fetch(relay, {
+      headers: { Accept: "application/json" }
+    });
+    if (!resp2.ok) throw new Error("行情中继请求失败");
+    const wrapped = await resp2.json();
+    const content = wrapped?.data?.content;
+    if (content == null || content === "") throw new Error("行情中继无数据");
+    return typeof content === "string" ? JSON.parse(content) : content;
+  }
+
+  /** Yahoo 美股代码：BRK.B → BRK-B */
+  function toYahooSymbol(code) {
+    return String(code || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\./g, "-");
+  }
+
+  /**
+   * 从 Yahoo chart 结果解析盘前/盘后涨跌幅（相对最近常规收盘价）
+   * @returns {number|null}
+   */
+  function preChangeFromYahooChart(result) {
+    if (!result?.meta || !result.timestamp?.length) return null;
+    const meta = result.meta;
+    const baseline = Number(meta.regularMarketPrice);
+    if (!baseline || Number.isNaN(baseline)) return null;
+
+    const timestamps = result.timestamp;
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const periods = meta.currentTradingPeriod || {};
+    const pre = periods.pre;
+    const post = periods.post;
+    const now = Math.floor(Date.now() / 1000);
+
+    function lastCloseInRange(start, end) {
+      if (start == null || end == null) return null;
+      for (let i = timestamps.length - 1; i >= 0; i--) {
+        const t = timestamps[i];
+        const px = closes[i];
+        if (t >= start && t < end && px != null && !Number.isNaN(Number(px))) {
+          return Number(px);
+        }
+      }
+      return null;
+    }
+
+    let extPrice = null;
+    if (post && now >= post.start) {
+      extPrice = lastCloseInRange(post.start, post.end);
+    }
+    if (extPrice == null && pre) {
+      extPrice = lastCloseInRange(pre.start, pre.end);
+    }
+    // 时段字段缺失时：取序列最新价（含盘前盘后）
+    if (extPrice == null) {
+      for (let i = closes.length - 1; i >= 0; i--) {
+        if (closes[i] != null && !Number.isNaN(Number(closes[i]))) {
+          extPrice = Number(closes[i]);
+          break;
+        }
+      }
+    }
+
+    if (extPrice == null || Math.abs(extPrice - baseline) < 1e-9) return null;
+    return Math.round(((extPrice - baseline) / baseline) * 10000) / 100;
+  }
+
+  /**
+   * 美股盘前/盘后涨跌幅（Yahoo Finance 1m chart + includePrePost）
+   * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
+   */
+  async function loadUsPreMarketQuotes(holdings, concurrency = 4) {
+    const usHoldings = holdings.filter(isUsHolding);
+    if (!usHoldings.length) return {};
+
+    const map = {};
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < usHoldings.length) {
+        const h = usHoldings[cursor++];
+        const code = quoteKey(h.code);
+        const symbol = toYahooSymbol(h.code);
+        if (!symbol) continue;
+        try {
+          const url =
+            "https://query1.finance.yahoo.com/v8/finance/chart/" +
+            encodeURIComponent(symbol) +
+            "?interval=1m&range=1d&includePrePost=true";
+          const json = await fetchJsonWithCorsFallback(url);
+          const result = json?.chart?.result?.[0];
+          const preChange = preChangeFromYahooChart(result);
+          if (preChange == null || Number.isNaN(preChange)) continue;
+          map[code] = {
+            name: result?.meta?.shortName || h.name || code,
+            price: Number(result?.meta?.regularMarketPrice) || undefined,
+            preChange
+          };
+        } catch (_) {
+          // 单只失败不影响其余
+        }
+      }
+    }
+
+    const workers = Array.from(
+      { length: Math.min(concurrency, usHoldings.length) },
+      () => worker()
+    );
+    await Promise.all(workers);
+    return map;
+  }
+
+  /**
+   * 用美股盘前/盘后数据补齐东方财富报价中的 preChange
    * 失败时不影响原有 change
    */
   async function enrichUsPreMarket(holdings, map) {
@@ -245,11 +373,11 @@
     if (!usHoldings.length) return map;
 
     try {
-      const sina = await loadSinaQuotes(usHoldings);
+      const preMap = await loadUsPreMarketQuotes(usHoldings);
       usHoldings.forEach((h) => {
         const key = quoteKey(h.code);
         const target = map[key] || map[h.code];
-        const src = sina[key] || sina[h.code];
+        const src = preMap[key] || preMap[h.code];
         if (!target || !src || src.preChange == null || Number.isNaN(src.preChange)) {
           return;
         }
@@ -264,7 +392,7 @@
   /**
    * 统一实时报价入口（一次只查传入的持仓，由调用方按页传入，不做多页合并）
    * 优先东方财富；失败/空数据则回退新浪。
-   * 美股盘前请另调 enrichUsPreMarket，避免串行等待拖慢日涨跌同步。
+   * 美股盘前请另调 loadUsPreMarketQuotes / enrichUsPreMarket，避免串行等待拖慢日涨跌同步。
    *
    * @returns {Promise<Object>} code -> { name, price, change, preChange? }
    */
@@ -547,6 +675,7 @@
     loadQuotes,
     loadEastMoneyQuotes,
     loadSinaQuotes,
+    loadUsPreMarketQuotes,
     loadIntradayTrends,
     loadDailyKlines,
     resolveStock,

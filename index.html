@@ -99,7 +99,7 @@
     const {
       quoteKey,
       loadQuotes,
-      loadSinaQuotes,
+      loadUsPreMarketQuotes,
       loadIntradayTrends,
       loadDailyKlines,
       calcPeriodReturns,
@@ -693,8 +693,8 @@
       try {
         const usOnPage = pageHoldings.filter(isUsHolding);
         // 美股盘前与东财日涨跌并行请求，避免串行拖慢
-        const sinaPrePromise = usOnPage.length
-          ? loadSinaQuotes(usOnPage).catch(() => null)
+        const prePromise = usOnPage.length
+          ? loadUsPreMarketQuotes(usOnPage)
           : null;
 
         const quotes = await loadQuotes(pageHoldings);
@@ -721,12 +721,13 @@
 
         persistFromDom();
 
-        if (sinaPrePromise) {
-          sinaPrePromise.then((sina) => {
-            if (!sina) return;
+        let preOk = 0;
+        if (prePromise) {
+          try {
+            const preMap = await prePromise;
             pageHoldings.forEach((h, offset) => {
               const key = quoteKey(h.code);
-              const src = sina[key] || sina[h.code];
+              const src = preMap[key] || preMap[h.code];
               if (!src || src.preChange == null || Number.isNaN(src.preChange)) return;
               const target = quotes[key] || quotes[h.code];
               if (target) target.preChange = src.preChange;
@@ -734,8 +735,11 @@
                 `[data-pre-change][data-fund="${fundId}"][data-index="${start + offset}"]`
               );
               if (preEl) applyPreChangeDisplay(preEl, src.preChange);
+              preOk += 1;
             });
-          });
+          } catch (preErr) {
+            console.warn("盘前行情失败", preErr);
+          }
         }
 
         if (ok === 0) {
@@ -746,11 +750,15 @@
         const page = getCurrentPage(fundId);
         const total = getTotalPages(fund);
         const pageTip = total > 1 ? `（第 ${page}/${total} 页）` : "";
-        showToast(
-          failed.length
-            ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
-            : `已同步 ${ok} 只股票实时涨跌幅`
-        );
+        let msg = failed.length
+          ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
+          : `已同步 ${ok} 只股票实时涨跌幅`;
+        if (usOnPage.length) {
+          msg += preOk
+            ? `，盘前 ${preOk} 只`
+            : "，盘前暂不可用";
+        }
+        showToast(msg);
       } catch (err) {
         showToast(err.message || "同步失败");
       } finally {

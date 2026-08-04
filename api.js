@@ -217,12 +217,13 @@
   }
 
   /**
-   * 统一实时报价入口
+   * 统一实时报价入口（一次只查传入的持仓，由调用方按页传入，不做多页合并）
    * 优先东方财富；成功后再补美股盘前；东方财富失败/空数据则回退新浪
    *
    * @returns {Promise<Object>} code -> { name, price, change, preChange? }
    */
   async function loadQuotes(holdings) {
+    if (!holdings.length) return {};
     try {
       const map = await loadEastMoneyQuotes(holdings);
       if (Object.keys(map).length) {

@@ -322,7 +322,6 @@ header p {
 .row input[readonly] {
   background: #f5f7fa;
   border-color: #e5e9f0;
-  color: #475569;
   cursor: default;
   box-shadow: none;
 }

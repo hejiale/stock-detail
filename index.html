@@ -122,6 +122,15 @@
       pageState[fundId] = Math.min(Math.max(1, page), total);
     }
 
+    /** 当前页持仓切片（最多 PAGE_SIZE 条） */
+    function getPageSlice(fundId) {
+      const fund = window.FUND_HOLDINGS[fundId];
+      const page = getCurrentPage(fundId);
+      const start = (page - 1) * PAGE_SIZE;
+      const holdings = fund.holdings.slice(start, start + PAGE_SIZE);
+      return { fund, page, start, holdings };
+    }
+
     function applyPage(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
       const page = getCurrentPage(fundId);
@@ -624,8 +633,11 @@
     }
 
     async function syncFundQuotes(fundId) {
-      const fund = window.FUND_HOLDINGS[fundId];
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
+      if (!btn || btn.disabled) return;
+
+      const { fund, start, holdings: pageHoldings } = getPageSlice(fundId);
+      if (!pageHoldings.length) return;
 
       const label = btn.querySelector(".btn-sync-label");
       btn.disabled = true;
@@ -633,11 +645,12 @@
       if (label) label.textContent = "正在抓取…";
 
       try {
-        const quotes = await loadQuotes(fund.holdings);
+        const quotes = await loadQuotes(pageHoldings);
         let ok = 0;
         const failed = [];
 
-        fund.holdings.forEach((h, i) => {
+        pageHoldings.forEach((h, offset) => {
+          const i = start + offset;
           const quote = quotes[h.code] || quotes[quoteKey(h.code)];
           const input = document.querySelector(`input[data-fund="${fundId}"][data-index="${i}"]`);
           const preEl = document.querySelector(
@@ -661,9 +674,12 @@
           return;
         }
 
+        const page = getCurrentPage(fundId);
+        const total = getTotalPages(fund);
+        const pageTip = total > 1 ? `（第 ${page}/${total} 页）` : "";
         showToast(
           failed.length
-            ? `已同步 ${ok} 只，失败：${failed.join("、")}`
+            ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
             : `已同步 ${ok} 只股票实时涨跌幅`
         );
       } catch (err) {
@@ -911,6 +927,7 @@
         const fundId = pagePrev.dataset.pagePrev;
         setCurrentPage(fundId, getCurrentPage(fundId) - 1);
         applyPage(fundId);
+        syncFundQuotes(fundId);
         return;
       }
 
@@ -919,14 +936,18 @@
         const fundId = pageNext.dataset.pageNext;
         setCurrentPage(fundId, getCurrentPage(fundId) + 1);
         applyPage(fundId);
+        syncFundQuotes(fundId);
         return;
       }
 
       const pageNum = e.target.closest("[data-page-num]");
       if (pageNum) {
         const fundId = pageNum.dataset.fundPage;
-        setCurrentPage(fundId, Number(pageNum.dataset.pageNum));
+        const nextPage = Number(pageNum.dataset.pageNum);
+        if (nextPage === getCurrentPage(fundId)) return;
+        setCurrentPage(fundId, nextPage);
         applyPage(fundId);
+        syncFundQuotes(fundId);
         return;
       }
 

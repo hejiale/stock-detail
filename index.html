@@ -39,8 +39,71 @@
 
   <div class="toast" id="toast"></div>
 
+  <div class="chart-modal" id="chartModal" aria-hidden="true">
+    <div class="chart-modal-backdrop" data-chart-close></div>
+    <div class="chart-modal-panel" role="dialog" aria-modal="true" aria-labelledby="chartModalName">
+      <div class="chart-modal-head">
+        <div class="chart-modal-title">
+          <div class="name" id="chartModalName">--</div>
+          <div class="sub" id="chartModalSub">当日分时走势</div>
+          <div class="chart-modal-meta">
+            <span class="price flat" id="chartModalPrice">--</span>
+            <span class="chg flat" id="chartModalChg">--</span>
+          </div>
+        </div>
+        <button class="chart-modal-close" type="button" data-chart-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="chart-periods" id="chartPeriods">
+        <button class="chart-period active" type="button" data-chart-range="day">
+          <span class="label">当日</span>
+          <span class="value" data-period-value="day">--</span>
+        </button>
+        <button class="chart-period" type="button" data-chart-range="1m">
+          <span class="label">近1月</span>
+          <span class="value" data-period-value="1m">--</span>
+        </button>
+        <button class="chart-period" type="button" data-chart-range="3m">
+          <span class="label">近3月</span>
+          <span class="value" data-period-value="3m">--</span>
+        </button>
+        <button class="chart-period" type="button" data-chart-range="6m">
+          <span class="label">近半年</span>
+          <span class="value" data-period-value="6m">--</span>
+        </button>
+        <button class="chart-period" type="button" data-chart-range="ytd">
+          <span class="label">今年以来</span>
+          <span class="value" data-period-value="ytd">--</span>
+        </button>
+        <button class="chart-period" type="button" data-chart-range="1y">
+          <span class="label">近1年</span>
+          <span class="value" data-period-value="1y">--</span>
+        </button>
+      </div>
+      <div class="chart-modal-body">
+        <div class="chart-canvas-wrap">
+          <canvas id="chartCanvas"></canvas>
+        </div>
+        <div class="chart-status" id="chartStatus">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <script src="data.js"></script>
+  <script src="api.js"></script>
   <script>
+    const {
+      quoteKey,
+      loadQuotes,
+      loadIntradayTrends,
+      loadDailyKlines,
+      calcPeriodReturns,
+      sliceKlinesForRange
+    } = window.MarketAPI;
+
     const STORAGE_KEY = "fund_daily_returns_v1";
     const PAGE_SIZE = 10;
     const pageState = {};
@@ -162,167 +225,6 @@
       showToast._timer = setTimeout(() => el.classList.remove("show"), 2600);
     }
 
-    function toSinaSymbol(holding) {
-      const code = holding.code;
-      if (holding.market === 105 || holding.market === 106 || /[A-Za-z]/.test(code)) {
-        return "gb_" + code.toLowerCase();
-      }
-      if (/^(6|9)\d{5}$/.test(code)) return "sh" + code;
-      if (/^(0|2|3)\d{5}$/.test(code)) return "sz" + code;
-      if (/^(4|8)\d{5}$/.test(code)) return "bj" + code;
-      return "sh" + code;
-    }
-
-    function toEastSecId(holding) {
-      if (holding.market != null) return holding.market + "." + holding.code;
-      const code = holding.code;
-      if (/^(6|9)\d{5}$/.test(code)) return "1." + code;
-      if (/^(0|2|3)\d{5}$/.test(code)) return "0." + code;
-      if (/^(4|8)\d{5}$/.test(code)) return "0." + code;
-      return "1." + code;
-    }
-
-    async function loadEastMoneyQuotes(holdings) {
-      const secids = holdings.map(toEastSecId).join(",");
-      const url =
-        "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3&secids=" +
-        encodeURIComponent(secids) +
-        "&_=" +
-        Date.now();
-
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error("行情接口请求失败");
-      const json = await resp.json();
-      const list = json?.data?.diff || [];
-      const map = {};
-      list.forEach((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
-        map[String(item.f12).toUpperCase()] = {
-          name: item.f14,
-          price: Number(item.f2),
-          change: Math.round(Number(item.f3) * 100) / 100
-        };
-      });
-      return map;
-    }
-
-    function loadSinaQuotes(holdings) {
-      return new Promise((resolve, reject) => {
-        const symbols = holdings.map(toSinaSymbol);
-        const list = symbols.join(",");
-        const script = document.createElement("script");
-        script.charset = "gbk";
-        script.src = "https://hq.sinajs.cn/list=" + list + "&_=" + Date.now();
-
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("行情请求超时，请检查网络后重试"));
-        }, 10000);
-
-        function cleanup() {
-          clearTimeout(timer);
-          script.onload = null;
-          script.onerror = null;
-          script.remove();
-        }
-
-        script.onload = () => {
-          cleanup();
-          const map = {};
-          holdings.forEach((h, idx) => {
-            const symbol = symbols[idx];
-            const raw = window["hq_str_" + symbol];
-            if (!raw) return;
-            const parts = raw.split(",");
-            // A股: name,open,prev,price...  美股 gb_: name,price,...,change%
-            let change;
-            if (symbol.startsWith("gb_")) {
-              const price = Number(parts[1]);
-              const pct = Number(parts[2]);
-              if (Number.isNaN(pct)) return;
-              change = pct;
-              // 盘前/盘后涨跌幅（相对常规时段收盘价）
-              const preRaw = Number(parts[22]);
-              const preChange = Number.isNaN(preRaw)
-                ? null
-                : Math.round(preRaw * 100) / 100;
-              map[h.code.toUpperCase()] = {
-                name: parts[0],
-                price,
-                change: Math.round(change * 100) / 100,
-                preChange
-              };
-              return;
-            }
-            const name = parts[0];
-            const prev = Number(parts[2]);
-            const price = Number(parts[3]);
-            if (!prev || Number.isNaN(prev) || Number.isNaN(price)) return;
-            change = ((price - prev) / prev) * 100;
-            map[h.code] = {
-              name,
-              price,
-              prev,
-              change: Math.round(change * 100) / 100
-            };
-          });
-          resolve(map);
-        };
-
-        script.onerror = () => {
-          cleanup();
-          reject(new Error("行情接口加载失败"));
-        };
-
-        document.head.appendChild(script);
-      });
-    }
-
-    function isUsHolding(holding) {
-      return (
-        holding.market === 105 ||
-        holding.market === 106 ||
-        /[A-Za-z]/.test(holding.code)
-      );
-    }
-
-    function quoteKey(code) {
-      return String(code).toUpperCase();
-    }
-
-    async function enrichUsPreMarket(holdings, map) {
-      const usHoldings = holdings.filter(isUsHolding);
-      if (!usHoldings.length) return map;
-
-      try {
-        const sina = await loadSinaQuotes(usHoldings);
-        usHoldings.forEach((h) => {
-          const key = quoteKey(h.code);
-          const target = map[key] || map[h.code];
-          const src = sina[key] || sina[h.code];
-          if (!target || !src || src.preChange == null || Number.isNaN(src.preChange)) {
-            return;
-          }
-          target.preChange = src.preChange;
-        });
-      } catch (_) {
-        // keep regular quotes even if pre-market enrichment fails
-      }
-      return map;
-    }
-
-    async function loadQuotes(holdings) {
-      try {
-        const map = await loadEastMoneyQuotes(holdings);
-        if (Object.keys(map).length) {
-          return enrichUsPreMarket(holdings, map);
-        }
-      } catch (_) {
-        // fall through to sina
-      }
-      return loadSinaQuotes(holdings);
-    }
-
     function applyPreChangeDisplay(el, value) {
       if (!el) return;
       el.classList.remove("up", "down");
@@ -334,6 +236,391 @@
       el.textContent = formatPct(n);
       if (n > 0) el.classList.add("up");
       else if (n < 0) el.classList.add("down");
+    }
+
+    function toneClass(n) {
+      if (n > 0) return "up";
+      if (n < 0) return "down";
+      return "flat";
+    }
+
+    function formatPrice(n) {
+      if (n == null || Number.isNaN(n)) return "--";
+      const abs = Math.abs(n);
+      if (abs >= 1000) return n.toFixed(0);
+      if (abs >= 100) return n.toFixed(1);
+      return n.toFixed(2);
+    }
+
+    function setChartStatus(msg) {
+      const el = document.getElementById("chartStatus");
+      if (!msg) {
+        el.classList.remove("show");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add("show");
+    }
+
+    function resetPeriodValues() {
+      document.querySelectorAll("[data-period-value]").forEach((el) => {
+        el.textContent = "--";
+        el.className = "value";
+      });
+      document.querySelectorAll(".chart-period").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.chartRange === "day");
+      });
+    }
+
+    function renderPeriodReturns(returns) {
+      Object.entries(returns || {}).forEach(([key, value]) => {
+        const el = document.querySelector(`[data-period-value="${key}"]`);
+        if (!el) return;
+        if (value == null || Number.isNaN(value)) {
+          el.textContent = "--";
+          el.className = "value";
+          return;
+        }
+        el.textContent = formatPct(value);
+        el.className = "value " + toneClass(value);
+      });
+    }
+
+    function buildRangeSeries(range, state) {
+      if (range === "day") {
+        if (!state.trend) return null;
+        return {
+          title: "当日分时",
+          baseline: state.trend.preClose,
+          baselineLabel: "昨收",
+          points: state.trend.points.map((p) => ({
+            label: p.time,
+            price: p.price,
+            avg: p.avg,
+            volume: p.volume
+          })),
+          showAvg: true
+        };
+      }
+
+      if (!state.history?.klines?.length) return null;
+      const sliced = sliceKlinesForRange(state.history.klines, range);
+      if (sliced.length < 2) return null;
+
+      const labels = {
+        "1m": "近1月",
+        "3m": "近3月",
+        "6m": "近半年",
+        ytd: "今年以来",
+        "1y": "近1年"
+      };
+
+      return {
+        title: labels[range] || "走势",
+        baseline: sliced[0].close,
+        baselineLabel: "起点",
+        points: sliced.map((k) => ({
+          label: k.date.slice(5),
+          price: k.close,
+          avg: null,
+          volume: k.volume
+        })),
+        showAvg: false
+      };
+    }
+
+    function drawIntradayChart(canvas, series) {
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || 320;
+      const cssH = canvas.clientHeight || 280;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const points = series.points;
+      if (!points?.length) return;
+
+      const pad = { top: 16, right: 14, bottom: 56, left: 52 };
+      const volH = 48;
+      const plotW = cssW - pad.left - pad.right;
+      const plotH = cssH - pad.top - pad.bottom - volH - 10;
+      const volTop = pad.top + plotH + 10;
+
+      const prices = points.map((p) => p.price);
+      let minP = Math.min(...prices);
+      let maxP = Math.max(...prices);
+      if (series.baseline != null) {
+        minP = Math.min(minP, series.baseline);
+        maxP = Math.max(maxP, series.baseline);
+      }
+      const span = maxP - minP || Math.abs(maxP) * 0.01 || 1;
+      minP -= span * 0.08;
+      maxP += span * 0.08;
+
+      const maxVol = Math.max(...points.map((p) => p.volume || 0), 1);
+      const last = points[points.length - 1];
+      const lineColor =
+        series.baseline == null
+          ? "#1677ff"
+          : last.price >= series.baseline
+            ? "#e64545"
+            : "#12a150";
+
+      function xAt(i) {
+        if (points.length === 1) return pad.left + plotW / 2;
+        return pad.left + (i / (points.length - 1)) * plotW;
+      }
+
+      function yAt(price) {
+        return pad.top + ((maxP - price) / (maxP - minP)) * plotH;
+      }
+
+      ctx.strokeStyle = "#edf0f5";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (plotH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + plotW, y);
+        ctx.stroke();
+      }
+
+      if (series.baseline != null) {
+        const y = yAt(series.baseline);
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "#94a3b8";
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + plotW, y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i);
+        const y = yAt(p.price);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      const lastX = xAt(points.length - 1);
+      ctx.lineTo(lastX, pad.top + plotH);
+      ctx.lineTo(xAt(0), pad.top + plotH);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+      grad.addColorStop(0, lineColor + "33");
+      grad.addColorStop(1, lineColor + "00");
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i);
+        const y = yAt(p.price);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+
+      if (series.showAvg) {
+        let started = false;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          if (p.avg == null) return;
+          const x = xAt(i);
+          const y = yAt(p.avg);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        if (started) {
+          ctx.strokeStyle = "#f59e0b";
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+      }
+
+      const barW = Math.max(1, plotW / points.length - 0.5);
+      points.forEach((p, i) => {
+        const h = ((p.volume || 0) / maxVol) * volH;
+        const x = xAt(i) - barW / 2;
+        const y = volTop + volH - h;
+        const up =
+          i === 0
+            ? series.baseline == null || p.price >= series.baseline
+            : p.price >= points[i - 1].price;
+        ctx.fillStyle = up ? "rgba(230, 69, 69, 0.35)" : "rgba(18, 161, 80, 0.35)";
+        ctx.fillRect(x, y, barW, h);
+      });
+
+      ctx.fillStyle = "#8a8f98";
+      ctx.font = '11px "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i <= 4; i++) {
+        const price = maxP - ((maxP - minP) * i) / 4;
+        const y = pad.top + (plotH * i) / 4;
+        ctx.fillText(formatPrice(price), pad.left - 8, y);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const timeIdx = [0, Math.floor((points.length - 1) / 2), points.length - 1];
+      timeIdx.forEach((i) => {
+        ctx.fillText(points[i].label, xAt(i), cssH - 18);
+      });
+
+      ctx.textAlign = "left";
+      ctx.fillText("成交量", pad.left, volTop - 2);
+    }
+
+    function updateChartMeta(series, state) {
+      const last = series.points[series.points.length - 1];
+      const base = series.baseline;
+      const chg = base ? ((last.price - base) / base) * 100 : null;
+      const tone = chg == null ? "flat" : toneClass(chg);
+
+      const priceEl = document.getElementById("chartModalPrice");
+      const chgEl = document.getElementById("chartModalChg");
+      priceEl.textContent = formatPrice(last.price);
+      priceEl.className = "price " + tone;
+
+      if (chg == null) {
+        chgEl.textContent = "--";
+        chgEl.className = "chg flat";
+      } else {
+        chgEl.textContent = formatPct(chg);
+        chgEl.className = "chg " + tone;
+      }
+
+      const name = state.trend?.name || state.history?.name || "";
+      const code = state.trend?.code || state.history?.code || "";
+      document.getElementById("chartModalName").textContent =
+        name + (code ? `（${code}）` : "");
+      document.getElementById("chartModalSub").textContent =
+        `${series.title} · ${series.baselineLabel || "基准"} ${formatPrice(base)}`;
+    }
+
+    function renderActiveChart() {
+      const state = openChartModal._state;
+      if (!state) return;
+      const series = buildRangeSeries(state.range, state);
+      const canvas = document.getElementById("chartCanvas");
+      if (!series) {
+        setChartStatus(state.range === "day" ? "暂无当日分时数据" : "暂无该区间行情");
+        return;
+      }
+      openChartModal._lastSeries = series;
+      setChartStatus("");
+      updateChartMeta(series, state);
+      drawIntradayChart(canvas, series);
+    }
+
+    function setChartRange(range) {
+      const state = openChartModal._state;
+      if (!state) return;
+      state.range = range;
+      document.querySelectorAll(".chart-period").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.chartRange === range);
+      });
+      renderActiveChart();
+    }
+
+    let chartRequestId = 0;
+
+    async function openChartModal(fundId, index) {
+      const fund = window.FUND_HOLDINGS[fundId];
+      const holding = fund?.holdings?.[index];
+      if (!holding) return;
+
+      const modal = document.getElementById("chartModal");
+      const canvas = document.getElementById("chartCanvas");
+      const reqId = ++chartRequestId;
+
+      document.getElementById("chartModalName").textContent =
+        holding.name + "（" + holding.code + "）";
+      document.getElementById("chartModalSub").textContent = "加载行情中…";
+      document.getElementById("chartModalPrice").textContent = "--";
+      document.getElementById("chartModalPrice").className = "price flat";
+      document.getElementById("chartModalChg").textContent = "--";
+      document.getElementById("chartModalChg").className = "chg flat";
+      resetPeriodValues();
+      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+
+      openChartModal._state = { range: "day", trend: null, history: null, returns: null };
+      openChartModal._lastSeries = null;
+
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+      setChartStatus("加载分时与区间涨跌幅…");
+
+      const [trendResult, historyResult] = await Promise.allSettled([
+        loadIntradayTrends(holding),
+        loadDailyKlines(holding)
+      ]);
+
+      if (reqId !== chartRequestId) return;
+
+      const state = {
+        range: "day",
+        trend: trendResult.status === "fulfilled" ? trendResult.value : null,
+        history: historyResult.status === "fulfilled" ? historyResult.value : null,
+        returns: null
+      };
+
+      if (state.history) {
+        state.returns = calcPeriodReturns(state.history.klines);
+      } else {
+        state.returns = { day: null, "1m": null, "3m": null, "6m": null, ytd: null, "1y": null };
+      }
+
+      if (state.trend?.preClose != null && state.trend.points?.length) {
+        const last = state.trend.points[state.trend.points.length - 1];
+        state.returns.day =
+          Math.round(((last.price - state.trend.preClose) / state.trend.preClose) * 10000) / 100;
+      }
+      renderPeriodReturns(state.returns);
+
+      openChartModal._state = state;
+
+      if (!state.trend && !state.history) {
+        openChartModal._lastSeries = null;
+        setChartStatus("行情加载失败，请稍后重试");
+        return;
+      }
+
+      if (!state.trend && state.history) {
+        state.range = "1m";
+        document.querySelectorAll(".chart-period").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.chartRange === "1m");
+        });
+      }
+
+      renderActiveChart();
+    }
+
+    function closeChartModal() {
+      chartRequestId += 1;
+      openChartModal._state = null;
+      openChartModal._lastSeries = null;
+      const modal = document.getElementById("chartModal");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+      setChartStatus("");
+      resetPeriodValues();
     }
 
     async function syncFundQuotes(fundId) {
@@ -449,7 +736,14 @@
             <div class="list-body">
               ${fund.holdings.map((h, i) => `
                 <div class="${gridClass}" data-index="${i}">
-                  <div class="stock-name" title="${h.name}（${h.code}）">${h.name}（${h.code}）</div>
+                  <div
+                    class="stock-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="${fund.id}"
+                    data-chart-index="${i}"
+                    title="查看 ${h.name} 当日分时"
+                  >${h.name}（${h.code}）</div>
                   ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
                   <div class="pre-change" data-pre-change data-fund="${fund.id}" data-index="${i}">--</div>
                   <div class="change-field">
@@ -597,6 +891,23 @@
     }
 
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-chart-close]")) {
+        closeChartModal();
+        return;
+      }
+
+      const rangeBtn = e.target.closest("[data-chart-range]");
+      if (rangeBtn) {
+        setChartRange(rangeBtn.dataset.chartRange);
+        return;
+      }
+
+      const chartName = e.target.closest("[data-chart-fund]");
+      if (chartName) {
+        openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
+        return;
+      }
+
       const pagePrev = e.target.closest("[data-page-prev]");
       if (pagePrev) {
         const fundId = pagePrev.dataset.pagePrev;
@@ -653,6 +964,26 @@
       if (clearBtn) {
         clearFund(clearBtn.dataset.clear);
       }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const modal = document.getElementById("chartModal");
+        if (modal.classList.contains("show")) closeChartModal();
+        return;
+      }
+
+      const chartName = e.target.closest?.("[data-chart-fund]");
+      if (chartName && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      const modal = document.getElementById("chartModal");
+      if (!modal.classList.contains("show") || !openChartModal._lastSeries) return;
+      drawIntradayChart(document.getElementById("chartCanvas"), openChartModal._lastSeries);
     });
 
     document.addEventListener("input", (e) => {

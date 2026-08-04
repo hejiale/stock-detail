@@ -150,9 +150,18 @@
     }
 
     .fund-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       padding: 16px 16px 12px;
       border-bottom: 1px solid var(--line);
       background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    }
+
+    .fund-meta-text {
+      min-width: 0;
+      flex: 1;
     }
 
     .fund-meta .name {
@@ -164,6 +173,34 @@
       margin-top: 4px;
       font-size: 12px;
       color: var(--muted);
+    }
+
+    .fund-meta .btn-sync {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 12px;
+      font-size: 13px;
+      border-radius: 10px;
+      box-shadow: 0 6px 14px rgba(15, 159, 110, 0.18);
+      white-space: nowrap;
+    }
+
+    .fund-meta .btn-sync svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .fund-meta .btn-sync.loading svg {
+      animation: sync-spin 0.8s linear infinite;
+    }
+
+    @keyframes sync-spin {
+      to { transform: rotate(360deg); }
     }
 
     .list-head,
@@ -703,8 +740,10 @@
       const fund = window.FUND_HOLDINGS[fundId];
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
 
+      const label = btn.querySelector(".btn-sync-label");
       btn.disabled = true;
-      btn.textContent = "正在抓取实时行情…";
+      btn.classList.add("loading");
+      if (label) label.textContent = "正在抓取…";
 
       try {
         const quotes = await loadQuotes(fund.holdings);
@@ -739,7 +778,8 @@
         showToast(err.message || "同步失败");
       } finally {
         btn.disabled = false;
-        btn.textContent = "推送实时涨跌幅";
+        btn.classList.remove("loading");
+        if (label) label.textContent = "推送实时涨跌幅";
       }
     }
 
@@ -767,12 +807,10 @@
         const actionsHtml = viewOnly
           ? `
           <div class="actions">
-            <button class="btn btn-sync" type="button" data-sync="${fund.id}">推送实时涨跌幅</button>
             <button class="btn btn-ghost" type="button" data-clear="${fund.id}">清空输入</button>
           </div>`
           : `
           <div class="actions">
-            <button class="btn btn-sync" type="button" data-sync="${fund.id}">推送实时涨跌幅</button>
             <button class="btn btn-primary" type="button" data-calc="${fund.id}">计算每日基金收益</button>
             <button class="btn btn-ghost" type="button" data-clear="${fund.id}">清空输入</button>
           </div>
@@ -786,8 +824,16 @@
         panel.innerHTML = `
           <div class="fund-card">
             <div class="fund-meta">
-              <div class="name">${fund.fundName}</div>
-              <div class="sub">${metaSub}</div>
+              <div class="fund-meta-text">
+                <div class="name">${fund.fundName}</div>
+                <div class="sub">${metaSub}</div>
+              </div>
+              <button class="btn btn-sync" type="button" data-sync="${fund.id}">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8a7.96 7.96 0 0 0 5.65-2.35l-1.41-1.41A5.98 5.98 0 0 1 8 14a6 6 0 1 1 5.65-8.65L11 8h5V3l-2.35-.65z"/>
+                </svg>
+                <span class="btn-sync-label">推送实时涨跌幅</span>
+              </button>
             </div>
             <div class="${headClass}">
               <div>股票名称</div>

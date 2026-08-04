@@ -163,7 +163,7 @@
    * @param {Array} holdings
    * @returns {Promise<Object>} code -> { name, price, change, preChange? }
    */
-  function loadSinaQuotes(holdings) {
+  function loadSinaQuotes(holdings, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
       const symbols = holdings.map(toSinaSymbol);
       const list = symbols.join(",");
@@ -174,7 +174,7 @@
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error("行情请求超时，请检查网络后重试"));
-      }, 10000);
+      }, timeoutMs);
 
       function cleanup() {
         clearTimeout(timer);
@@ -263,7 +263,8 @@
 
   /**
    * 统一实时报价入口（一次只查传入的持仓，由调用方按页传入，不做多页合并）
-   * 优先东方财富；成功后再补美股盘前；东方财富失败/空数据则回退新浪
+   * 优先东方财富；失败/空数据则回退新浪。
+   * 美股盘前请另调 enrichUsPreMarket，避免串行等待拖慢日涨跌同步。
    *
    * @returns {Promise<Object>} code -> { name, price, change, preChange? }
    */
@@ -271,9 +272,7 @@
     if (!holdings.length) return {};
     try {
       const map = await loadEastMoneyQuotes(holdings);
-      if (Object.keys(map).length) {
-        return enrichUsPreMarket(holdings, map);
-      }
+      if (Object.keys(map).length) return map;
     } catch (_) {
       // 回退新浪
     }
@@ -551,6 +550,7 @@
     loadIntradayTrends,
     loadDailyKlines,
     resolveStock,
+    enrichUsPreMarket,
     // 区间计算
     calcPeriodReturns,
     sliceKlinesForRange

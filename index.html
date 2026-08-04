@@ -99,11 +99,13 @@
     const {
       quoteKey,
       loadQuotes,
+      loadSinaQuotes,
       loadIntradayTrends,
       loadDailyKlines,
       calcPeriodReturns,
       sliceKlinesForRange,
-      resolveStock
+      resolveStock,
+      isUsHolding
     } = window.MarketAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
@@ -148,7 +150,8 @@
       const keep = activeFundId || getActiveFundId();
       applyCustomHoldings();
       render();
-      switchTab(keep, { forceSync: true });
+      switchTab(keep);
+      syncFundQuotes(keep);
     }
 
     function getTotalPages(fund) {
@@ -688,6 +691,12 @@
       if (label) label.textContent = "正在抓取…";
 
       try {
+        const usOnPage = pageHoldings.filter(isUsHolding);
+        // 美股盘前与东财日涨跌并行请求，避免串行拖慢
+        const sinaPrePromise = usOnPage.length
+          ? loadSinaQuotes(usOnPage).catch(() => null)
+          : null;
+
         const quotes = await loadQuotes(pageHoldings);
         let ok = 0;
         const failed = [];
@@ -711,6 +720,23 @@
         });
 
         persistFromDom();
+
+        if (sinaPrePromise) {
+          sinaPrePromise.then((sina) => {
+            if (!sina) return;
+            pageHoldings.forEach((h, offset) => {
+              const key = quoteKey(h.code);
+              const src = sina[key] || sina[h.code];
+              if (!src || src.preChange == null || Number.isNaN(src.preChange)) return;
+              const target = quotes[key] || quotes[h.code];
+              if (target) target.preChange = src.preChange;
+              const preEl = document.querySelector(
+                `[data-pre-change][data-fund="${fundId}"][data-index="${start + offset}"]`
+              );
+              if (preEl) applyPreChangeDisplay(preEl, src.preChange);
+            });
+          });
+        }
 
         if (ok === 0) {
           showToast("未获取到行情，请稍后重试");

@@ -319,6 +319,19 @@ header p {
   box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
 }
 
+.row input[readonly] {
+  background: #f5f7fa;
+  border-color: #e5e9f0;
+  color: #475569;
+  cursor: default;
+  box-shadow: none;
+}
+
+.row input[readonly]:focus {
+  border-color: #e5e9f0;
+  box-shadow: none;
+}
+
 .row input::placeholder {
   color: #b4bbc6;
   font-weight: 400;

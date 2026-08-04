@@ -25,6 +25,7 @@
         <button class="tab" data-tab="huaxia" type="button">华夏</button>
         <button class="tab" data-tab="guangfa" type="button">广发</button>
         <button class="tab" data-tab="jianxin" type="button">建信</button>
+        <button class="tab" data-tab="cnSemi" type="button">A股</button>
         <button class="tab" data-tab="usSemi" type="button">美股</button>
       </div>
       <button class="tabs-arrow" type="button" data-tab-next aria-label="下一个">
@@ -101,12 +102,54 @@
       loadIntradayTrends,
       loadDailyKlines,
       calcPeriodReturns,
-      sliceKlinesForRange
+      sliceKlinesForRange,
+      resolveStock
     } = window.MarketAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
+    const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
+    const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
     const PAGE_SIZE = 10;
     const pageState = {};
+
+    function loadCustomStocks() {
+      try {
+        return JSON.parse(localStorage.getItem(CUSTOM_STOCKS_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveCustomStocks(all) {
+      localStorage.setItem(CUSTOM_STOCKS_KEY, JSON.stringify(all));
+    }
+
+    /** 把本地自选插到默认列表前面 */
+    function applyCustomHoldings() {
+      CUSTOMIZABLE_FUNDS.forEach((fundId) => {
+        const fund = window.FUND_HOLDINGS[fundId];
+        if (!fund) return;
+        if (!fund._defaultHoldings) {
+          fund._defaultHoldings = fund.holdings.slice();
+        }
+        const custom = (loadCustomStocks()[fundId] || []).map((h) => ({
+          ...h,
+          custom: true
+        }));
+        fund.holdings = [...custom, ...fund._defaultHoldings];
+      });
+    }
+
+    function getActiveFundId() {
+      return document.querySelector(".tab.active")?.dataset.tab || "dongfang";
+    }
+
+    function rerender(activeFundId) {
+      const keep = activeFundId || getActiveFundId();
+      applyCustomHoldings();
+      render();
+      switchTab(keep, { forceSync: true });
+    }
 
     function getTotalPages(fund) {
       return Math.max(1, Math.ceil(fund.holdings.length / PAGE_SIZE));
@@ -703,11 +746,10 @@
 
         const fundSaved = saved[fund.id] || {};
 
-        const isUS = fund.market === "US" || fund.viewOnly;
         const viewOnly = !!fund.viewOnly;
-        const ratioLabel = isUS ? "参考权重" : "持仓比例";
-        const metaSub = isUS
-          ? `共 ${fund.holdings.length} 只主流半导体 · 仅查看涨跌`
+        const ratioLabel = viewOnly ? "参考权重" : "持仓比例";
+        const metaSub = viewOnly
+          ? `共 ${fund.holdings.length} 只${fund.market === "US" ? "美股" : "A股"}半导体 · 仅查看涨跌`
           : `代码 ${fund.fundCode} · 前十大合计 ${fund.top10Total.toFixed(2)}%`;
         const gridClass = viewOnly ? "row view-only" : "row";
         const headClass = viewOnly ? "list-head view-only" : "list-head";
@@ -726,6 +768,25 @@
             <div class="detail" id="detail-${fund.id}"></div>
           </div>`;
 
+        const addStockHtml = CUSTOMIZABLE_FUNDS.has(fund.id)
+          ? `
+            <div class="add-stock">
+              <input
+                type="text"
+                class="add-stock-input"
+                data-add-code="${fund.id}"
+                placeholder="${fund.market === "US" ? "输入美股代码，如 NVDA" : "沪/深/北交所代码，如 600519、000001、920001"}"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button class="btn btn-add" type="button" data-add-stock="${fund.id}" aria-label="添加股票" title="添加">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M7.25 7.25V3.5h1.5v3.75H12.5v1.5H8.75V12.5h-1.5V8.75H3.5v-1.5h3.75z"/>
+                </svg>
+              </button>
+            </div>`
+          : "";
+
         panel.innerHTML = `
           <div class="fund-card">
             <div class="fund-meta">
@@ -740,6 +801,7 @@
                 <span class="btn-sync-label">推送实时涨跌幅</span>
               </button>
             </div>
+            ${addStockHtml}
             <div class="${headClass}">
               <div>股票名称</div>
               ${viewOnly ? "" : `<div>${ratioLabel}</div>`}
@@ -748,15 +810,26 @@
             </div>
             <div class="list-body">
               ${fund.holdings.map((h, i) => `
-                <div class="${gridClass}" data-index="${i}">
-                  <div
-                    class="stock-name"
-                    role="button"
-                    tabindex="0"
-                    data-chart-fund="${fund.id}"
-                    data-chart-index="${i}"
-                    title="查看 ${h.name} 当日分时"
-                  >${h.name}（${h.code}）</div>
+                <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
+                  <div class="stock-name-cell">
+                    <div
+                      class="stock-name"
+                      role="button"
+                      tabindex="0"
+                      data-chart-fund="${fund.id}"
+                      data-chart-index="${i}"
+                      title="查看 ${h.name} 当日分时"
+                    >${h.name}（${h.code}）</div>
+                    ${h.custom ? `
+                      <button
+                        class="btn-remove-stock"
+                        type="button"
+                        data-remove-stock="${fund.id}"
+                        data-remove-code="${h.code}"
+                        title="移除自选"
+                        aria-label="移除 ${h.name}"
+                      >×</button>` : ""}
+                  </div>
                   ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
                   <div class="pre-change" data-pre-change data-fund="${fund.id}" data-index="${i}">--</div>
                   <div class="change-field">
@@ -863,6 +936,74 @@
       persistFromDom();
     }
 
+    async function addCustomStock(fundId) {
+      if (!CUSTOMIZABLE_FUNDS.has(fundId)) return;
+      const fund = window.FUND_HOLDINGS[fundId];
+      const input = document.querySelector(`[data-add-code="${fundId}"]`);
+      const btn = document.querySelector(`[data-add-stock="${fundId}"]`);
+      const raw = (input?.value || "").trim();
+      if (!raw) {
+        showToast(fund.market === "US" ? "请输入美股代码" : "请输入 A 股代码");
+        input?.focus();
+        return;
+      }
+
+      if (btn) btn.disabled = true;
+      try {
+        const stock = await resolveStock(raw, fund.market === "US" ? "US" : "CN");
+        const all = loadCustomStocks();
+        const list = all[fundId] || [];
+        const existsCustom = list.some(
+          (h) => quoteKey(h.code) === quoteKey(stock.code)
+        );
+        const existsDefault = (fund._defaultHoldings || fund.holdings).some(
+          (h) => quoteKey(h.code) === quoteKey(stock.code)
+        );
+        if (existsCustom || existsDefault) {
+          showToast(`${stock.name}（${stock.code}）已在列表中`);
+          return;
+        }
+
+        all[fundId] = [
+          { name: stock.name, code: stock.code, market: stock.market, ratio: stock.ratio },
+          ...list
+        ];
+        saveCustomStocks(all);
+
+        // 新增后回到第 1 页，并清掉该页签按 index 缓存的涨跌幅（避免错位）
+        pageState[fundId] = 1;
+        const saved = loadInputs();
+        delete saved[fundId];
+        saveInputs(saved);
+
+        if (input) input.value = "";
+        showToast(`已添加 ${stock.name}（${stock.code}）`);
+        rerender(fundId);
+      } catch (err) {
+        showToast(err.message || "添加失败");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function removeCustomStock(fundId, code) {
+      if (!CUSTOMIZABLE_FUNDS.has(fundId)) return;
+      const all = loadCustomStocks();
+      const list = all[fundId] || [];
+      const next = list.filter((h) => quoteKey(h.code) !== quoteKey(code));
+      if (next.length === list.length) return;
+      all[fundId] = next;
+      saveCustomStocks(all);
+
+      pageState[fundId] = 1;
+      const saved = loadInputs();
+      delete saved[fundId];
+      saveInputs(saved);
+
+      showToast("已移除自选股票");
+      rerender(fundId);
+    }
+
     function getTabButtons() {
       return Array.from(document.querySelectorAll(".tabs .tab"));
     }
@@ -913,6 +1054,12 @@
       const rangeBtn = e.target.closest("[data-chart-range]");
       if (rangeBtn) {
         setChartRange(rangeBtn.dataset.chartRange);
+        return;
+      }
+
+      const removeBtn = e.target.closest("[data-remove-stock]");
+      if (removeBtn) {
+        removeCustomStock(removeBtn.dataset.removeStock, removeBtn.dataset.removeCode);
         return;
       }
 
@@ -982,6 +1129,13 @@
       const clearBtn = e.target.closest("[data-clear]");
       if (clearBtn) {
         clearFund(clearBtn.dataset.clear);
+        return;
+      }
+
+      const addBtn = e.target.closest("[data-add-stock]");
+      if (addBtn) {
+        addCustomStock(addBtn.dataset.addStock);
+        return;
       }
     });
 
@@ -989,6 +1143,12 @@
       if (e.key === "Escape") {
         const modal = document.getElementById("chartModal");
         if (modal.classList.contains("show")) closeChartModal();
+        return;
+      }
+
+      if (e.key === "Enter" && e.target.matches?.("[data-add-code]")) {
+        e.preventDefault();
+        addCustomStock(e.target.dataset.addCode);
         return;
       }
 
@@ -1012,6 +1172,7 @@
       }
     });
 
+    applyCustomHoldings();
     render();
     updateTabArrows();
   </script>

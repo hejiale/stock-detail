@@ -12,7 +12,7 @@
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
  *   market 为东方财富 secid 前缀：
- *     0=深交所, 1=上交所, 105=纳斯达克, 106=纽交所,
+ *     0=深交所 / 北交所, 1=上交所, 105=纳斯达克, 106=纽交所,
  *     116=港股, 176=日股, 177=韩股
  */
 (function (global) {
@@ -25,19 +25,64 @@
   // 代码转换
   // ---------------------------------------------------------------------------
 
+  /** 北交所：920 新代码；以及历史 43/83/87、部分 4/8 开头 */
+  function isBjCode(code) {
+    return /^(920\d{3}|(43|83|87)\d{4}|[48]\d{5})$/.test(code);
+  }
+
+  /**
+   * 规范化 A 股代码为 6 位数字
+   * 支持：002245 / sz002245 / 002245.SZ / 多余位数（取前 6 位）/ 不足 6 位左侧补 0
+   */
+  function normalizeCnCode(raw) {
+    let s = String(raw || "").trim().toUpperCase();
+    if (!s) return "";
+
+    s = s.replace(/\.(SH|SZ|BJ|SS|XSHE|XSHG)$/i, "");
+    const pref = s.match(/^(SH|SZ|BJ|SS)(.+)$/);
+    if (pref) s = pref[2];
+
+    const digits = s.replace(/\D/g, "");
+    if (!digits) return "";
+
+    if (digits.length === 6) return digits;
+    if (digits.length < 6) return digits.padStart(6, "0");
+    // 多输位数时优先取前 6 位（如 00224512 → 002245）
+    return digits.slice(0, 6);
+  }
+
+  /**
+   * 推断 A 股东方财富 market，并给出候选顺序（首选 + 兜底）
+   * - 上交所(1)：60/68/90 等
+   * - 深交所(0)：00/001/002/003/30 等
+   * - 北交所(0)：920 及历史 43/83/87 等（东财与深市同用 0）
+   */
+  function inferCnMarketCandidates(code) {
+    if (isBjCode(code)) return [0, 1];
+    // 上交所主板 / 科创板 / B 股（9xxxx，但 920 已在北交所优先处理）
+    if (/^(60|68|90)\d{4}$/.test(code) || /^6\d{5}$/.test(code) || /^9\d{5}$/.test(code)) {
+      return [1, 0];
+    }
+    // 深交所主板 / 中小板 / 创业板
+    if (/^(00|30)\d{4}$/.test(code) || /^(0|2|3)\d{5}$/.test(code)) {
+      return [0, 1];
+    }
+    return [1, 0];
+  }
+
   /**
    * 转为新浪行情代码
    * - 美股：gb_nvda
-   * - A 股：sh600519 / sz000001 / bj430047
+   * - A 股：sh600519 / sz000001 / bj920001
    */
   function toSinaSymbol(holding) {
     const code = holding.code;
     if (holding.market === 105 || holding.market === 106 || /[A-Za-z]/.test(code)) {
       return "gb_" + code.toLowerCase();
     }
+    if (isBjCode(code)) return "bj" + code;
     if (/^(6|9)\d{5}$/.test(code)) return "sh" + code;
     if (/^(0|2|3)\d{5}$/.test(code)) return "sz" + code;
-    if (/^(4|8)\d{5}$/.test(code)) return "bj" + code;
     return "sh" + code;
   }
 
@@ -48,9 +93,9 @@
   function toEastSecId(holding) {
     if (holding.market != null) return holding.market + "." + holding.code;
     const code = holding.code;
+    if (isBjCode(code)) return "0." + code;
     if (/^(6|9)\d{5}$/.test(code)) return "1." + code;
     if (/^(0|2|3)\d{5}$/.test(code)) return "0." + code;
-    if (/^(4|8)\d{5}$/.test(code)) return "0." + code;
     return "1." + code;
   }
 
@@ -426,6 +471,48 @@
   }
 
   /**
+   * 根据代码解析股票（名称 + 市场），用于添加自选
+   * @param {string} rawCode
+   * @param {'CN'|'US'} marketType
+   * @returns {Promise<{ name, code, market, ratio }>}
+   */
+  async function resolveStock(rawCode, marketType) {
+    if (!String(rawCode || "").trim()) throw new Error("请输入股票代码");
+
+    if (marketType === "CN") {
+      const code = normalizeCnCode(rawCode);
+      if (!/^\d{6}$/.test(code)) {
+        throw new Error("A股代码应为 6 位数字，如 002245、600519、920001");
+      }
+
+      const candidates = inferCnMarketCandidates(code);
+      for (const market of candidates) {
+        const quotes = await loadQuotes([{ code, market }]);
+        const quote = quotes[quoteKey(code)] || quotes[code];
+        if (quote && quote.name) {
+          return { name: quote.name, code, market, ratio: 1 };
+        }
+      }
+      throw new Error("未找到该股票，请确认是上交所 / 深交所 / 北交所代码");
+    }
+
+    const code = String(rawCode || "").trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(code)) {
+      throw new Error("美股代码格式不正确");
+    }
+
+    for (const market of [105, 106]) {
+      const holding = { code, market };
+      const quotes = await loadQuotes([holding]);
+      const quote = quotes[quoteKey(code)] || quotes[code];
+      if (quote && quote.name) {
+        return { name: quote.name, code, market, ratio: 5 };
+      }
+    }
+    throw new Error("未找到该美股，请检查代码");
+  }
+
+  /**
    * 截取某区间的日 K（含起点那根）
    * @param {'1m'|'3m'|'6m'|'ytd'|'1y'} range
    */
@@ -463,6 +550,7 @@
     loadSinaQuotes,
     loadIntradayTrends,
     loadDailyKlines,
+    resolveStock,
     // 区间计算
     calcPeriodReturns,
     sliceKlinesForRange

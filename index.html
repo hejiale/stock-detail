@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>基金持仓收益估算</title>
+  <title>基金持仓估算</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -202,10 +202,25 @@
         <div>报告期</div>
         <div style="text-align:right">营收</div>
         <div style="text-align:right">净利润</div>
-        <div style="text-align:right">负债</div>
+        <div style="text-align:right">负债率</div>
       </div>
       <div class="board-modal-body profile-body">
         <div id="profileList"></div>
+        <div class="profile-section" id="profileHoldersSection">
+          <div class="profile-section-head">
+            <div class="profile-section-title">前十大股东</div>
+            <div class="profile-section-sub" id="profileHoldersDate"></div>
+          </div>
+          <div class="profile-change-summary" id="profileChangeSummary" hidden></div>
+          <div class="profile-holders-head">
+            <div>#</div>
+            <div>股东名称</div>
+            <div style="text-align:right">持股%</div>
+            <div style="text-align:right">加减仓</div>
+          </div>
+          <div id="profileHolders"></div>
+          <div class="profile-holders-empty" id="profileHoldersEmpty"></div>
+        </div>
         <div class="board-status show" id="profileStatus">加载中…</div>
       </div>
     </div>
@@ -866,14 +881,8 @@
 
       wrap.innerHTML = list
         .map((r) => {
-          const liab =
-            r.liabilities != null
-              ? formatMarketCap(r.liabilities)
-              : r.debtRatio != null
-                ? r.debtRatio.toFixed(1) + "%"
-                : "--";
-          const liabHint =
-            r.liabilities == null && r.debtRatio != null ? "资产负债率" : "";
+          const debt =
+            r.debtRatio != null ? r.debtRatio.toFixed(2) + "%" : "--";
           return `
             <div class="profile-row">
               <div class="profile-period">
@@ -889,10 +898,86 @@
                 ${formatYoy(r.profitYoy)}
               </div>
               <div class="profile-metric">
-                <div class="metric-main" title="${liabHint}">${liab}</div>
+                <div class="metric-main" title="资产负债率">${debt}</div>
               </div>
             </div>`;
         })
+        .join("");
+    }
+
+    function formatHolderChange(h) {
+      const action = h.action || "--";
+      let tone = "flat";
+      if (action === "增持" || action === "新进") tone = "up";
+      else if (action === "减持") tone = "down";
+
+      let detail = "";
+      if (h.changeRatio != null && !Number.isNaN(h.changeRatio)) {
+        detail = formatPct(h.changeRatio);
+      } else if (
+        h.changeShares != null &&
+        !Number.isNaN(h.changeShares) &&
+        action !== "新进" &&
+        action !== "不变"
+      ) {
+        const abs = Math.abs(h.changeShares);
+        const sign = h.changeShares > 0 ? "+" : "-";
+        if (abs >= 1e8) detail = sign + (abs / 1e8).toFixed(2) + "亿股";
+        else if (abs >= 1e4) detail = sign + (abs / 1e4).toFixed(2) + "万股";
+        else detail = sign + abs.toFixed(0) + "股";
+      }
+
+      return `<span class="holder-change ${tone}"><span class="action">${action}</span>${
+        detail ? `<span class="detail">${detail}</span>` : ""
+      }</span>`;
+    }
+
+    function renderProfileHolders(holders, holdersError) {
+      const listEl = document.getElementById("profileHolders");
+      const emptyEl = document.getElementById("profileHoldersEmpty");
+      const dateEl = document.getElementById("profileHoldersDate");
+      const summaryEl = document.getElementById("profileChangeSummary");
+      if (!listEl || !emptyEl || !dateEl || !summaryEl) return;
+
+      listEl.innerHTML = "";
+      emptyEl.textContent = "";
+      summaryEl.hidden = true;
+      summaryEl.innerHTML = "";
+
+      if (!holders?.list?.length) {
+        dateEl.textContent = "";
+        emptyEl.textContent = holdersError || "暂无股东数据";
+        return;
+      }
+
+      dateEl.textContent = holders.date ? `截至 ${holders.date}` : "";
+
+      const counts = { 新进: 0, 增持: 0, 减持: 0, 不变: 0 };
+      holders.list.forEach((h) => {
+        if (counts[h.action] != null) counts[h.action] += 1;
+      });
+      const chips = [];
+      if (counts["新进"]) chips.push(`<span class="up">新进 ${counts["新进"]}</span>`);
+      if (counts["增持"]) chips.push(`<span class="up">增持 ${counts["增持"]}</span>`);
+      if (counts["减持"]) chips.push(`<span class="down">减持 ${counts["减持"]}</span>`);
+      if (counts["不变"]) chips.push(`<span class="flat">不变 ${counts["不变"]}</span>`);
+      if (chips.length) {
+        summaryEl.hidden = false;
+        summaryEl.innerHTML = `本期变动：${chips.join('<span class="sep">·</span>')}`;
+      }
+
+      listEl.innerHTML = holders.list
+        .map(
+          (h) => `
+          <div class="profile-holder-row">
+            <div class="holder-rank">${h.rank || "--"}</div>
+            <div class="holder-name" title="${h.name}">${h.name}</div>
+            <div class="holder-ratio">${
+              h.ratio != null ? h.ratio.toFixed(2) + "%" : "--"
+            }</div>
+            <div class="holder-chg">${formatHolderChange(h)}</div>
+          </div>`
+        )
         .join("");
     }
 
@@ -915,6 +1000,7 @@
       document.getElementById("profileTotalMcap").textContent = "--";
       document.getElementById("profileFloatMcap").textContent = "--";
       document.getElementById("profileList").innerHTML = "";
+      renderProfileHolders(null, "");
       document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.profileKind === "all");
       });
@@ -938,6 +1024,8 @@
           formatMarketCap(profile.marketCap?.total);
         document.getElementById("profileFloatMcap").textContent =
           formatMarketCap(profile.marketCap?.float);
+
+        renderProfileHolders(profile.holders, profile.holdersError);
 
         if (profile.financeError && !profile.reports?.length) {
           setProfileStatus(profile.financeError);

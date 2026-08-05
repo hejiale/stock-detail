@@ -1318,3 +1318,125 @@ header p {
 .profile-yoy.down { color: var(--down); }
 .profile-yoy.flat { color: var(--muted); }
 
+.profile-section {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid #eef2f7;
+}
+
+.profile-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px 6px;
+}
+
+.profile-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.profile-section-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.profile-change-summary {
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  font-size: 12px;
+  color: #475569;
+}
+
+.profile-change-summary .sep {
+  margin: 0 6px;
+  color: #cbd5e1;
+}
+
+.profile-change-summary .up { color: var(--up); font-weight: 600; }
+.profile-change-summary .down { color: var(--down); font-weight: 600; }
+.profile-change-summary .flat { color: #64748b; font-weight: 600; }
+
+.profile-holders-head {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.4fr) 64px 88px;
+  gap: 8px;
+  padding: 4px 16px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.profile-holder-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.4fr) 64px 88px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-holder-row:hover {
+  background: #f8fafc;
+}
+
+.holder-rank {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.holder-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.holder-ratio {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.holder-chg {
+  text-align: right;
+}
+
+.holder-change {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.holder-change .action {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.holder-change .detail {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.holder-change.up { color: var(--up); }
+.holder-change.down { color: var(--down); }
+.holder-change.flat { color: #64748b; }
+
+.profile-holders-empty {
+  padding: 8px 16px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+

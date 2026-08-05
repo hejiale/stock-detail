@@ -493,8 +493,6 @@
 
   const EAST_DC_WEB = "https://datacenter-web.eastmoney.com/api/data/v1/get";
   const EAST_DC_SEC = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
-  /** 东财海外资产负债表「总负债」科目 */
-  const EAST_LIAB_ITEM = "004011999";
 
   /** 市场归类：CN / US / HK / JP / KR */
   function getMarketKind(holding) {
@@ -555,16 +553,6 @@
     return digits.padStart(5, "0") + ".HK";
   }
 
-  function mapLiabilityByDate(rows) {
-    const map = {};
-    (rows || []).forEach((row) => {
-      const d = normalizeReportDate(row.REPORT_DATE);
-      const amt = numOrNull(row.AMOUNT);
-      if (d && amt != null) map[d] = amt;
-    });
-    return map;
-  }
-
   async function loadCnFinancialReports(code) {
     const filter = '(SECURITY_CODE="' + code + '")';
     const [perfJson, balJson] = await Promise.all([
@@ -585,7 +573,7 @@
       fetchDatacenterJson(
         buildDatacenterUrl(EAST_DC_WEB, {
           reportName: "RPT_DMSK_FN_BALANCE",
-          columns: "REPORT_DATE,TOTAL_LIABILITIES",
+          columns: "REPORT_DATE,TOTAL_LIABILITIES,TOTAL_ASSETS",
           filter,
           pageNumber: "1",
           pageSize: "12",
@@ -597,11 +585,14 @@
       )
     ]);
 
-    const liabMap = {};
+    const debtRatioMap = {};
     (balJson?.result?.data || []).forEach((row) => {
       const d = normalizeReportDate(row.REPORT_DATE);
-      const amt = numOrNull(row.TOTAL_LIABILITIES);
-      if (d && amt != null) liabMap[d] = amt;
+      const liab = numOrNull(row.TOTAL_LIABILITIES);
+      const assets = numOrNull(row.TOTAL_ASSETS);
+      if (d && liab != null && assets && assets > 0) {
+        debtRatioMap[d] = Math.round((liab / assets) * 10000) / 100;
+      }
     });
 
     const reports = (perfJson?.result?.data || []).map((row) => {
@@ -613,10 +604,9 @@
         kind: classifyPeriod(label, ""),
         revenue: numOrNull(row.TOTAL_OPERATE_INCOME),
         profit: numOrNull(row.PARENT_NETPROFIT),
-        liabilities: liabMap[date] ?? null,
         revenueYoy: numOrNull(row.YSTZ),
         profitYoy: numOrNull(row.SJLTZ),
-        debtRatio: null
+        debtRatio: debtRatioMap[date] ?? null
       };
     });
 
@@ -629,45 +619,28 @@
     const mainReport = isHk
       ? "RPT_HKF10_FN_GMAININDICATOR"
       : "RPT_USF10_FN_GMAININDICATOR";
-    const balReport = isHk ? "RPT_HKF10_FN_BALANCE" : "RPT_USF10_FN_BALANCE";
     const filter = '(SECUCODE="' + secucode + '")';
     const mainColumns = isHk
       ? "SECUCODE,SECURITY_NAME_ABBR,REPORT_DATE,REPORT_TYPE,REPORT_DATA_TYPE,OPERATE_INCOME,HOLDER_PROFIT,OPERATE_INCOME_YOY,HOLDER_PROFIT_YOY,DEBT_ASSET_RATIO,CURRENCY_ABBR"
       : "SECUCODE,SECURITY_NAME_ABBR,REPORT_DATE,REPORT_TYPE,REPORT_DATA_TYPE,OPERATE_INCOME,PARENT_HOLDER_NETPROFIT,OPERATE_INCOME_YOY,PARENT_HOLDER_NETPROFIT_YOY,DEBT_ASSET_RATIO,CURRENCY_ABBR";
 
-    const [mainJson, balJson] = await Promise.all([
-      fetchDatacenterJson(
-        buildDatacenterUrl(EAST_DC_SEC, {
-          reportName: mainReport,
-          columns: mainColumns,
-          filter,
-          pageNumber: "1",
-          pageSize: "12",
-          sortColumns: "REPORT_DATE",
-          sortTypes: "-1",
-          source: "SECURITIES",
-          client: "PC"
-        })
-      ),
-      fetchDatacenterJson(
-        buildDatacenterUrl(EAST_DC_SEC, {
-          reportName: balReport,
-          columns: "ITEM_NAME,STD_ITEM_CODE,AMOUNT,REPORT_DATE",
-          filter: filter + '(STD_ITEM_CODE="' + EAST_LIAB_ITEM + '")',
-          pageNumber: "1",
-          pageSize: "12",
-          sortColumns: "REPORT_DATE",
-          sortTypes: "-1",
-          source: "SECURITIES",
-          client: "PC"
-        })
-      ).catch(() => null)
-    ]);
+    const mainJson = await fetchDatacenterJson(
+      buildDatacenterUrl(EAST_DC_SEC, {
+        reportName: mainReport,
+        columns: mainColumns,
+        filter,
+        pageNumber: "1",
+        pageSize: "12",
+        sortColumns: "REPORT_DATE",
+        sortTypes: "-1",
+        source: "SECURITIES",
+        client: "PC"
+      })
+    );
 
     const rows = mainJson?.result?.data || [];
     if (!rows.length) throw new Error("暂无财务数据");
 
-    const liabMap = mapLiabilityByDate(balJson?.result?.data);
     const currency = String(rows[0].CURRENCY_ABBR || (isHk ? "HKD" : "USD"));
     const currencyLabel =
       currency === "HKD" ? "港元" : currency === "CNY" ? "人民币" : "美元";
@@ -683,7 +656,6 @@
         profit: numOrNull(
           isHk ? row.HOLDER_PROFIT : row.PARENT_HOLDER_NETPROFIT
         ),
-        liabilities: liabMap[date] ?? null,
         revenueYoy: numOrNull(row.OPERATE_INCOME_YOY),
         profitYoy: numOrNull(
           isHk ? row.HOLDER_PROFIT_YOY : row.PARENT_HOLDER_NETPROFIT_YOY
@@ -700,12 +672,84 @@
     };
   }
 
+  /** 规范化股东变动状态：新进 / 增持 / 减持 / 不变 */
+  function normalizeHolderAction(row) {
+    const state = String(row.HOLDER_STATE_NEW || row.HOLDER_STATE || "").trim();
+    const raw = row.HOLD_NUM_CHANGE;
+    const changeNum =
+      typeof raw === "number" ? raw : numOrNull(String(raw || "").replace(/,/g, ""));
+
+    let action = state;
+    if (!action || action === "null") {
+      if (raw === "新进") action = "新进";
+      else if (raw === "不变") action = "不变";
+      else if (changeNum != null && changeNum > 0) action = "增持";
+      else if (changeNum != null && changeNum < 0) action = "减持";
+      else action = "--";
+    } else if (/新/.test(action)) action = "新进";
+    else if (/增/.test(action)) action = "增持";
+    else if (/减/.test(action)) action = "减持";
+    else if (/不|持平|无变化/.test(action)) action = "不变";
+
+    return {
+      action,
+      changeRatio: numOrNull(row.CHANGE_RATIO),
+      changeShares: changeNum
+    };
+  }
+
   /**
-   * 个股资料：市值 + 近年营收/利润/负债
+   * A 股前十大股东（最近报告期）+ 加减仓
+   * @returns {Promise<{ date: string, list: Array }>}
+   */
+  async function loadCnTopHolders(code) {
+    const json = await fetchDatacenterJson(
+      buildDatacenterUrl(EAST_DC_WEB, {
+        reportName: "RPT_F10_EH_HOLDERS",
+        columns:
+          "END_DATE,HOLDER_RANK,HOLDER_NAME,HOLD_NUM,HOLD_NUM_RATIO,HOLD_NUM_CHANGE,CHANGE_RATIO,HOLDER_STATE_NEW,HOLDER_STATE",
+        filter: '(SECURITY_CODE="' + code + '")',
+        pageNumber: "1",
+        pageSize: "30",
+        sortColumns: "END_DATE,HOLDER_RANK",
+        sortTypes: "-1,1",
+        source: "WEB",
+        client: "WEB"
+      })
+    );
+
+    const rows = json?.result?.data || [];
+    if (!rows.length) throw new Error("暂无股东数据");
+
+    const latest = normalizeReportDate(rows[0].END_DATE);
+    const list = rows
+      .filter((r) => normalizeReportDate(r.END_DATE) === latest)
+      .slice(0, 10)
+      .map((r) => {
+        const chg = normalizeHolderAction(r);
+        return {
+          rank: Number(r.HOLDER_RANK) || 0,
+          name: String(r.HOLDER_NAME || "--"),
+          ratio: numOrNull(r.HOLD_NUM_RATIO),
+          shares: numOrNull(r.HOLD_NUM),
+          action: chg.action,
+          changeRatio: chg.changeRatio,
+          changeShares: chg.changeShares
+        };
+      });
+
+    if (!list.length) throw new Error("暂无股东数据");
+    return { date: latest, list };
+  }
+
+  /**
+   * 个股资料：市值 + 近年营收/利润/负债率 + 十大股东
    * @returns {Promise<{
    *   name, code, marketKind, currency, currencyLabel,
    *   marketCap: { total, float },
    *   reports: Array,
+   *   holders: { date, list }|null,
+   *   holdersError?: string,
    *   financeError?: string
    * }>}
    */
@@ -738,9 +782,15 @@
       financePromise = Promise.reject(new Error("该市场暂不支持财务数据"));
     }
 
-    const [mcapResult, financeResult] = await Promise.allSettled([
+    const holdersPromise =
+      marketKind === "CN"
+        ? loadCnTopHolders(code)
+        : Promise.reject(new Error("该市场暂无十大股东数据"));
+
+    const [mcapResult, financeResult, holdersResult] = await Promise.allSettled([
       mcapPromise,
-      financePromise
+      financePromise,
+      holdersPromise
     ]);
 
     const mcap =
@@ -749,6 +799,8 @@
         : { total: null, float: null, name: null };
     const finance =
       financeResult.status === "fulfilled" ? financeResult.value : null;
+    const holders =
+      holdersResult.status === "fulfilled" ? holdersResult.value : null;
 
     return {
       name: finance?.name || mcap.name || holding.name || code,
@@ -763,6 +815,11 @@
         float: mcap.float
       },
       reports: finance?.reports || [],
+      holders,
+      holdersError:
+        holdersResult.status === "rejected"
+          ? holdersResult.reason?.message || "暂无股东数据"
+          : null,
       financeError:
         financeResult.status === "rejected"
           ? financeResult.reason?.message || "暂无财务数据"

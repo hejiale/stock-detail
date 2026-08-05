@@ -1171,6 +1171,13 @@
       .trim();
   }
 
+  function stripConceptSuffix(name) {
+    return String(name || "")
+      .replace(/概念$/u, "")
+      .replace(/[（(][^）)]*[）)]$/u, "")
+      .trim();
+  }
+
   function resolveIndustryGroupName(rawName) {
     const name = String(rawName || "");
     const base = stripIndustryLevelSuffix(name);
@@ -1182,15 +1189,72 @@
   }
 
   /**
-   * 把细分行业板归并成粗板块
-   * - 涨跌幅：按成分总市值加权
-   * - 点击时可拉全部子板块成分股
+   * 概念板块归类规则（按顺序匹配，越靠前越优先）
+   * 把相近题材拢成粗板块，便于扫读
    */
-  function groupCnIndustryBoards(boards) {
+  const CN_CONCEPT_GROUP_RULES = [
+    { name: "人工智能", test: /人工智能|ChatGPT|DeepSeek|Kimi|智谱AI|多模态AI|AIGC|AIPC|AI智能体|AI应用|AI语料|MLOps|^AI(?!制药|芯片)/i },
+    { name: "算力液冷", test: /算力|液冷|数据中心|东数西算|边缘计算|英伟达|CPO|光通信模块|铜缆高速|高带宽内存|时空大数据/i },
+    { name: "芯片半导体", test: /芯片|半导体|存储芯片|EDA|先进封装|光刻|IGBT|碳化硅|氮化镓|MLCC|被动元件|PCB|中芯|国产芯片/i },
+    { name: "华为生态", test: /华为|鸿蒙|昇腾|海思|欧拉/ },
+    { name: "机器人", test: /机器人|人形机器人|减速器|机器视觉|工业母机|虚拟机器人/ },
+    { name: "新能源车", test: /新能源车|特斯拉|小米汽车|华为汽车|无人驾驶|汽车|充电桩|换电|高压快充|激光雷达|车联网|飞行汽车|eVTOL|轮毂电机|胎压监测|电子后视镜|电子车牌/ },
+    { name: "电池储能", test: /电池|固态电池|锂电池|锂电|钠离子|钒电池|BC电池|HJT|TOPCon|钙钛矿|储能|抽水蓄能|熔盐储能|燃料电池|麒麟电池|刀片电池|超级电容|动力电池/i },
+    { name: "光伏风电", test: /光伏|风能|绿色电力|植物照明/ },
+    { name: "氢能核电", test: /氢能源|氢能|核能核电|可控核聚变|超超临界|虚拟电厂|智能电网|特高压|电网概念|雅下水电|地热能|空气能热泵/ },
+    { name: "军工航天", test: /军工|军民融合|商业航天|航天航空|卫星|航母|低空|无人机|通用航空|大飞机|北斗|海工装备|空间站|民爆/ },
+    { name: "医药医疗", test: /医药|医疗|医美|创新药|中药|CRO|CAR-T|减肥药|疫苗|基因|体外诊断|AI制药|互联医疗|精准医疗|精准诊断|单抗|免疫治疗|特色药|独家药品|流感|肝炎|肝素|阿兹海默|青蒿素|长寿药|毛发医疗|幽门螺杆菌|辅助生殖|医废|病原体|病毒防治|DRG|SPD|重组蛋白|合成生物/i },
+    { name: "消费电子", test: /消费电子|苹果|小米概念|OLED|MiniLED|MicroLED|LED概念|无线耳机|无线充电|智能穿戴|AI手机|AI眼镜|3D摄像|3D玻璃|屏下摄像|柔性屏|折叠屏|显示技术|超清视频|智能电视|智能家居/i },
+    { name: "信创云数", test: /信创|云计算|大数据|数据要素|数据安全|数据确权|网络安全|国产软件|腾讯云|国资云|工业互联|物联网|智慧城市|智慧政务|智慧灯杆|数字经济|数字孪生|数字水印|数字货币|财税数字化|VPN|IPv6|WiFi|UWB|PLC|ERP|电子身份证/i },
+    { name: "元宇宙XR", test: /元宇宙|虚拟现实|增强现实|混合现实|虚拟数字人|裸眼3D|空间计算|全息技术|Web3|区块链/i },
+    { name: "传媒游戏", test: /游戏|短剧|影视|电子竞技|数字阅读|抖音|快手|小红书|百度概念|网红经济|文娱消费|彩票/ },
+    { name: "电商零售", test: /电商|跨境|新消费|新零售|社区团购|拼多多|阿里概念|蚂蚁概念|免税|零售|内贸流通|移动支付|跨境支付|退税商店|C2M|首发经济/ },
+    { name: "白酒食品", test: /白酒|酿酒|啤酒|调味品|预制菜|乳业|猪肉|鸡肉|粮食|食品安全|代糖|人造肉|味蕾|维生素|宠物经济|婴童|谷子经济|盲盒|户外露营|冰雪经济|地摊经济/ },
+    { name: "地产基建", test: /地产|建筑|基建|水利|装配建筑|地下管网|新型城镇化|雄安|租售同权|工程建设|工程机械|房屋检测|海绵城市|新型工业化|PPP/i },
+    { name: "金融券商", test: /券商|银行|保险|互联网金融|融资融券|化债|参股保险|参股券商|参股银行|参股期货|证金持股|REITs|转债/i },
+    { name: "有色贵金属", test: /黄金|稀土|锂矿|小金属|培育钻石|稀缺资源|资源开采|钛白粉/ },
+    { name: "油气煤化", test: /油气|煤化工|氟化工|磷化工|化工原料|可燃冰|页岩气|天然气|环氧丙烷|草甘膦|有机硅|PVDF|工业气体|氦气/i },
+    { name: "航运交运", test: /快递|冷链|交运|船舶|铁路|磁悬浮|ETC/i },
+    { name: "国企改革", test: /国企改革|央企改革|中特估|中字头|沪企改革|并购重组|股权激励|股权转让|举牌|供销社/ },
+    { name: "区域自贸", test: /自贸|一带一路|京津冀|成渝|长江三角|西部大开发|深圳特区|滨海新区|海南|东北振兴|中俄贸易|统一大市场|粤港/ },
+    { name: "新材料", test: /新材料|石墨烯|碳纤维|碳基|PEEK|蓝宝石|纳米银|降解塑料|复合集流体|玻璃基板|3D打印|超导|氮化镓/i },
+    { name: "环保节能", test: /节能环保|碳交易|垃圾分类|土壤修复|噪声防治|尾气治理|核污染|低碳冶金|净水|包装材料|造纸印刷/ },
+    { name: "养老教育", test: /养老|教育|体育|托育|职业教育|在线教育/ },
+    { name: "旅游酒店", test: /旅游|酒店/ },
+    { name: "通信5G", test: /5G|6G|F5G|通信技术|光纤|毫米波/i },
+    { name: "农业种植", test: /农业|种植|农药|水产|生态农业|转基因|土地流转|乡村振兴/ }
+  ];
+
+  function resolveConceptGroupName(rawName) {
+    const name = String(rawName || "");
+    const base = stripConceptSuffix(name);
+    for (let i = 0; i < CN_CONCEPT_GROUP_RULES.length; i++) {
+      const rule = CN_CONCEPT_GROUP_RULES[i];
+      if (rule.test.test(name) || rule.test.test(base)) return rule.name;
+    }
+    return base || name;
+  }
+
+  /**
+   * 把细分板块归并成粗板块
+   * - 涨跌幅：按成分总市值加权
+   * - 点击时可拉子板块成分股
+   * @param {Array} boards
+   * @param {(name: string) => string} resolveGroupName
+   * @param {(rawName: string, groupName: string) => boolean} [isPreferredName]
+   */
+  function groupCnBoards(boards, resolveGroupName, isPreferredName) {
     const map = new Map();
+    const preferredFn =
+      typeof isPreferredName === "function"
+        ? isPreferredName
+        : (rawName, groupName) =>
+            stripIndustryLevelSuffix(rawName) === groupName ||
+            /Ⅱ$/.test(rawName) ||
+            rawName === groupName;
 
     (boards || []).forEach((b) => {
-      const groupName = resolveIndustryGroupName(b.name);
+      const groupName = resolveGroupName(b.name);
       let g = map.get(groupName);
       if (!g) {
         g = {
@@ -1217,12 +1281,7 @@
       g.mcap += mcap;
       g.weightedChange += (b.change || 0) * (mcap || 1);
 
-      // 代表代码：优先取名称恰好等于归类名 / 带Ⅱ的父级，否则取市值最大
-      const isPreferred =
-        stripIndustryLevelSuffix(b.name) === groupName ||
-        /Ⅱ$/.test(b.name) ||
-        b.name === groupName;
-      if (isPreferred || mcap >= g._repMcap) {
+      if (preferredFn(b.name, groupName) || mcap >= g._repMcap) {
         g.code = b.code;
         g._repMcap = mcap;
       }
@@ -1259,6 +1318,17 @@
         };
       })
       .sort((a, b) => b.change - a.change);
+  }
+
+  function groupCnIndustryBoards(boards) {
+    return groupCnBoards(boards, resolveIndustryGroupName);
+  }
+
+  function groupCnConceptBoards(boards) {
+    return groupCnBoards(boards, resolveConceptGroupName, (rawName, groupName) => {
+      const base = stripConceptSuffix(rawName);
+      return rawName === groupName || base === groupName || rawName === groupName + "概念";
+    });
   }
 
   async function loadCnSectorBoards(kind = "industry") {
@@ -1325,8 +1395,9 @@
     }
 
     const sorted = all.sort((a, b) => b.change - a.change);
-    // 仅行业板块做归类；概念板块仍按原列表
-    return kind === "industry" ? groupCnIndustryBoards(sorted) : sorted;
+    if (kind === "industry") return groupCnIndustryBoards(sorted);
+    if (kind === "concept") return groupCnConceptBoards(sorted);
+    return sorted;
   }
 
   /**

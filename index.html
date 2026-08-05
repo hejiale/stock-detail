@@ -1273,9 +1273,7 @@
         openBoardModal._kind = kind;
         openBoardModal._list = list;
         document.getElementById("boardModalSub").textContent =
-          kind === "industry"
-            ? `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`
-            : `共 ${list.length} 个${kindLabel}板块 · 按涨跌幅排序`;
+          `共 ${list.length} 个${kindLabel}板块（相近已归类）· 按涨跌幅排序`;
         renderBoardList(list);
         setBoardStatus(list.length ? "" : "暂无板块数据");
       } catch (err) {

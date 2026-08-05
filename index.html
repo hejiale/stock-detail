@@ -367,9 +367,7 @@
         }
       }
 
-      const prevBtn = panel.querySelector("[data-page-prev]");
       const nextBtn = panel.querySelector("[data-page-next]");
-      if (prevBtn) prevBtn.disabled = page <= 1;
       if (nextBtn) nextBtn.disabled = page >= total;
 
       panel.querySelectorAll("[data-page-num]").forEach((btn) => {
@@ -402,7 +400,6 @@
         <div class="pager">
           <div class="pager-info"></div>
           <div class="pager-btns">
-            <button class="pager-btn" type="button" data-page-prev="${fund.id}">上一页</button>
             ${pageBtns}
             <button class="pager-btn" type="button" data-page-next="${fund.id}">下一页</button>
           </div>
@@ -1912,13 +1909,6 @@
       const chartName = e.target.closest("[data-chart-fund]");
       if (chartName) {
         openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
-        return;
-      }
-
-      const pagePrev = e.target.closest("[data-page-prev]");
-      if (pagePrev) {
-        const fundId = pagePrev.dataset.pagePrev;
-        goToPage(fundId, getCurrentPage(fundId) - 1);
         return;
       }
 

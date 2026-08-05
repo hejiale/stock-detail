@@ -925,7 +925,7 @@
           return `
             <div class="us-index-card">
               <div class="idx-name">${item.name}</div>
-              <div class="idx-chg ${tone}">${formatPct(item.change)}</div>
+              <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
               <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
             </div>`;
         })
@@ -1182,6 +1182,10 @@
                   <path d="M7.25 7.25V3.5h1.5v3.75H12.5v1.5H8.75V12.5h-1.5V8.75H3.5v-1.5h3.75z"/>
                 </svg>
               </button>
+              ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
+              <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}" aria-label="板块">
+                <img src="bankuai.png" alt="板块" />
+              </button>` : ""}
             </div>`
           : "";
 
@@ -1189,16 +1193,7 @@
           <div class="fund-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
-                <div class="name-row">
-                  <div class="name">${fund.fundName}</div>
-                  ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
-                    <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}">
-                      板块
-                      <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                        <path d="M4.2 2.2 8 6l-3.8 3.8L3.3 8.9 6.2 6 3.3 3.1 4.2 2.2z"/>
-                      </svg>
-                    </button>` : ""}
-                </div>
+                <div class="name">${fund.fundName}</div>
                 <div class="sub">${metaSub}</div>
               </div>
               <button class="btn btn-sync" type="button" data-sync="${fund.id}">

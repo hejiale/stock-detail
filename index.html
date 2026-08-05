@@ -590,9 +590,7 @@
       }
 
       const name = state.trend?.name || state.history?.name || "";
-      const code = state.trend?.code || state.history?.code || "";
-      document.getElementById("chartModalName").textContent =
-        name + (code ? `（${code}）` : "");
+      document.getElementById("chartModalName").textContent = name || "--";
       document.getElementById("chartModalSub").textContent =
         `${series.title} · ${series.baselineLabel || "基准"} ${formatPrice(base)}`;
     }
@@ -634,7 +632,7 @@
       const reqId = ++chartRequestId;
 
       document.getElementById("chartModalName").textContent =
-        holding.name + "（" + holding.code + "）";
+        holding.name;
       document.getElementById("chartModalSub").textContent = "加载行情中…";
       document.getElementById("chartModalPrice").textContent = "--";
       document.getElementById("chartModalPrice").className = "price flat";
@@ -890,7 +888,7 @@
                       data-chart-fund="${fund.id}"
                       data-chart-index="${i}"
                       title="查看 ${h.name} 当日分时"
-                    >${h.name}（${h.code}）</div>
+                    >${h.name}</div>
                     ${h.custom ? `
                       <button
                         class="btn-remove-stock"

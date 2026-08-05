@@ -455,8 +455,36 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 分时 / 日 K
+  // 分时 / 日 K / 市值
   // ---------------------------------------------------------------------------
+
+  /**
+   * 东方财富总市值 / 流通市值
+   * ulist 字段：f20 总市值、f21 流通市值（单位：元）
+   *
+   * @returns {Promise<{ total: number|null, float: number|null }>}
+   */
+  async function loadStockMarketCap(holding) {
+    const secid = toEastSecId(holding);
+    const path =
+      "/api/qt/ulist.np/get?fltt=2&fields=f12,f20,f21&secids=" +
+      encodeURIComponent(secid) +
+      "&ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now();
+
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const item = json?.data?.diff?.[0];
+    if (!item) throw new Error("暂无市值数据");
+
+    const total = Number(item.f20);
+    const floatCap = Number(item.f21);
+    return {
+      total: !Number.isNaN(total) && total > 0 ? total : null,
+      float: !Number.isNaN(floatCap) && floatCap > 0 ? floatCap : null
+    };
+  }
 
   /**
    * 东方财富当日分时
@@ -746,6 +774,7 @@
     loadUsPreMarketQuotes,
     loadIntradayTrends,
     loadDailyKlines,
+    loadStockMarketCap,
     resolveStock,
     enrichUsPreMarket,
     // 区间计算

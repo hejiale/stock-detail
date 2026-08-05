@@ -50,6 +50,7 @@
           <div class="chart-modal-meta">
             <span class="price flat" id="chartModalPrice">--</span>
             <span class="chg flat" id="chartModalChg">--</span>
+            <span class="mcap" id="chartModalMcap">市值 --</span>
           </div>
         </div>
         <button class="chart-modal-close" type="button" data-chart-close aria-label="关闭">
@@ -102,6 +103,7 @@
       loadUsPreMarketQuotes,
       loadIntradayTrends,
       loadDailyKlines,
+      loadStockMarketCap,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock,
@@ -305,6 +307,21 @@
       if (abs >= 1000) return n.toFixed(0);
       if (abs >= 100) return n.toFixed(1);
       return n.toFixed(2);
+    }
+
+    /** 市值（元）格式化为 万 / 亿 / 万亿 */
+    function formatMarketCap(n) {
+      if (n == null || Number.isNaN(n) || n <= 0) return "--";
+      if (n >= 1e12) return (n / 1e12).toFixed(2) + "万亿";
+      if (n >= 1e8) return (n / 1e8).toFixed(2) + "亿";
+      if (n >= 1e4) return (n / 1e4).toFixed(2) + "万";
+      return n.toFixed(0);
+    }
+
+    function setChartModalMcap(total) {
+      const el = document.getElementById("chartModalMcap");
+      el.textContent =
+        total == null ? "市值 --" : "市值 " + formatMarketCap(total);
     }
 
     function setChartStatus(msg) {
@@ -610,6 +627,7 @@
       document.getElementById("chartModalPrice").className = "price flat";
       document.getElementById("chartModalChg").textContent = "--";
       document.getElementById("chartModalChg").className = "chg flat";
+      setChartModalMcap(null);
       resetPeriodValues();
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
 
@@ -621,12 +639,17 @@
       document.body.style.overflow = "hidden";
       setChartStatus("加载分时与区间涨跌幅…");
 
-      const [trendResult, historyResult] = await Promise.allSettled([
+      const [trendResult, historyResult, mcapResult] = await Promise.allSettled([
         loadIntradayTrends(holding),
-        loadDailyKlines(holding)
+        loadDailyKlines(holding),
+        loadStockMarketCap(holding)
       ]);
 
       if (reqId !== chartRequestId) return;
+
+      setChartModalMcap(
+        mcapResult.status === "fulfilled" ? mcapResult.value?.total : null
+      );
 
       const state = {
         range: "day",
@@ -676,6 +699,7 @@
       document.body.style.overflow = "";
       setChartStatus("");
       resetPeriodValues();
+      setChartModalMcap(null);
     }
 
     async function syncFundQuotes(fundId) {

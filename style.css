@@ -676,6 +676,13 @@ header p {
 .chart-modal-meta .price.flat,
 .chart-modal-meta .chg.flat { color: #64748b; }
 
+.chart-modal-meta .mcap {
+  align-self: flex-end;
+  padding-bottom: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .chart-modal-close {
   flex-shrink: 0;
   width: 36px;

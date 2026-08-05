@@ -174,22 +174,35 @@ header p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  width: 36px;
   height: 36px;
-  padding: 0 12px;
-  font-size: 13px;
+  padding: 0;
+  border: none;
   border-radius: 10px;
-  box-shadow: 0 6px 14px rgba(15, 159, 110, 0.18);
-  white-space: nowrap;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
-.fund-meta .btn-sync svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
+.fund-meta .btn-sync:active {
+  transform: scale(0.94);
 }
 
-.fund-meta .btn-sync.loading svg {
+.fund-meta .btn-sync:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.fund-meta .btn-sync img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.fund-meta .btn-sync.loading img {
   animation: sync-spin 0.8s linear infinite;
 }
 
@@ -527,12 +540,6 @@ header p {
   background: #fff;
   color: #475569;
   border: 1px solid #e2e8f0;
-}
-
-.btn-sync {
-  background: linear-gradient(135deg, #0f9f6e, #16c784);
-  color: #fff;
-  box-shadow: 0 10px 20px rgba(15, 159, 110, 0.22);
 }
 
 .btn:disabled {

@@ -1049,10 +1049,8 @@
       const { fund, start, holdings: pageHoldings } = getPageSlice(fundId);
       if (!pageHoldings.length) return;
 
-      const label = btn.querySelector(".btn-sync-label");
       btn.disabled = true;
       btn.classList.add("loading");
-      if (label) label.textContent = "正在抓取…";
 
       try {
         const usOnPage = pageHoldings.filter(isUsHolding);
@@ -1128,7 +1126,6 @@
       } finally {
         btn.disabled = false;
         btn.classList.remove("loading");
-        if (label) label.textContent = "推送实时涨跌幅";
       }
     }
 
@@ -1196,11 +1193,8 @@
                 <div class="name">${fund.fundName}</div>
                 <div class="sub">${metaSub}</div>
               </div>
-              <button class="btn btn-sync" type="button" data-sync="${fund.id}">
-                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8a7.96 7.96 0 0 0 5.65-2.35l-1.41-1.41A5.98 5.98 0 0 1 8 14a6 6 0 1 1 5.65-8.65L11 8h5V3l-2.35-.65z"/>
-                </svg>
-                <span class="btn-sync-label">推送实时涨跌幅</span>
+              <button class="btn-sync" type="button" data-sync="${fund.id}" title="推送实时涨跌幅" aria-label="推送实时涨跌幅">
+                <img src="pull.png" alt="推送" />
               </button>
             </div>
             ${addStockHtml}

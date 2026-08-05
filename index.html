@@ -19,15 +19,7 @@
           <path d="M10.2 2.6 4.8 8l5.4 5.4 1.2-1.2L7.2 8l4.2-4.2-1.2-1.2z"/>
         </svg>
       </button>
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="dongfang" type="button">东方</button>
-        <button class="tab" data-tab="caitong" type="button">财通</button>
-        <button class="tab" data-tab="huaxia" type="button">华夏</button>
-        <button class="tab" data-tab="guangfa" type="button">广发</button>
-        <button class="tab" data-tab="jianxin" type="button">建信</button>
-        <button class="tab" data-tab="cnSemi" type="button">A股</button>
-        <button class="tab" data-tab="usSemi" type="button">美股</button>
-      </div>
+      <div class="tabs" role="tablist"></div>
       <button class="tabs-arrow" type="button" data-tab-next aria-label="下一个">
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
@@ -259,6 +251,7 @@
       quoteKey,
       loadQuotes,
       loadUsPreMarketQuotes,
+      enrichUsPreMarket,
       loadIntradayTrends,
       loadDailyKlines,
       loadStockProfile,
@@ -278,17 +271,32 @@
     const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
     const PAGE_SIZE = 10;
     const pageState = {};
+    const MODAL_IDS = [
+      "chartModal",
+      "profileModal",
+      "boardModal",
+      "boardStocksModal",
+      "usBoardModal"
+    ];
 
-    function loadCustomStocks() {
+    function loadJson(key, fallback) {
       try {
-        return JSON.parse(localStorage.getItem(CUSTOM_STOCKS_KEY) || "{}");
+        return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
       } catch {
-        return {};
+        return fallback;
       }
     }
 
+    function saveJson(key, val) {
+      localStorage.setItem(key, JSON.stringify(val));
+    }
+
+    function loadCustomStocks() {
+      return loadJson(CUSTOM_STOCKS_KEY, {});
+    }
+
     function saveCustomStocks(all) {
-      localStorage.setItem(CUSTOM_STOCKS_KEY, JSON.stringify(all));
+      saveJson(CUSTOM_STOCKS_KEY, all);
     }
 
     /** 把本地自选插到默认列表前面 */
@@ -314,9 +322,8 @@
     function rerender(activeFundId) {
       const keep = activeFundId || getActiveFundId();
       applyCustomHoldings();
-      render();
-      switchTab(keep);
-      syncFundQuotes(keep);
+      renderFundPanel(keep);
+      switchTab(keep, { forceSync: true });
     }
 
     function getTotalPages(fund) {
@@ -342,24 +349,22 @@
       return { fund, page, start, holdings };
     }
 
-    function applyPage(fundId) {
+    function updatePagerUI(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
       const page = getCurrentPage(fundId);
       const total = getTotalPages(fund);
       const panel = document.querySelector(`[data-panel="${fundId}"]`);
       if (!panel) return;
 
-      panel.querySelectorAll(".row[data-index]").forEach((row) => {
-        const index = Number(row.dataset.index);
-        const rowPage = Math.floor(index / PAGE_SIZE) + 1;
-        row.hidden = rowPage !== page;
-      });
-
       const info = panel.querySelector(".pager-info");
       if (info) {
-        const start = (page - 1) * PAGE_SIZE + 1;
-        const end = Math.min(page * PAGE_SIZE, fund.holdings.length);
-        info.textContent = `第 ${page}/${total} 页 · ${start}-${end} / ${fund.holdings.length}`;
+        if (fund.holdings.length <= PAGE_SIZE) {
+          info.textContent = `共 ${fund.holdings.length} 条`;
+        } else {
+          const start = (page - 1) * PAGE_SIZE + 1;
+          const end = Math.min(page * PAGE_SIZE, fund.holdings.length);
+          info.textContent = `第 ${page}/${total} 页 · ${start}-${end} / ${fund.holdings.length}`;
+        }
       }
 
       const prevBtn = panel.querySelector("[data-page-prev]");
@@ -368,9 +373,18 @@
       if (nextBtn) nextBtn.disabled = page >= total;
 
       panel.querySelectorAll("[data-page-num]").forEach((btn) => {
-        const n = Number(btn.dataset.pageNum);
-        btn.classList.toggle("active", n === page);
+        btn.classList.toggle("active", Number(btn.dataset.pageNum) === page);
       });
+    }
+
+    /** 翻页：先持久化当前页输入，再只渲染目标页行 */
+    function goToPage(fundId, page) {
+      persistFromDom();
+      setCurrentPage(fundId, page);
+      renderFundRows(fundId);
+      updatePagerUI(fundId);
+      applyAllChangeColors(fundId);
+      syncFundQuotes(fundId);
     }
 
     function buildPagerHtml(fund) {
@@ -397,15 +411,11 @@
     }
 
     function loadInputs() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      } catch {
-        return {};
-      }
+      return loadJson(STORAGE_KEY, {});
     }
 
     function saveInputs(all) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+      saveJson(STORAGE_KEY, all);
     }
 
     function formatPct(n) {
@@ -488,8 +498,9 @@
       return `<span class="profile-yoy ${toneClass(n)}">${formatPct(n)}</span>`;
     }
 
-    function setChartStatus(msg) {
-      const el = document.getElementById("chartStatus");
+    function setStatus(elOrId, msg) {
+      const el = typeof elOrId === "string" ? document.getElementById(elOrId) : elOrId;
+      if (!el) return;
       if (!msg) {
         el.classList.remove("show");
         el.textContent = "";
@@ -497,6 +508,29 @@
       }
       el.textContent = msg;
       el.classList.add("show");
+    }
+
+    function syncBodyScroll() {
+      const anyOpen = MODAL_IDS.some((id) =>
+        document.getElementById(id)?.classList.contains("show")
+      );
+      document.body.style.overflow = anyOpen ? "hidden" : "";
+    }
+
+    function showModal(id) {
+      const modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      syncBodyScroll();
+    }
+
+    function hideModal(id) {
+      const modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      syncBodyScroll();
     }
 
     function resetPeriodValues() {
@@ -765,11 +799,11 @@
       const series = buildRangeSeries(state.range, state);
       const canvas = document.getElementById("chartCanvas");
       if (!series) {
-        setChartStatus(state.range === "day" ? "暂无当日分时数据" : "暂无该区间行情");
+        setStatus("chartStatus", state.range === "day" ? "暂无当日分时数据" : "暂无该区间行情");
         return;
       }
       openChartModal._lastSeries = series;
-      setChartStatus("");
+      setStatus("chartStatus", "");
       updateChartMeta(series, state);
       drawIntradayChart(canvas, series);
     }
@@ -791,7 +825,6 @@
       const holding = fund?.holdings?.[index];
       if (!holding) return;
 
-      const modal = document.getElementById("chartModal");
       const canvas = document.getElementById("chartCanvas");
       const reqId = ++chartRequestId;
 
@@ -814,10 +847,8 @@
       };
       openChartModal._lastSeries = null;
 
-      modal.classList.add("show");
-      modal.setAttribute("aria-hidden", "false");
-      document.body.style.overflow = "hidden";
-      setChartStatus("加载分时与区间涨跌幅…");
+      showModal("chartModal");
+      setStatus("chartStatus", "加载分时与区间涨跌幅…");
 
       const [trendResult, historyResult] = await Promise.allSettled([
         loadIntradayTrends(holding),
@@ -851,7 +882,7 @@
 
       if (!state.trend && !state.history) {
         openChartModal._lastSeries = null;
-        setChartStatus("行情加载失败，请稍后重试");
+        setStatus("chartStatus", "行情加载失败，请稍后重试");
         return;
       }
 
@@ -872,34 +903,23 @@
       if (document.getElementById("profileModal")?.classList.contains("show")) {
         closeProfileModal();
       }
-      const modal = document.getElementById("chartModal");
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-      document.body.style.overflow = "";
-      setChartStatus("");
+      hideModal("chartModal");
+      setStatus("chartStatus", "");
       resetPeriodValues();
     }
 
-    function setProfileStatus(msg) {
-      const el = document.getElementById("profileStatus");
-      if (!el) return;
-      if (!msg) {
-        el.classList.remove("show");
-        el.textContent = "";
-        return;
-      }
-      el.textContent = msg;
-      el.classList.add("show");
+    function filterReports(reports, kind) {
+      return (reports || []).filter((r) => {
+        if (kind === "annual") return r.kind === "annual";
+        if (kind === "quarter") return r.kind === "quarter";
+        return true;
+      });
     }
 
     function renderProfileList(reports, kind) {
       const wrap = document.getElementById("profileList");
       if (!wrap) return;
-      const list = (reports || []).filter((r) => {
-        if (kind === "annual") return r.kind === "annual";
-        if (kind === "quarter") return r.kind === "quarter";
-        return true;
-      });
+      const list = filterReports(reports, kind);
 
       if (!list.length) {
         wrap.innerHTML = "";
@@ -1017,7 +1037,6 @@
         return;
       }
 
-      const modal = document.getElementById("profileModal");
       const reqId = ++profileRequestId;
       const name = document.getElementById("chartModalName")?.textContent || holding.name;
 
@@ -1034,9 +1053,8 @@
       openProfileModal._kind = "all";
       openProfileModal._data = null;
 
-      modal.classList.add("show");
-      modal.setAttribute("aria-hidden", "false");
-      setProfileStatus("加载个股资料…");
+      showModal("profileModal");
+      setStatus("profileStatus", "加载个股资料…");
 
       try {
         const profile = await loadStockProfile(holding);
@@ -1055,19 +1073,19 @@
         renderProfileHolders(profile.holders, profile.holdersError);
 
         if (profile.financeError && !profile.reports?.length) {
-          setProfileStatus(profile.financeError);
+          setStatus("profileStatus", profile.financeError);
           return;
         }
 
         renderProfileList(profile.reports, "all");
-        setProfileStatus(
+        setStatus("profileStatus", 
           profile.reports?.length
             ? ""
             : profile.financeError || "暂无财务数据"
         );
       } catch (err) {
         if (reqId !== profileRequestId) return;
-        setProfileStatus(err.message || "加载失败");
+        setStatus("profileStatus", err.message || "加载失败");
       }
     }
 
@@ -1078,34 +1096,16 @@
       });
       const data = openProfileModal._data;
       if (!data) return;
+      const filtered = filterReports(data.reports, kind);
       renderProfileList(data.reports, kind);
-      const filtered = (data.reports || []).filter((r) => {
-        if (kind === "annual") return r.kind === "annual";
-        if (kind === "quarter") return r.kind === "quarter";
-        return true;
-      });
-      setProfileStatus(filtered.length ? "" : "该分类暂无数据");
+      setStatus("profileStatus", filtered.length ? "" : "该分类暂无数据");
     }
 
     function closeProfileModal() {
       profileRequestId += 1;
       openProfileModal._data = null;
-      const modal = document.getElementById("profileModal");
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-      setProfileStatus("");
-    }
-
-    function setBoardStatus(msg) {
-      const el = document.getElementById("boardStatus");
-      if (!el) return;
-      if (!msg) {
-        el.classList.remove("show");
-        el.textContent = "";
-        return;
-      }
-      el.textContent = msg;
-      el.classList.add("show");
+      hideModal("profileModal");
+      setStatus("profileStatus", "");
     }
 
     function renderBoardList(list) {
@@ -1117,15 +1117,10 @@
         return;
       }
 
-      const upArrow =
-        '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
-      const downArrow =
-        '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
-
       wrap.innerHTML = list
         .map((item, i) => {
           const tone = toneClass(item.change);
-          const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
+          const arrow = chgArrowHtml(item.change);
           const metaParts = [];
           if (item.childCount > 1) {
             metaParts.push(`含${item.childCount}个细分`);
@@ -1161,18 +1156,6 @@
         .join("");
     }
 
-    function setBoardStocksStatus(msg) {
-      const el = document.getElementById("boardStocksStatus");
-      if (!el) return;
-      if (!msg) {
-        el.classList.remove("show");
-        el.textContent = "";
-        return;
-      }
-      el.textContent = msg;
-      el.classList.add("show");
-    }
-
     function renderBoardStocksList(list) {
       const wrap = document.getElementById("boardStocksList");
       if (!wrap) return;
@@ -1181,15 +1164,10 @@
         return;
       }
 
-      const upArrow =
-        '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
-      const downArrow =
-        '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
-
       wrap.innerHTML = list
         .map((item, i) => {
           const tone = toneClass(item.change);
-          const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
+          const arrow = chgArrowHtml(item.change);
           return `
             <div class="board-row board-stock-row">
               <div class="board-info">
@@ -1216,7 +1194,6 @@
       const fetchCodes = codes.slice(0, 10);
       if (!fetchCodes.length) return;
 
-      const modal = document.getElementById("boardStocksModal");
       const reqId = ++boardStocksRequestId;
       const tip =
         codes.length > 1
@@ -1227,10 +1204,8 @@
         boardName || fetchCodes[0];
       document.getElementById("boardStocksModalSub").textContent = tip;
       document.getElementById("boardStocksList").innerHTML = "";
-      setBoardStocksStatus("加载成分股涨幅…");
-
-      modal.classList.add("show");
-      modal.setAttribute("aria-hidden", "false");
+      setStatus("boardStocksStatus", "加载成分股涨幅…");
+      showModal("boardStocksModal");
 
       try {
         const list = await loadCnSectorStocks(fetchCodes, 20);
@@ -1240,27 +1215,25 @@
             ? `含${codes.length}个细分 · 涨幅前 ${list.length} 只`
             : `${fetchCodes[0]} · 涨幅前 ${list.length} 只`;
         renderBoardStocksList(list);
-        setBoardStocksStatus(list.length ? "" : "暂无成分股数据");
+        setStatus("boardStocksStatus", list.length ? "" : "暂无成分股数据");
       } catch (err) {
         if (reqId !== boardStocksRequestId) return;
         document.getElementById("boardStocksModalSub").textContent = "加载失败";
-        setBoardStocksStatus(err?.message || "成分股加载失败");
+        setStatus("boardStocksStatus", err?.message || "成分股加载失败");
       }
     }
 
     function closeBoardStocksModal() {
       boardStocksRequestId += 1;
-      const modal = document.getElementById("boardStocksModal");
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-      setBoardStocksStatus("");
+      hideModal("boardStocksModal");
+      setStatus("boardStocksStatus", "");
     }
 
     async function loadBoardKind(kind) {
       const requestId = (loadBoardKind._req = (loadBoardKind._req || 0) + 1);
       const kindLabel = kind === "concept" ? "概念" : "行业";
       document.getElementById("boardModalSub").textContent = `加载${kindLabel}板块中…`;
-      setBoardStatus("加载中…");
+      setStatus("boardStatus", "加载中…");
       document.getElementById("boardList").innerHTML = "";
 
       document.querySelectorAll("[data-board-kind]").forEach((btn) => {
@@ -1275,19 +1248,16 @@
         document.getElementById("boardModalSub").textContent =
           `共 ${list.length} 个${kindLabel}板块（相近已归类）· 按涨跌幅排序`;
         renderBoardList(list);
-        setBoardStatus(list.length ? "" : "暂无板块数据");
+        setStatus("boardStatus", list.length ? "" : "暂无板块数据");
       } catch (err) {
         if (requestId !== loadBoardKind._req) return;
         document.getElementById("boardModalSub").textContent = "加载失败";
-        setBoardStatus(err?.message || "板块数据加载失败，请稍后重试");
+        setStatus("boardStatus", err?.message || "板块数据加载失败，请稍后重试");
       }
     }
 
     async function openBoardModal() {
-      const modal = document.getElementById("boardModal");
-      modal.classList.add("show");
-      modal.setAttribute("aria-hidden", "false");
-      document.body.style.overflow = "hidden";
+      showModal("boardModal");
       const kind = openBoardModal._kind || "industry";
       await loadBoardKind(kind);
     }
@@ -1297,29 +1267,8 @@
       if (document.getElementById("boardStocksModal")?.classList.contains("show")) {
         closeBoardStocksModal();
       }
-      const modal = document.getElementById("boardModal");
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-      if (
-        !document.getElementById("chartModal")?.classList.contains("show") &&
-        !document.getElementById("usBoardModal")?.classList.contains("show") &&
-        !document.getElementById("profileModal")?.classList.contains("show")
-      ) {
-        document.body.style.overflow = "";
-      }
-      setBoardStatus("");
-    }
-
-    function setUsBoardStatus(msg) {
-      const el = document.getElementById("usBoardStatus");
-      if (!el) return;
-      if (!msg) {
-        el.classList.remove("show");
-        el.textContent = "";
-        return;
-      }
-      el.textContent = msg;
-      el.classList.add("show");
+      hideModal("boardModal");
+      setStatus("boardStatus", "");
     }
 
     function chgArrowHtml(change) {
@@ -1414,12 +1363,9 @@
     }
 
     async function openUsBoardModal() {
-      const modal = document.getElementById("usBoardModal");
-      modal.classList.add("show");
-      modal.setAttribute("aria-hidden", "false");
-      document.body.style.overflow = "hidden";
+      showModal("usBoardModal");
       document.getElementById("usBoardModalSub").textContent = "加载中…";
-      setUsBoardStatus("加载中…");
+      setStatus("usBoardStatus", "加载中…");
       document.getElementById("usIndexGrid").innerHTML = "";
       document.getElementById("usSectorList").innerHTML = "";
       document.getElementById("usStockList").innerHTML = "";
@@ -1438,28 +1384,20 @@
         renderUsSectors(sectors);
         document.getElementById("usBoardModalSub").textContent =
           `指数 ${indices.length} · 板块 ${sectors.length} · 排行前 20`;
-        setUsBoardStatus("");
+        setStatus("usBoardStatus", "");
         await loadUsRankKind(rank);
       } catch (err) {
         if (requestId !== openUsBoardModal._req) return;
         document.getElementById("usBoardModalSub").textContent = "加载失败";
-        setUsBoardStatus(err?.message || "美股数据加载失败，请稍后重试");
+        setStatus("usBoardStatus", err?.message || "美股数据加载失败，请稍后重试");
       }
     }
 
     function closeUsBoardModal() {
       openUsBoardModal._req = (openUsBoardModal._req || 0) + 1;
       loadUsRankKind._req = (loadUsRankKind._req || 0) + 1;
-      const modal = document.getElementById("usBoardModal");
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-      if (
-        !document.getElementById("chartModal")?.classList.contains("show") &&
-        !document.getElementById("boardModal")?.classList.contains("show")
-      ) {
-        document.body.style.overflow = "";
-      }
-      setUsBoardStatus("");
+      hideModal("usBoardModal");
+      setStatus("usBoardStatus", "");
     }
 
     async function syncFundQuotes(fundId) {
@@ -1474,23 +1412,29 @@
 
       try {
         const usOnPage = pageHoldings.filter(isUsHolding);
-        // 美股盘前与东财日涨跌并行请求，避免串行拖慢
+        // 美股盘前与日涨跌并行，再经 enrichUsPreMarket 合并
         const prePromise = usOnPage.length
           ? loadUsPreMarketQuotes(usOnPage)
           : null;
 
         const quotes = await loadQuotes(pageHoldings);
+        await enrichUsPreMarket(pageHoldings, quotes, prePromise);
+
         let ok = 0;
+        let preOk = 0;
         const failed = [];
 
         pageHoldings.forEach((h, offset) => {
           const i = start + offset;
           const quote = quotes[h.code] || quotes[quoteKey(h.code)];
-          const input = document.querySelector(`input[data-fund="${fundId}"][data-index="${i}"]`);
+          const input = document.querySelector(
+            `input[data-fund="${fundId}"][data-index="${i}"]`
+          );
           const preEl = document.querySelector(
             `[data-pre-change][data-fund="${fundId}"][data-index="${i}"]`
           );
           if (preEl) applyPreChangeDisplay(preEl, quote?.preChange);
+          if (quote?.preChange != null && !Number.isNaN(quote.preChange)) preOk += 1;
 
           if (!quote || !input || Number.isNaN(quote.change)) {
             failed.push(h.name);
@@ -1502,27 +1446,6 @@
         });
 
         persistFromDom();
-
-        let preOk = 0;
-        if (prePromise) {
-          try {
-            const preMap = await prePromise;
-            pageHoldings.forEach((h, offset) => {
-              const key = quoteKey(h.code);
-              const src = preMap[key] || preMap[h.code];
-              if (!src || src.preChange == null || Number.isNaN(src.preChange)) return;
-              const target = quotes[key] || quotes[h.code];
-              if (target) target.preChange = src.preChange;
-              const preEl = document.querySelector(
-                `[data-pre-change][data-fund="${fundId}"][data-index="${start + offset}"]`
-              );
-              if (preEl) applyPreChangeDisplay(preEl, src.preChange);
-              preOk += 1;
-            });
-          } catch (preErr) {
-            console.warn("盘前行情失败", preErr);
-          }
-        }
 
         if (ok === 0) {
           showToast("未获取到行情，请稍后重试");
@@ -1536,9 +1459,7 @@
           ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
           : `已同步 ${ok} 只股票实时涨跌幅`;
         if (usOnPage.length) {
-          msg += preOk
-            ? `，盘前 ${preOk} 只`
-            : "，盘前暂不可用";
+          msg += preOk ? `，盘前 ${preOk} 只` : "，盘前暂不可用";
         }
         showToast(msg);
       } catch (err) {
@@ -1549,29 +1470,84 @@
       }
     }
 
-    function render() {
-      const saved = loadInputs();
-      const panels = document.getElementById("panels");
-      panels.innerHTML = "";
+    function buildRowsHtml(fund, start, holdings, fundSaved) {
+      const viewOnly = !!fund.viewOnly;
+      const gridClass = viewOnly ? "row view-only" : "row";
+      return holdings
+        .map((h, offset) => {
+          const i = start + offset;
+          return `
+            <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
+              <div class="stock-name-cell">
+                <div
+                  class="stock-name"
+                  role="button"
+                  tabindex="0"
+                  data-chart-fund="${fund.id}"
+                  data-chart-index="${i}"
+                  title="查看 ${h.name} 当日分时"
+                >${h.name}</div>
+                ${h.custom ? `
+                  <button
+                    class="btn-remove-stock"
+                    type="button"
+                    data-remove-stock="${fund.id}"
+                    data-remove-code="${h.code}"
+                    title="移除自选"
+                    aria-label="移除 ${h.name}"
+                  >×</button>` : ""}
+              </div>
+              ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
+              <div class="pre-change" data-pre-change data-fund="${fund.id}" data-index="${i}">--</div>
+              <div class="change-field">
+                <input
+                  type="number"
+                  step="0.01"
+                  inputmode="decimal"
+                  placeholder="${viewOnly ? "--" : "如 1.25"}"
+                  data-fund="${fund.id}"
+                  data-index="${i}"
+                  value="${fundSaved[i] ?? ""}"
+                  ${viewOnly ? "readonly tabindex=\"-1\"" : ""}
+                />
+                <span class="change-icon up-icon" aria-hidden="true">
+                  <img src="aesc.png" alt="" />
+                </span>
+                <span class="change-icon down-icon" aria-hidden="true">
+                  <img src="desc.png" alt="" />
+                </span>
+              </div>
+            </div>`;
+        })
+        .join("");
+    }
 
-      Object.values(window.FUND_HOLDINGS).forEach((fund, index) => {
-        const panel = document.createElement("section");
-        panel.className = "panel" + (index === 0 ? " active" : "");
-        panel.dataset.panel = fund.id;
+    function renderFundRows(fundId) {
+      const panel = document.querySelector(`[data-panel="${fundId}"]`);
+      const body = panel?.querySelector(".list-body");
+      if (!body) return;
+      const { fund, start, holdings } = getPageSlice(fundId);
+      const fundSaved = loadInputs()[fundId] || {};
+      body.innerHTML = buildRowsHtml(fund, start, holdings, fundSaved);
+    }
 
-        const fundSaved = saved[fund.id] || {};
+    function buildPanelElement(fund, isActive) {
+      const panel = document.createElement("section");
+      panel.className = "panel" + (isActive ? " active" : "");
+      panel.dataset.panel = fund.id;
 
-        const viewOnly = !!fund.viewOnly;
-        const ratioLabel = viewOnly ? "参考权重" : "持仓比例";
-        const metaSub = viewOnly
-          ? `共 ${fund.holdings.length} 只${fund.market === "US" ? "美股" : "A股"}半导体 · 仅查看涨跌`
-          : `代码 ${fund.fundCode} · 前十大合计 ${fund.top10Total.toFixed(2)}%`;
-        const gridClass = viewOnly ? "row view-only" : "row";
-        const headClass = viewOnly ? "list-head view-only" : "list-head";
+      const fundSaved = loadInputs()[fund.id] || {};
+      const viewOnly = !!fund.viewOnly;
+      const ratioLabel = viewOnly ? "参考权重" : "持仓比例";
+      const metaSub = viewOnly
+        ? `共 ${fund.holdings.length} 只${fund.market === "US" ? "美股" : "A股"}半导体 · 仅查看涨跌`
+        : `代码 ${fund.fundCode} · 前十大合计 ${fund.top10Total.toFixed(2)}%`;
+      const headClass = viewOnly ? "list-head view-only" : "list-head";
+      const { start, holdings: pageHoldings } = getPageSlice(fund.id);
 
-        const actionsHtml = viewOnly
-          ? ""
-          : `
+      const actionsHtml = viewOnly
+        ? ""
+        : `
           <div class="actions">
             <button class="btn btn-primary" type="button" data-calc="${fund.id}">计算每日基金收益</button>
             <button class="btn btn-ghost" type="button" data-clear="${fund.id}">清空输入</button>
@@ -1583,8 +1559,8 @@
             <div class="detail" id="detail-${fund.id}"></div>
           </div>`;
 
-        const addStockHtml = CUSTOMIZABLE_FUNDS.has(fund.id)
-          ? `
+      const addStockHtml = CUSTOMIZABLE_FUNDS.has(fund.id)
+        ? `
             <div class="add-stock">
               <input
                 type="text"
@@ -1604,9 +1580,9 @@
                 <img src="bankuai.png" alt="板块" />
               </button>` : ""}
             </div>`
-          : "";
+        : "";
 
-        panel.innerHTML = `
+      panel.innerHTML = `
           <div class="fund-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
@@ -1625,61 +1601,57 @@
               <div>日涨跌幅%</div>
             </div>
             <div class="list-body">
-              ${fund.holdings.map((h, i) => `
-                <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
-                  <div class="stock-name-cell">
-                    <div
-                      class="stock-name"
-                      role="button"
-                      tabindex="0"
-                      data-chart-fund="${fund.id}"
-                      data-chart-index="${i}"
-                      title="查看 ${h.name} 当日分时"
-                    >${h.name}</div>
-                    ${h.custom ? `
-                      <button
-                        class="btn-remove-stock"
-                        type="button"
-                        data-remove-stock="${fund.id}"
-                        data-remove-code="${h.code}"
-                        title="移除自选"
-                        aria-label="移除 ${h.name}"
-                      >×</button>` : ""}
-                  </div>
-                  ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
-                  <div class="pre-change" data-pre-change data-fund="${fund.id}" data-index="${i}">--</div>
-                  <div class="change-field">
-                    <input
-                      type="number"
-                      step="0.01"
-                      inputmode="decimal"
-                      placeholder="${viewOnly ? "--" : "如 1.25"}"
-                      data-fund="${fund.id}"
-                      data-index="${i}"
-                      value="${fundSaved[i] ?? ""}"
-                      ${viewOnly ? "readonly tabindex=\"-1\"" : ""}
-                    />
-                    <span class="change-icon up-icon" aria-hidden="true">
-                      <img src="aesc.png" alt="" />
-                    </span>
-                    <span class="change-icon down-icon" aria-hidden="true">
-                      <img src="desc.png" alt="" />
-                    </span>
-                  </div>
-                </div>
-              `).join("")}
+              ${buildRowsHtml(fund, start, pageHoldings, fundSaved)}
             </div>
             ${buildPagerHtml(fund)}
           </div>
 
           ${actionsHtml}
         `;
+      return panel;
+    }
 
-        panels.appendChild(panel);
+    /** 仅重建某个基金面板（自选增删用） */
+    function renderFundPanel(fundId) {
+      const fund = window.FUND_HOLDINGS[fundId];
+      if (!fund) return;
+      const panels = document.getElementById("panels");
+      const old = document.querySelector(`[data-panel="${fundId}"]`);
+      const isActive = old ? old.classList.contains("active") : false;
+      setCurrentPage(fundId, getCurrentPage(fundId));
+      const panel = buildPanelElement(fund, isActive);
+      if (old) old.replaceWith(panel);
+      else panels.appendChild(panel);
+      updatePagerUI(fundId);
+      applyAllChangeColors(fundId);
+    }
+
+    function renderTabs() {
+      const tabsEl = document.querySelector(".tabs");
+      if (!tabsEl) return;
+      const activeId = getActiveFundId();
+      tabsEl.innerHTML = Object.values(window.FUND_HOLDINGS)
+        .map(
+          (fund, i) =>
+            `<button class="tab${
+              fund.id === activeId || (!window.FUND_HOLDINGS[activeId] && i === 0)
+                ? " active"
+                : ""
+            }" data-tab="${fund.id}" type="button">${fund.name}</button>`
+        )
+        .join("");
+    }
+
+    function render() {
+      renderTabs();
+      const panels = document.getElementById("panels");
+      panels.innerHTML = "";
+      const funds = Object.values(window.FUND_HOLDINGS);
+      funds.forEach((fund, index) => {
         setCurrentPage(fund.id, getCurrentPage(fund.id));
-        applyPage(fund.id);
+        panels.appendChild(buildPanelElement(fund, index === 0));
+        updatePagerUI(fund.id);
       });
-
       applyAllChangeColors();
     }
 
@@ -1697,14 +1669,15 @@
     function calcFund(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
       if (fund.viewOnly) return;
-      const inputs = document.querySelectorAll(`input[data-fund="${fundId}"]`);
+      persistFromDom();
+      const saved = loadInputs()[fundId] || {};
       let weighted = 0;
       let filledWeight = 0;
       let filledCount = 0;
       let missing = [];
 
       fund.holdings.forEach((h, i) => {
-        const raw = inputs[i].value.trim();
+        const raw = String(saved[i] ?? "").trim();
         if (raw === "" || Number.isNaN(Number(raw))) {
           missing.push(h.name);
           return;
@@ -1732,10 +1705,12 @@
         parts.push(`未填写：${missing.join("、")}（按 0 处理）。`);
       }
       detailEl.textContent = parts.join(" ");
-      persistFromDom();
     }
 
     function clearFund(fundId) {
+      const saved = loadInputs();
+      saved[fundId] = {};
+      saveInputs(saved);
       document.querySelectorAll(`input[data-fund="${fundId}"]`).forEach((input) => {
         input.value = "";
         applyChangeColor(input);
@@ -1745,7 +1720,6 @@
         .forEach((el) => applyPreChangeDisplay(el, null));
       const resultEl = document.getElementById(`result-${fundId}`);
       if (resultEl) resultEl.classList.remove("show");
-      persistFromDom();
     }
 
     async function addCustomStock(fundId) {
@@ -1944,18 +1918,14 @@
       const pagePrev = e.target.closest("[data-page-prev]");
       if (pagePrev) {
         const fundId = pagePrev.dataset.pagePrev;
-        setCurrentPage(fundId, getCurrentPage(fundId) - 1);
-        applyPage(fundId);
-        syncFundQuotes(fundId);
+        goToPage(fundId, getCurrentPage(fundId) - 1);
         return;
       }
 
       const pageNext = e.target.closest("[data-page-next]");
       if (pageNext) {
         const fundId = pageNext.dataset.pageNext;
-        setCurrentPage(fundId, getCurrentPage(fundId) + 1);
-        applyPage(fundId);
-        syncFundQuotes(fundId);
+        goToPage(fundId, getCurrentPage(fundId) + 1);
         return;
       }
 
@@ -1964,9 +1934,7 @@
         const fundId = pageNum.dataset.fundPage;
         const nextPage = Number(pageNum.dataset.pageNum);
         if (nextPage === getCurrentPage(fundId)) return;
-        setCurrentPage(fundId, nextPage);
-        applyPage(fundId);
-        syncFundQuotes(fundId);
+        goToPage(fundId, nextPage);
         return;
       }
 

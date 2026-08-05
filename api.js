@@ -35,12 +35,47 @@
     "https://push2delay.eastmoney.com"
   ];
 
+  /** 涨跌幅等保留两位小数 */
+  function round2(n) {
+    return Math.round(Number(n) * 100) / 100;
+  }
+
+  /**
+   * 拼接东财路径+查询串（自动附带 ut、防缓存 _）
+   * @param {string} apiPath 如 /api/qt/ulist.np/get
+   * @param {Object} params
+   */
+  function buildEastPath(apiPath, params) {
+    const q = Object.keys(params)
+      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
+      .join("&");
+    return (
+      apiPath +
+      "?" +
+      q +
+      (q ? "&" : "") +
+      "ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now()
+    );
+  }
+
+  /** 统一 data.diff：数组 / 对象字典 → 数组 */
+  function normalizeEastDiff(json) {
+    const raw = json?.data?.diff;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") return Object.values(raw);
+    return [];
+  }
+
   /**
    * 按主机列表依次请求东财 JSON，直到成功
    * @param {string[]} hosts
    * @param {string} pathWithQuery 以 / 开头的路径+查询串
+   * @param {(json: any) => boolean} [isValid] 可选校验；不通过则换下一主机
    */
-  async function fetchEastMoneyJson(hosts, pathWithQuery) {
+  async function fetchEastMoneyJson(hosts, pathWithQuery, isValid) {
     let lastError = null;
     for (let i = 0; i < hosts.length; i++) {
       try {
@@ -51,12 +86,58 @@
           lastError = new Error("行情接口请求失败");
           continue;
         }
-        return await resp.json();
+        const json = await resp.json();
+        if (typeof isValid === "function" && !isValid(json)) {
+          lastError = new Error("行情接口返回无效数据");
+          continue;
+        }
+        return json;
       } catch (err) {
         lastError = err;
       }
     }
     throw lastError || new Error("行情接口请求失败");
+  }
+
+  /** 东财 ulist 批量报价 / 市值等 */
+  async function fetchEastUlist(secids, fields) {
+    const path = buildEastPath("/api/qt/ulist.np/get", {
+      fltt: 2,
+      fields,
+      secids
+    });
+    return fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+  }
+
+  /**
+   * 东财 clist（板块 / 成分股 / 排行）
+   * @returns {Promise<{ list: Array, total: number, json: any }>}
+   */
+  async function fetchEastClist({
+    fs,
+    fields,
+    pn = 1,
+    pz = 50,
+    po = 1,
+    fid = "f3"
+  }) {
+    const path = buildEastPath("/api/qt/clist/get", {
+      pn,
+      pz,
+      po,
+      np: 1,
+      fltt: 2,
+      invt: 2,
+      fid,
+      fs,
+      fields
+    });
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    return {
+      list: normalizeEastDiff(json),
+      total: Number(json?.data?.total) || 0,
+      json
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -90,21 +171,28 @@
   }
 
   /**
+   * 解析 A 股交易所：bj / sh / sz（北交所优先于沪市 9xxxx）
+   */
+  function resolveCnExchange(code) {
+    if (isBjCode(code)) return "bj";
+    if (/^(60|68|90)\d{4}$/.test(code) || /^6\d{5}$/.test(code) || /^9\d{5}$/.test(code)) {
+      return "sh";
+    }
+    if (/^(00|30)\d{4}$/.test(code) || /^(0|2|3)\d{5}$/.test(code)) {
+      return "sz";
+    }
+    return "sh";
+  }
+
+  /**
    * 推断 A 股东方财富 market，并给出候选顺序（首选 + 兜底）
    * - 上交所(1)：60/68/90 等
    * - 深交所(0)：00/001/002/003/30 等
    * - 北交所(0)：920 及历史 43/83/87 等（东财与深市同用 0）
    */
   function inferCnMarketCandidates(code) {
-    if (isBjCode(code)) return [0, 1];
-    // 上交所主板 / 科创板 / B 股（9xxxx，但 920 已在北交所优先处理）
-    if (/^(60|68|90)\d{4}$/.test(code) || /^6\d{5}$/.test(code) || /^9\d{5}$/.test(code)) {
-      return [1, 0];
-    }
-    // 深交所主板 / 中小板 / 创业板
-    if (/^(00|30)\d{4}$/.test(code) || /^(0|2|3)\d{5}$/.test(code)) {
-      return [0, 1];
-    }
+    const ex = resolveCnExchange(code);
+    if (ex === "bj" || ex === "sz") return [0, 1];
     return [1, 0];
   }
 
@@ -118,10 +206,7 @@
     if (holding.market === 105 || holding.market === 106 || /[A-Za-z]/.test(code)) {
       return "gb_" + code.toLowerCase();
     }
-    if (isBjCode(code)) return "bj" + code;
-    if (/^(6|9)\d{5}$/.test(code)) return "sh" + code;
-    if (/^(0|2|3)\d{5}$/.test(code)) return "sz" + code;
-    return "sh" + code;
+    return resolveCnExchange(code) + code;
   }
 
   /**
@@ -130,11 +215,8 @@
    */
   function toEastSecId(holding) {
     if (holding.market != null) return holding.market + "." + holding.code;
-    const code = holding.code;
-    if (isBjCode(code)) return "0." + code;
-    if (/^(6|9)\d{5}$/.test(code)) return "1." + code;
-    if (/^(0|2|3)\d{5}$/.test(code)) return "0." + code;
-    return "1." + code;
+    const ex = resolveCnExchange(holding.code);
+    return (ex === "sh" ? "1" : "0") + "." + holding.code;
   }
 
   /** 是否按美股逻辑处理（含字母代码） */
@@ -167,19 +249,12 @@
    * @returns {Promise<Object>} code(大写) -> { name, price, change }
    */
   async function loadEastMoneyQuotes(holdings) {
-    const secids = holdings.map(toEastSecId).join(",");
-    const path =
-      "/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3,f18&secids=" +
-      encodeURIComponent(secids) +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
-
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const list = json?.data?.diff || [];
+    const json = await fetchEastUlist(
+      holdings.map(toEastSecId).join(","),
+      "f12,f14,f2,f3,f18"
+    );
     const map = {};
-    list.forEach((item) => {
+    normalizeEastDiff(json).forEach((item) => {
       if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
       const live = Number(item.f2);
       const prev = Number(item.f18);
@@ -193,7 +268,7 @@
       map[String(item.f12).toUpperCase()] = {
         name: item.f14,
         price,
-        change: Math.round(Number(item.f3) * 100) / 100
+        change: round2(item.f3)
       };
     });
     return map;
@@ -248,13 +323,11 @@
             change = pct;
             // 盘前/盘后涨跌幅：相对常规时段收盘价
             const preRaw = Number(parts[22]);
-            const preChange = Number.isNaN(preRaw)
-              ? null
-              : Math.round(preRaw * 100) / 100;
+            const preChange = Number.isNaN(preRaw) ? null : round2(preRaw);
             map[h.code.toUpperCase()] = {
               name: parts[0],
               price,
-              change: Math.round(change * 100) / 100,
+              change: round2(change),
               preChange
             };
             return;
@@ -269,7 +342,7 @@
             name,
             price,
             prev,
-            change: Math.round(change * 100) / 100
+            change: round2(change)
           };
         });
         resolve(map);
@@ -363,7 +436,7 @@
     }
 
     if (extPrice == null || Math.abs(extPrice - baseline) < 1e-9) return null;
-    return Math.round(((extPrice - baseline) / baseline) * 10000) / 100;
+    return round2(((extPrice - baseline) / baseline) * 100);
   }
 
   /**
@@ -414,13 +487,17 @@
   /**
    * 用美股盘前/盘后数据补齐东方财富报价中的 preChange
    * 失败时不影响原有 change
+   * @param {Promise|Object} [preMapOrPromise] 可选：已发起的盘前请求，便于与日涨跌并行
    */
-  async function enrichUsPreMarket(holdings, map) {
+  async function enrichUsPreMarket(holdings, map, preMapOrPromise) {
     const usHoldings = holdings.filter(isUsHolding);
     if (!usHoldings.length) return map;
 
     try {
-      const preMap = await loadUsPreMarketQuotes(usHoldings);
+      const preMap =
+        preMapOrPromise != null
+          ? await preMapOrPromise
+          : await loadUsPreMarketQuotes(usHoldings);
       usHoldings.forEach((h) => {
         const key = quoteKey(h.code);
         const target = map[key] || map[h.code];
@@ -465,17 +542,8 @@
    * @returns {Promise<{ total: number|null, float: number|null, name: string|null }>}
    */
   async function loadStockMarketCap(holding) {
-    const secid = toEastSecId(holding);
-    const path =
-      "/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f20,f21&secids=" +
-      encodeURIComponent(secid) +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
-
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const item = json?.data?.diff?.[0];
+    const json = await fetchEastUlist(toEastSecId(holding), "f12,f14,f20,f21");
+    const item = normalizeEastDiff(json)[0];
     if (!item) throw new Error("暂无市值数据");
 
     const total = Number(item.f20);
@@ -591,7 +659,7 @@
       const liab = numOrNull(row.TOTAL_LIABILITIES);
       const assets = numOrNull(row.TOTAL_ASSETS);
       if (d && liab != null && assets && assets > 0) {
-        debtRatioMap[d] = Math.round((liab / assets) * 10000) / 100;
+        debtRatioMap[d] = round2((liab / assets) * 100);
       }
     });
 
@@ -837,17 +905,13 @@
    *   points: [{ datetime, time, price, avg, volume }]
    */
   async function loadIntradayTrends(holding) {
-    const secid = toEastSecId(holding);
-    const path =
-      "/api/qt/stock/trends2/get" +
-      "?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13" +
-      "&fields2=f51,f52,f53,f54,f55,f56,f57,f58" +
-      "&ut=" +
-      EAST_UT +
-      "&ndays=1&iscr=0&secid=" +
-      encodeURIComponent(secid) +
-      "&_=" +
-      Date.now();
+    const path = buildEastPath("/api/qt/stock/trends2/get", {
+      fields1: "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+      fields2: "f51,f52,f53,f54,f55,f56,f57,f58",
+      ndays: 1,
+      iscr: 0,
+      secid: toEastSecId(holding)
+    });
 
     let json;
     try {
@@ -907,44 +971,28 @@
    *   klines: [{ date, close, volume }] 升序
    */
   async function loadDailyKlines(holding) {
-    const secid = toEastSecId(holding);
-    const path =
-      "/api/qt/stock/kline/get" +
-      "?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13" +
-      "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61" +
-      "&ut=" +
-      EAST_UT +
-      "&klt=101&fqt=1&end=20500101&lmt=320&secid=" +
-      encodeURIComponent(secid) +
-      "&_=" +
-      Date.now();
+    const path = buildEastPath("/api/qt/stock/kline/get", {
+      fields1: "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+      fields2: "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+      klt: 101,
+      fqt: 1,
+      end: "20500101",
+      lmt: 320,
+      secid: toEastSecId(holding)
+    });
 
-    let data = null;
-    let lastError = null;
-    for (let i = 0; i < EAST_HIS_HOSTS.length; i++) {
-      try {
-        const resp = await fetch(EAST_HIS_HOSTS[i] + path, {
-          headers: { Accept: "application/json" }
-        });
-        if (!resp.ok) {
-          lastError = new Error("历史行情请求失败");
-          continue;
-        }
-        const json = await resp.json();
-        const candidate = json?.data;
-        if (candidate && Array.isArray(candidate.klines) && candidate.klines.length) {
-          data = candidate;
-          break;
-        }
-        lastError = new Error("暂无历史行情");
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    if (!data) {
-      throw lastError || new Error("暂无历史行情");
+    let json;
+    try {
+      json = await fetchEastMoneyJson(
+        EAST_HIS_HOSTS,
+        path,
+        (j) => j?.data && Array.isArray(j.data.klines) && j.data.klines.length
+      );
+    } catch (_) {
+      throw new Error("暂无历史行情");
     }
 
+    const data = json.data;
     const klines = data.klines
       .map((row) => {
         const parts = String(row).split(",");
@@ -1000,7 +1048,7 @@
 
   function calcReturnFromBase(last, base) {
     if (!last || !base || !base.close) return null;
-    return Math.round(((last.close - base.close) / base.close) * 10000) / 100;
+    return round2(((last.close - base.close) / base.close) * 100);
   }
 
   /**
@@ -1008,23 +1056,29 @@
    * @returns {{ day, '1m', '3m', '6m', ytd, '1y' }} 值为 number | null
    *   day 需由调用方用分时昨收另行填入
    */
+  /** 区间起点日期字符串；无法识别的 range 返回 null */
+  function rangeStartDate(lastDateStr, range) {
+    if (range === "ytd") return `${String(lastDateStr).slice(0, 4)}-01-01`;
+    const months = { "1m": -1, "3m": -3, "6m": -6, "1y": -12 }[range];
+    if (months == null) return null;
+    return toDateStr(addMonths(parseDate(lastDateStr), months));
+  }
+
   function calcPeriodReturns(klines) {
     const empty = { day: null, "1m": null, "3m": null, "6m": null, ytd: null, "1y": null };
     if (!klines?.length) return empty;
 
     const last = klines[klines.length - 1];
-    const lastDate = parseDate(last.date);
     const result = { ...empty };
 
-    const monthTargets = { "1m": -1, "3m": -3, "6m": -6, "1y": -12 };
-    Object.entries(monthTargets).forEach(([key, months]) => {
-      const target = toDateStr(addMonths(lastDate, months));
+    ["1m", "3m", "6m", "1y"].forEach((key) => {
+      const target = rangeStartDate(last.date, key);
       const base = findKlineOnOrBefore(klines, target) || klines[0];
       result[key] = calcReturnFromBase(last, base);
     });
 
     // 今年以来：优先用上年最后一个交易日收盘
-    const ytdStart = `${last.date.slice(0, 4)}-01-01`;
+    const ytdStart = rangeStartDate(last.date, "ytd");
     let ytdBase = findKlineOnOrBefore(klines, ytdStart);
     if (!ytdBase) {
       ytdBase = klines.find((k) => k.date >= ytdStart) || klines[0];
@@ -1083,16 +1137,8 @@
   function sliceKlinesForRange(klines, range) {
     if (!klines?.length) return [];
     const last = klines[klines.length - 1];
-    const lastDate = parseDate(last.date);
-    let targetStr;
-
-    if (range === "ytd") {
-      targetStr = `${last.date.slice(0, 4)}-01-01`;
-    } else {
-      const months = { "1m": -1, "3m": -3, "6m": -6, "1y": -12 }[range];
-      if (months == null) return klines.slice();
-      targetStr = toDateStr(addMonths(lastDate, months));
-    }
+    const targetStr = rangeStartDate(last.date, range);
+    if (!targetStr) return klines.slice();
 
     let startIdx = 0;
     for (let i = 0; i < klines.length; i++) {
@@ -1300,7 +1346,7 @@
     return Array.from(map.values())
       .map((g) => {
         const weight = g.mcap > 0 ? g.mcap : g.children.length || 1;
-        const change = Math.round((g.weightedChange / weight) * 100) / 100;
+        const change = round2(g.weightedChange / weight);
         const children = g.children
           .slice()
           .sort((a, b) => b.mcap - a.mcap || b.change - a.change);
@@ -1341,27 +1387,12 @@
     const seen = new Set();
 
     for (let pn = 1; pn <= maxPages; pn++) {
-      const path =
-        "/api/qt/clist/get?pn=" +
-        pn +
-        "&pz=" +
-        pageSize +
-        "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
-        encodeURIComponent(fs) +
-        "&fields=" +
-        encodeURIComponent(fields) +
-        "&ut=" +
-        EAST_UT +
-        "&_=" +
-        Date.now();
-
-      const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-      const raw = json?.data?.diff;
-      const page = Array.isArray(raw)
-        ? raw
-        : raw && typeof raw === "object"
-          ? Object.values(raw)
-          : [];
+      const { list: page, total } = await fetchEastClist({
+        fs,
+        fields,
+        pn,
+        pz: pageSize
+      });
 
       if (!page.length) break;
 
@@ -1379,18 +1410,15 @@
         all.push({
           code,
           name: String(item.f14),
-          change: Math.round(change * 100) / 100,
+          change: round2(change),
           mcap: !Number.isNaN(mcap) && mcap > 0 ? mcap : 0,
           upCount: Number(item.f104) || 0,
           downCount: Number(item.f105) || 0,
           leader: item.f128 && item.f128 !== "-" ? String(item.f128) : "",
-          leaderChange: Number.isNaN(leaderChange)
-            ? null
-            : Math.round(leaderChange * 100) / 100
+          leaderChange: Number.isNaN(leaderChange) ? null : round2(leaderChange)
         });
       });
 
-      const total = Number(json?.data?.total) || 0;
       if (page.length < pageSize || (total > 0 && all.length >= total)) break;
     }
 
@@ -1424,25 +1452,13 @@
 
     const pages = await Promise.all(
       codes.map(async (code) => {
-        const path =
-          "/api/qt/clist/get?pn=1&pz=" +
-          perBoard +
-          "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
-          encodeURIComponent("b:" + code + "+f:!50") +
-          "&fields=" +
-          encodeURIComponent("f12,f13,f14,f2,f3") +
-          "&ut=" +
-          EAST_UT +
-          "&_=" +
-          Date.now();
         try {
-          const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-          const raw = json?.data?.diff;
-          return Array.isArray(raw)
-            ? raw
-            : raw && typeof raw === "object"
-              ? Object.values(raw)
-              : [];
+          const { list } = await fetchEastClist({
+            fs: "b:" + code + "+f:!50",
+            fields: "f12,f13,f14,f2,f3",
+            pz: perBoard
+          });
+          return list;
         } catch (_) {
           return [];
         }
@@ -1464,7 +1480,7 @@
         code: stockCode,
         name: String(item.f14 || stockCode),
         price: Number.isNaN(price) || price === 0 ? null : price,
-        change: Math.round(change * 100) / 100,
+        change: round2(change),
         market: Number.isNaN(market) ? null : market
       });
     });
@@ -1477,19 +1493,14 @@
    * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
    */
   async function loadUsIndices() {
-    const path =
-      "/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f12,f14&secids=" +
-      encodeURIComponent("100.DJIA,100.NDX,100.SPX") +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const list = json?.data?.diff || [];
+    const json = await fetchEastUlist(
+      "100.DJIA,100.NDX,100.SPX",
+      "f2,f3,f12,f14"
+    );
     const order = { DJIA: 0, NDX: 1, SPX: 2 };
     const shortName = { DJIA: "道琼斯", NDX: "纳斯达克", SPX: "标普500" };
 
-    return list
+    return normalizeEastDiff(json)
       .map((item) => {
         if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
           return null;
@@ -1502,7 +1513,7 @@
           code,
           name: shortName[code] || String(item.f14 || code),
           price: Number.isNaN(price) ? null : price,
-          change: Math.round(change * 100) / 100
+          change: round2(change)
         };
       })
       .filter(Boolean)
@@ -1514,22 +1525,10 @@
    * GET {push2}/api/qt/clist/get  fs=m:202+t:2
    */
   async function loadUsSectorBoards() {
-    const path =
-      "/api/qt/clist/get?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
-      encodeURIComponent("m:202+t:2") +
-      "&fields=" +
-      encodeURIComponent("f12,f14,f2,f3") +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const raw = json?.data?.diff;
-    const list = Array.isArray(raw)
-      ? raw
-      : raw && typeof raw === "object"
-        ? Object.values(raw)
-        : [];
+    const { list } = await fetchEastClist({
+      fs: "m:202+t:2",
+      fields: "f12,f14,f2,f3"
+    });
 
     return list
       .map((item) => {
@@ -1541,7 +1540,7 @@
         return {
           code: String(item.f12 || ""),
           name: String(item.f14),
-          change: Math.round(change * 100) / 100
+          change: round2(change)
         };
       })
       .filter(Boolean)
@@ -1556,30 +1555,12 @@
    * @param {number} [limit=20]
    */
   async function loadUsStockRank(kind = "gainers", limit = 20) {
-    const fs =
-      "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214";
-    const po = kind === "losers" ? "0" : "1";
-    const path =
-      "/api/qt/clist/get?pn=1&pz=" +
-      Math.max(limit, 20) +
-      "&po=" +
-      po +
-      "&np=1&fltt=2&invt=2&fid=f3&fs=" +
-      encodeURIComponent(fs) +
-      "&fields=" +
-      encodeURIComponent("f12,f14,f2,f3") +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
-
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const raw = json?.data?.diff;
-    const list = Array.isArray(raw)
-      ? raw
-      : raw && typeof raw === "object"
-        ? Object.values(raw)
-        : [];
+    const { list } = await fetchEastClist({
+      fs: "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
+      fields: "f12,f14,f2,f3",
+      pz: Math.max(limit, 20),
+      po: kind === "losers" ? 0 : 1
+    });
 
     return list
       .map((item) => {
@@ -1593,7 +1574,7 @@
           code: String(item.f12).toUpperCase(),
           name: String(item.f14 || item.f12),
           price: Number.isNaN(price) ? null : price,
-          change: Math.round(change * 100) / 100
+          change: round2(change)
         };
       })
       .filter(Boolean)

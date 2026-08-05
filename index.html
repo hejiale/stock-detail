@@ -367,9 +367,6 @@
         }
       }
 
-      const nextBtn = panel.querySelector("[data-page-next]");
-      if (nextBtn) nextBtn.disabled = page >= total;
-
       panel.querySelectorAll("[data-page-num]").forEach((btn) => {
         btn.classList.toggle("active", Number(btn.dataset.pageNum) === page);
       });
@@ -401,7 +398,6 @@
           <div class="pager-info"></div>
           <div class="pager-btns">
             ${pageBtns}
-            <button class="pager-btn" type="button" data-page-next="${fund.id}">下一页</button>
           </div>
         </div>
       `;
@@ -1909,13 +1905,6 @@
       const chartName = e.target.closest("[data-chart-fund]");
       if (chartName) {
         openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
-        return;
-      }
-
-      const pageNext = e.target.closest("[data-page-next]");
-      if (pageNext) {
-        const fundId = pageNext.dataset.pageNext;
-        goToPage(fundId, getCurrentPage(fundId) + 1);
         return;
       }
 

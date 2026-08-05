@@ -416,7 +416,7 @@
       const points = series.points;
       if (!points?.length) return;
 
-      const pad = { top: 16, right: 14, bottom: 56, left: 52 };
+      const pad = { top: 16, right: 52, bottom: 56, left: 52 };
       const volH = 48;
       const plotW = cssW - pad.left - pad.right;
       const plotH = cssH - pad.top - pad.bottom - volH - 10;
@@ -435,10 +435,14 @@
 
       const maxVol = Math.max(...points.map((p) => p.volume || 0), 1);
       const last = points[points.length - 1];
+      const base =
+        series.baseline != null && series.baseline !== 0
+          ? series.baseline
+          : null;
       const lineColor =
-        series.baseline == null
+        base == null
           ? "#1677ff"
-          : last.price >= series.baseline
+          : last.price >= base
             ? "#e64545"
             : "#12a150";
 
@@ -461,8 +465,8 @@
         ctx.stroke();
       }
 
-      if (series.baseline != null) {
-        const y = yAt(series.baseline);
+      if (base != null) {
+        const y = yAt(base);
         ctx.save();
         ctx.setLineDash([4, 4]);
         ctx.strokeStyle = "#94a3b8";
@@ -530,22 +534,31 @@
         const y = volTop + volH - h;
         const up =
           i === 0
-            ? series.baseline == null || p.price >= series.baseline
+            ? base == null || p.price >= base
             : p.price >= points[i - 1].price;
         ctx.fillStyle = up ? "rgba(230, 69, 69, 0.35)" : "rgba(18, 161, 80, 0.35)";
         ctx.fillRect(x, y, barW, h);
       });
 
-      ctx.fillStyle = "#8a8f98";
       ctx.font = '11px "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       for (let i = 0; i <= 4; i++) {
         const price = maxP - ((maxP - minP) * i) / 4;
         const y = pad.top + (plotH * i) / 4;
+        ctx.fillStyle = "#8a8f98";
+        ctx.textAlign = "right";
         ctx.fillText(formatPrice(price), pad.left - 8, y);
+
+        if (base != null) {
+          const pct = ((price - base) / base) * 100;
+          ctx.textAlign = "left";
+          ctx.fillStyle =
+            pct > 0.005 ? "#e64545" : pct < -0.005 ? "#12a150" : "#8a8f98";
+          ctx.fillText(formatPct(pct), pad.left + plotW + 8, y);
+        }
       }
 
+      ctx.fillStyle = "#8a8f98";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const timeIdx = [0, Math.floor((points.length - 1) / 2), points.length - 1];

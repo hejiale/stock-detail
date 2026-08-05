@@ -124,6 +124,47 @@
     </div>
   </div>
 
+  <div class="board-modal" id="usBoardModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-us-board-close></div>
+    <div class="board-modal-panel us-board-panel" role="dialog" aria-modal="true" aria-labelledby="usBoardModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="usBoardModalName">美股市场概况</div>
+          <div class="sub" id="usBoardModalSub">三大指数 · 主要板块 · 涨跌榜</div>
+        </div>
+        <button class="board-modal-close" type="button" data-us-board-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-modal-body us-board-body">
+        <div class="us-section">
+          <div class="us-section-title">三大指数</div>
+          <div class="us-index-grid" id="usIndexGrid"></div>
+        </div>
+        <div class="us-section">
+          <div class="us-section-title">主要板块</div>
+          <div class="us-sector-list" id="usSectorList"></div>
+        </div>
+        <div class="us-section">
+          <div class="us-section-title">个股排行</div>
+          <div class="board-tabs us-rank-tabs">
+            <button class="board-tab active" type="button" data-us-rank="gainers">涨幅榜</button>
+            <button class="board-tab" type="button" data-us-rank="losers">跌幅榜</button>
+          </div>
+          <div class="board-list-head us-stock-head">
+            <div>#</div>
+            <div>股票</div>
+            <div style="text-align:right">涨跌幅%</div>
+          </div>
+          <div class="us-stock-list" id="usStockList"></div>
+        </div>
+        <div class="board-status show" id="usBoardStatus">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <script src="data.js"></script>
   <script src="api.js"></script>
   <script>
@@ -135,6 +176,9 @@
       loadDailyKlines,
       loadStockMarketCap,
       loadCnSectorBoards,
+      loadUsIndices,
+      loadUsSectorBoards,
+      loadUsStockRank,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock,
@@ -837,10 +881,165 @@
       const modal = document.getElementById("boardModal");
       modal.classList.remove("show");
       modal.setAttribute("aria-hidden", "true");
-      if (!document.getElementById("chartModal")?.classList.contains("show")) {
+      if (
+        !document.getElementById("chartModal")?.classList.contains("show") &&
+        !document.getElementById("usBoardModal")?.classList.contains("show")
+      ) {
         document.body.style.overflow = "";
       }
       setBoardStatus("");
+    }
+
+    function setUsBoardStatus(msg) {
+      const el = document.getElementById("usBoardStatus");
+      if (!el) return;
+      if (!msg) {
+        el.classList.remove("show");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add("show");
+    }
+
+    function chgArrowHtml(change) {
+      if (change > 0) {
+        return '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3.2 13.2 11H2.8L8 3.2z"/></svg>';
+      }
+      if (change < 0) {
+        return '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12.8 2.8 5h10.4L8 12.8z"/></svg>';
+      }
+      return "";
+    }
+
+    function renderUsIndices(list) {
+      const wrap = document.getElementById("usIndexGrid");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = '<div class="board-meta" style="padding:8px">暂无指数数据</div>';
+        return;
+      }
+      wrap.innerHTML = list
+        .map((item) => {
+          const tone = toneClass(item.change);
+          return `
+            <div class="us-index-card">
+              <div class="idx-name">${item.name}</div>
+              <div class="idx-chg ${tone}">${formatPct(item.change)}</div>
+              <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    function renderUsSectors(list) {
+      const wrap = document.getElementById("usSectorList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = '<div class="board-meta" style="padding:8px">暂无板块数据</div>';
+        return;
+      }
+      wrap.innerHTML = list
+        .map((item) => {
+          const tone = toneClass(item.change);
+          return `
+            <div class="us-sector-row">
+              <div class="us-sector-name">${item.name}</div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    function renderUsStockRank(list) {
+      const wrap = document.getElementById("usStockList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const tone = toneClass(item.change);
+          return `
+            <div class="board-row">
+              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
+              <div class="board-info">
+                <div class="board-name">${item.name}</div>
+                <div class="board-meta">${item.code}${item.price == null ? "" : " · $" + formatPrice(item.price)}</div>
+              </div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadUsRankKind(kind) {
+      const requestId = (loadUsRankKind._req = (loadUsRankKind._req || 0) + 1);
+      document.querySelectorAll("[data-us-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.usRank === kind);
+      });
+      openUsBoardModal._rank = kind;
+
+      try {
+        const list = await loadUsStockRank(kind, 20);
+        if (requestId !== loadUsRankKind._req) return;
+        openUsBoardModal._stocks = list;
+        renderUsStockRank(list);
+      } catch (err) {
+        if (requestId !== loadUsRankKind._req) return;
+        document.getElementById("usStockList").innerHTML = "";
+        showToast(err?.message || "涨跌榜加载失败");
+      }
+    }
+
+    async function openUsBoardModal() {
+      const modal = document.getElementById("usBoardModal");
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+      document.getElementById("usBoardModalSub").textContent = "加载中…";
+      setUsBoardStatus("加载中…");
+      document.getElementById("usIndexGrid").innerHTML = "";
+      document.getElementById("usSectorList").innerHTML = "";
+      document.getElementById("usStockList").innerHTML = "";
+
+      const requestId = (openUsBoardModal._req = (openUsBoardModal._req || 0) + 1);
+      const rank = openUsBoardModal._rank || "gainers";
+
+      try {
+        const [indices, sectors] = await Promise.all([
+          loadUsIndices(),
+          loadUsSectorBoards()
+        ]);
+        if (requestId !== openUsBoardModal._req) return;
+
+        renderUsIndices(indices);
+        renderUsSectors(sectors);
+        document.getElementById("usBoardModalSub").textContent =
+          `指数 ${indices.length} · 板块 ${sectors.length} · 排行前 20`;
+        setUsBoardStatus("");
+        await loadUsRankKind(rank);
+      } catch (err) {
+        if (requestId !== openUsBoardModal._req) return;
+        document.getElementById("usBoardModalSub").textContent = "加载失败";
+        setUsBoardStatus(err?.message || "美股数据加载失败，请稍后重试");
+      }
+    }
+
+    function closeUsBoardModal() {
+      openUsBoardModal._req = (openUsBoardModal._req || 0) + 1;
+      loadUsRankKind._req = (loadUsRankKind._req || 0) + 1;
+      const modal = document.getElementById("usBoardModal");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      if (
+        !document.getElementById("chartModal")?.classList.contains("show") &&
+        !document.getElementById("boardModal")?.classList.contains("show")
+      ) {
+        document.body.style.overflow = "";
+      }
+      setUsBoardStatus("");
     }
 
     async function syncFundQuotes(fundId) {
@@ -992,8 +1191,8 @@
               <div class="fund-meta-text">
                 <div class="name-row">
                   <div class="name">${fund.fundName}</div>
-                  ${fund.id === "cnSemi" ? `
-                    <button class="btn-board" type="button" data-open-board title="查看A股板块涨幅">
+                  ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
+                    <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}">
                       板块
                       <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
                         <path d="M4.2 2.2 8 6l-3.8 3.8L3.3 8.9 6.2 6 3.3 3.1 4.2 2.2z"/>
@@ -1254,6 +1453,17 @@
     }
 
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-us-board-close]")) {
+        closeUsBoardModal();
+        return;
+      }
+
+      const usRankBtn = e.target.closest("[data-us-rank]");
+      if (usRankBtn) {
+        loadUsRankKind(usRankBtn.dataset.usRank);
+        return;
+      }
+
       if (e.target.closest("[data-board-close]")) {
         closeBoardModal();
         return;
@@ -1265,8 +1475,10 @@
         return;
       }
 
-      if (e.target.closest("[data-open-board]")) {
-        openBoardModal();
+      const openBoardBtn = e.target.closest("[data-open-board]");
+      if (openBoardBtn) {
+        if (openBoardBtn.dataset.openBoard === "us") openUsBoardModal();
+        else openBoardModal();
         return;
       }
 
@@ -1365,6 +1577,11 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        const usBoardModal = document.getElementById("usBoardModal");
+        if (usBoardModal.classList.contains("show")) {
+          closeUsBoardModal();
+          return;
+        }
         const boardModal = document.getElementById("boardModal");
         if (boardModal.classList.contains("show")) {
           closeBoardModal();

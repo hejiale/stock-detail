@@ -841,6 +841,134 @@
     return all.sort((a, b) => b.change - a.change);
   }
 
+  /**
+   * 美股三大指数：道琼斯 / 纳斯达克 / 标普500
+   * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
+   */
+  async function loadUsIndices() {
+    const path =
+      "/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f12,f14&secids=" +
+      encodeURIComponent("100.DJIA,100.NDX,100.SPX") +
+      "&ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now();
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const list = json?.data?.diff || [];
+    const order = { DJIA: 0, NDX: 1, SPX: 2 };
+    const shortName = { DJIA: "道琼斯", NDX: "纳斯达克", SPX: "标普500" };
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const code = String(item.f12).toUpperCase();
+        const change = Number(item.f3);
+        const price = Number(item.f2);
+        if (Number.isNaN(change)) return null;
+        return {
+          code,
+          name: shortName[code] || String(item.f14 || code),
+          price: Number.isNaN(price) ? null : price,
+          change: Math.round(change * 100) / 100
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (order[a.code] ?? 9) - (order[b.code] ?? 9));
+  }
+
+  /**
+   * 美股主要行业板块（11 个大类）
+   * GET {push2}/api/qt/clist/get  fs=m:202+t:2
+   */
+  async function loadUsSectorBoards() {
+    const path =
+      "/api/qt/clist/get?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
+      encodeURIComponent("m:202+t:2") +
+      "&fields=" +
+      encodeURIComponent("f12,f14,f2,f3") +
+      "&ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now();
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const raw = json?.data?.diff;
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object"
+        ? Object.values(raw)
+        : [];
+
+    return list
+      .map((item) => {
+        if (!item || item.f14 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        if (Number.isNaN(change)) return null;
+        return {
+          code: String(item.f12 || ""),
+          name: String(item.f14),
+          change: Math.round(change * 100) / 100
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.change - a.change);
+  }
+
+  /**
+   * 美股涨幅榜 / 跌幅榜（知名分类股，取前 limit 只）
+   * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
+   *
+   * @param {"gainers"|"losers"} kind
+   * @param {number} [limit=20]
+   */
+  async function loadUsStockRank(kind = "gainers", limit = 20) {
+    const fs =
+      "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214";
+    const po = kind === "losers" ? "0" : "1";
+    const path =
+      "/api/qt/clist/get?pn=1&pz=" +
+      Math.max(limit, 20) +
+      "&po=" +
+      po +
+      "&np=1&fltt=2&invt=2&fid=f3&fs=" +
+      encodeURIComponent(fs) +
+      "&fields=" +
+      encodeURIComponent("f12,f14,f2,f3") +
+      "&ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now();
+
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const raw = json?.data?.diff;
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object"
+        ? Object.values(raw)
+        : [];
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        const price = Number(item.f2);
+        if (Number.isNaN(change)) return null;
+        return {
+          code: String(item.f12).toUpperCase(),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) ? null : price,
+          change: Math.round(change * 100) / 100
+        };
+      })
+      .filter(Boolean)
+      .slice(0, limit);
+  }
+
   global.MarketAPI = {
     // 工具
     quoteKey,
@@ -856,6 +984,9 @@
     loadDailyKlines,
     loadStockMarketCap,
     loadCnSectorBoards,
+    loadUsIndices,
+    loadUsSectorBoards,
+    loadUsStockRank,
     resolveStock,
     enrichUsPreMarket,
     // 区间计算

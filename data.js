@@ -119,7 +119,7 @@ window.FUND_HOLDINGS = {
     viewOnly: true,
     top10Total: 100,
     holdings: [
-      { name: "长鑫存储", code: "688799", market: 1, ratio: 1 },
+      { name: "长鑫存储", code: "688825", market: 1, ratio: 1 },
       { name: "中芯国际", code: "688981", market: 1, ratio: 1 },
       { name: "华虹公司", code: "688347", market: 1, ratio: 1 },
       { name: "韦尔股份", code: "603501", market: 1, ratio: 1 },

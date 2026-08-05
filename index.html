@@ -143,9 +143,8 @@
         </button>
       </div>
       <div class="board-list-head board-stocks-head">
-        <div>#</div>
         <div>股票名称</div>
-        <div style="text-align:right">现价</div>
+        <div style="text-align:center">现价</div>
         <div style="text-align:right">涨跌幅%</div>
       </div>
       <div class="board-modal-body">
@@ -1185,10 +1184,9 @@
           const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
           return `
             <div class="board-row board-stock-row">
-              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name">${item.name}</div>
-                <div class="board-meta">${item.code}</div>
+                <div class="board-meta">${i + 1} · ${item.code}</div>
               </div>
               <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${arrow}</div>

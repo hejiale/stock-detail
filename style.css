@@ -1073,19 +1073,28 @@ header p {
 }
 
 .board-stocks-head {
-  grid-template-columns: 36px 1fr 72px 88px;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 .board-stock-row {
-  grid-template-columns: 36px 1fr 72px 88px;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
-.board-price {
-  text-align: right;
+.board-stock-row .board-price {
+  text-align: center;
+  justify-self: center;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: #334155;
+}
+
+.board-stock-row .board-chg {
+  justify-self: end;
 }
 
 .board-rank {

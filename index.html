@@ -1127,6 +1127,9 @@
           const tone = toneClass(item.change);
           const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
           const metaParts = [];
+          if (item.childCount > 1) {
+            metaParts.push(`含${item.childCount}个细分`);
+          }
           if (item.upCount || item.downCount) {
             metaParts.push(`涨${item.upCount} / 跌${item.downCount}`);
           }
@@ -1135,8 +1138,13 @@
               item.leaderChange == null ? "" : " " + formatPct(item.leaderChange);
             metaParts.push(`领涨 ${item.leader}${leaderChg}`);
           }
+          const codes = (item.childCodes && item.childCodes.length
+            ? item.childCodes
+            : [item.code]
+          ).join(",");
+          const safeName = String(item.name).replace(/"/g, "&quot;");
           return `
-            <button class="board-row board-row-btn" type="button" data-board-code="${item.code}" data-board-name="${String(item.name).replace(/"/g, "&quot;")}" title="查看 ${String(item.name).replace(/"/g, "&quot;")} 涨幅前20">
+            <button class="board-row board-row-btn" type="button" data-board-code="${item.code}" data-board-codes="${codes}" data-board-name="${safeName}" title="查看 ${safeName} 涨幅前20">
               <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name-row">
@@ -1197,15 +1205,27 @@
 
     let boardStocksRequestId = 0;
 
-    async function openBoardStocksModal(boardCode, boardName) {
-      if (!boardCode) return;
+    async function openBoardStocksModal(boardCode, boardName, boardCodes) {
+      const codes = (Array.isArray(boardCodes)
+        ? boardCodes
+        : String(boardCodes || boardCode || "").split(",")
+      )
+        .map((c) => String(c || "").trim())
+        .filter(Boolean);
+      // 子板块过多时取市值靠前的若干个，避免请求过多
+      const fetchCodes = codes.slice(0, 10);
+      if (!fetchCodes.length) return;
+
       const modal = document.getElementById("boardStocksModal");
       const reqId = ++boardStocksRequestId;
+      const tip =
+        codes.length > 1
+          ? `含${codes.length}个细分 · 加载涨幅榜…`
+          : `${fetchCodes[0]} · 加载涨幅榜…`;
 
       document.getElementById("boardStocksModalName").textContent =
-        boardName || boardCode;
-      document.getElementById("boardStocksModalSub").textContent =
-        `${boardCode} · 加载涨幅榜…`;
+        boardName || fetchCodes[0];
+      document.getElementById("boardStocksModalSub").textContent = tip;
       document.getElementById("boardStocksList").innerHTML = "";
       setBoardStocksStatus("加载成分股涨幅…");
 
@@ -1213,16 +1233,17 @@
       modal.setAttribute("aria-hidden", "false");
 
       try {
-        const list = await loadCnSectorStocks(boardCode, 20);
+        const list = await loadCnSectorStocks(fetchCodes, 20);
         if (reqId !== boardStocksRequestId) return;
         document.getElementById("boardStocksModalSub").textContent =
-          `${boardCode} · 涨幅前 ${list.length} 只`;
+          codes.length > 1
+            ? `含${codes.length}个细分 · 涨幅前 ${list.length} 只`
+            : `${fetchCodes[0]} · 涨幅前 ${list.length} 只`;
         renderBoardStocksList(list);
         setBoardStocksStatus(list.length ? "" : "暂无成分股数据");
       } catch (err) {
         if (reqId !== boardStocksRequestId) return;
-        document.getElementById("boardStocksModalSub").textContent =
-          `${boardCode} · 加载失败`;
+        document.getElementById("boardStocksModalSub").textContent = "加载失败";
         setBoardStocksStatus(err?.message || "成分股加载失败");
       }
     }
@@ -1252,7 +1273,9 @@
         openBoardModal._kind = kind;
         openBoardModal._list = list;
         document.getElementById("boardModalSub").textContent =
-          `共 ${list.length} 个${kindLabel}板块 · 按涨跌幅排序`;
+          kind === "industry"
+            ? `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`
+            : `共 ${list.length} 个${kindLabel}板块 · 按涨跌幅排序`;
         renderBoardList(list);
         setBoardStatus(list.length ? "" : "暂无板块数据");
       } catch (err) {
@@ -1868,7 +1891,8 @@
       if (boardRowBtn) {
         openBoardStocksModal(
           boardRowBtn.dataset.boardCode,
-          boardRowBtn.dataset.boardName
+          boardRowBtn.dataset.boardName,
+          boardRowBtn.dataset.boardCodes
         );
         return;
       }

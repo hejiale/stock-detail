@@ -1116,12 +1116,155 @@
    *       f128 领涨股, f136 领涨股涨跌幅
    *
    * @param {"industry"|"concept"} kind
-   * @returns {Promise<Array<{code,name,change,upCount,downCount,leader,leaderChange}>>}
+   * @returns {Promise<Array<{code,name,change,upCount,downCount,leader,leaderChange,childCodes?,childCount?}>>}
    */
+
+  /**
+   * 行业板块归类规则（按顺序匹配，越靠前越优先）
+   * 把东财三级细分拢成更易扫读的粗板块
+   */
+  const CN_INDUSTRY_GROUP_RULES = [
+    { name: "半导体", test: /半导体|芯片|集成电路|光刻|晶圆|EDA|先进封装|分立器件|被动元件/ },
+    { name: "消费电子", test: /消费电子|品牌消费电子|光学光电子|光学元件|LED/ },
+    { name: "电子元件", test: /元件|印制电路板|PCB|电子化学品|其他电子/ },
+    { name: "计算机", test: /计算机|软件|IT服务|安防设备|工控|自动化设备|机器人/ },
+    { name: "通信", test: /通信|电信运营|运营商/ },
+    { name: "传媒互联网", test: /游戏|影视|动漫|广告|媒体|出版|数字媒体|营销代理|电商|互联网/ },
+    { name: "贵金属", test: /黄金|白银|贵金属/ },
+    { name: "能源金属", test: /锂|钴|镍|锡|锑|稀土|钨|钼|小金属|磁性材料|能源金属|金属新材料/ },
+    { name: "工业金属", test: /铜|铝|铅锌|钢铁|普钢|特钢|铁矿|工业金属|有色金属|冶钢|焦炭|焦煤/ },
+    { name: "电池储能", test: /电池|储能|电解液|隔膜|正极|负极|锂电|燃料电池|蓄电池/ },
+    { name: "光伏", test: /光伏|硅料|硅片|逆变器/ },
+    { name: "风电", test: /风电/ },
+    { name: "电力设备", test: /电网|电力设备|电机|电源设备|火电设备|综合电力/ },
+    { name: "电力公用", test: /电力$|火电|水电|核电|热力|燃气|水务|环保|环境治理|固废|大气/ },
+    { name: "石油石化", test: /石油|石化|油服|油气|炼化|炼油|油品/ },
+    { name: "煤炭", test: /煤炭|动力煤|煤化工/ },
+    { name: "汽车整车", test: /乘用车|商用车|摩托车|电动乘用车|综合乘用车|^汽车$/ },
+    { name: "汽车零部件", test: /汽车零部件|汽车电子|底盘|发动机|车身|轮胎|汽车服务|汽车经销|汽车综合/ },
+    { name: "家电", test: /家电|冰洗|空调|彩电|厨卫|厨电|照明|冰箱|洗衣机/ },
+    { name: "白酒", test: /白酒/ },
+    { name: "啤酒饮料", test: /啤酒|饮料|软饮料|其他酒/ },
+    { name: "食品加工", test: /乳品|肉制品|调味|零食|休闲食品|烘焙|熟食|粮油|果蔬|保健品|宠物食品|饲料|食品/ },
+    { name: "农林牧渔", test: /种植|养殖|畜牧|渔业|水产|林业|农业|农用|农药|农化|种子|饲料|动物保健/ },
+    { name: "医药生物", test: /医药|医疗|医美|医院|中药|化学制药|化学制剂|原料药|生物制品|血液|疫苗|体外诊断|诊断服务|药店/ },
+    { name: "银行", test: /银行|农商行|城商行/ },
+    { name: "非银金融", test: /证券|保险|信托|期货|多元金融|资产管理|租赁/ },
+    { name: "房地产", test: /房地产|住宅开发|商业地产|产业地产|物业管理|房产租赁/ },
+    { name: "建筑建材", test: /建筑|装修|装饰|房屋建设|基建|工程咨询|水泥|玻璃|玻纤|瓷砖|管材|耐火|建材|装修建材/ },
+    { name: "基础化工", test: /化学|化工|氯碱|纯碱|氮肥|磷肥|复合肥|氨纶|涤纶|粘胶|有机硅|氟化工|涂料|炭黑|聚氨酯|胶黏|塑料|橡胶|化纤|农药/ },
+    { name: "机械设备", test: /工程机械|机床|专用设备|通用设备|轨交|船舶|能源及重型|仪器仪表|磨具|印刷包装机械|纺织服装设备/ },
+    { name: "军工航空", test: /军工|航天|航空装备|航海装备|地面兵装|国防/ },
+    { name: "交通运输", test: /航运|港口|机场|航空运输|公路|铁路|物流|快递|仓储|公交|交运/ },
+    { name: "商贸零售", test: /零售|百货|超市|贸易|跨境|专业连锁|一般零售|多业态/ },
+    { name: "纺织服装", test: /纺织|服装|家纺|印染|棉纺|鞋/ },
+    { name: "家居轻工", test: /家居|家具|包装|造纸|纸|文娱用品|文化用品|饰品|包装印刷|印刷$/ },
+    { name: "美容护理", test: /化妆品|美容|个护|洗护/ },
+    { name: "社会服务", test: /酒店|旅游|景区|教育|体育|人力资源|会展|检测|专业服务/ },
+    { name: "综合", test: /^综合|综合Ⅱ|综合Ⅲ/ }
+  ];
+
+  function stripIndustryLevelSuffix(name) {
+    return String(name || "")
+      .replace(/[ⅠⅡⅢI]{1,3}$/u, "")
+      .replace(/[ⅠⅡⅢ]$/u, "")
+      .trim();
+  }
+
+  function resolveIndustryGroupName(rawName) {
+    const name = String(rawName || "");
+    const base = stripIndustryLevelSuffix(name);
+    for (let i = 0; i < CN_INDUSTRY_GROUP_RULES.length; i++) {
+      const rule = CN_INDUSTRY_GROUP_RULES[i];
+      if (rule.test.test(name) || rule.test.test(base)) return rule.name;
+    }
+    return base || name;
+  }
+
+  /**
+   * 把细分行业板归并成粗板块
+   * - 涨跌幅：按成分总市值加权
+   * - 点击时可拉全部子板块成分股
+   */
+  function groupCnIndustryBoards(boards) {
+    const map = new Map();
+
+    (boards || []).forEach((b) => {
+      const groupName = resolveIndustryGroupName(b.name);
+      let g = map.get(groupName);
+      if (!g) {
+        g = {
+          name: groupName,
+          code: b.code,
+          change: 0,
+          upCount: 0,
+          downCount: 0,
+          leader: "",
+          leaderChange: null,
+          mcap: 0,
+          weightedChange: 0,
+          children: [],
+          _bestLeaderChange: -Infinity,
+          _repMcap: 0
+        };
+        map.set(groupName, g);
+      }
+
+      const mcap = Number(b.mcap) > 0 ? Number(b.mcap) : 0;
+      g.children.push({ code: b.code, name: b.name, mcap, change: b.change || 0 });
+      g.upCount += b.upCount || 0;
+      g.downCount += b.downCount || 0;
+      g.mcap += mcap;
+      g.weightedChange += (b.change || 0) * (mcap || 1);
+
+      // 代表代码：优先取名称恰好等于归类名 / 带Ⅱ的父级，否则取市值最大
+      const isPreferred =
+        stripIndustryLevelSuffix(b.name) === groupName ||
+        /Ⅱ$/.test(b.name) ||
+        b.name === groupName;
+      if (isPreferred || mcap >= g._repMcap) {
+        g.code = b.code;
+        g._repMcap = mcap;
+      }
+
+      if (
+        b.leader &&
+        b.leaderChange != null &&
+        b.leaderChange > g._bestLeaderChange
+      ) {
+        g.leader = b.leader;
+        g.leaderChange = b.leaderChange;
+        g._bestLeaderChange = b.leaderChange;
+      }
+    });
+
+    return Array.from(map.values())
+      .map((g) => {
+        const weight = g.mcap > 0 ? g.mcap : g.children.length || 1;
+        const change = Math.round((g.weightedChange / weight) * 100) / 100;
+        const children = g.children
+          .slice()
+          .sort((a, b) => b.mcap - a.mcap || b.change - a.change);
+        return {
+          code: g.code,
+          name: g.name,
+          change,
+          upCount: g.upCount,
+          downCount: g.downCount,
+          leader: g.leader,
+          leaderChange: g.leaderChange,
+          childCodes: children.map((c) => c.code),
+          childCount: children.length,
+          childNames: children.map((c) => c.name)
+        };
+      })
+      .sort((a, b) => b.change - a.change);
+  }
+
   async function loadCnSectorBoards(kind = "industry") {
     const fs =
       kind === "concept" ? "m:90+t:3+f:!50" : "m:90+t:2+f:!50";
-    const fields = "f12,f14,f3,f104,f105,f128,f136";
+    const fields = "f12,f14,f3,f20,f104,f105,f128,f136";
     const pageSize = 100;
     const maxPages = 10;
     const all = [];
@@ -1162,10 +1305,12 @@
         if (Number.isNaN(change)) return;
         if (code) seen.add(code);
         const leaderChange = Number(item.f136);
+        const mcap = Number(item.f20);
         all.push({
           code,
           name: String(item.f14),
           change: Math.round(change * 100) / 100,
+          mcap: !Number.isNaN(mcap) && mcap > 0 ? mcap : 0,
           upCount: Number(item.f104) || 0,
           downCount: Number(item.f105) || 0,
           leader: item.f128 && item.f128 !== "-" ? String(item.f128) : "",
@@ -1179,7 +1324,9 @@
       if (page.length < pageSize || (total > 0 && all.length >= total)) break;
     }
 
-    return all.sort((a, b) => b.change - a.change);
+    const sorted = all.sort((a, b) => b.change - a.change);
+    // 仅行业板块做归类；概念板块仍按原列表
+    return kind === "industry" ? groupCnIndustryBoards(sorted) : sorted;
   }
 
   /**
@@ -1190,52 +1337,68 @@
    * @param {number} [limit=20]
    * @returns {Promise<Array<{ code, name, price, change, market }>>}
    */
-  async function loadCnSectorStocks(boardCode, limit = 20) {
-    const code = String(boardCode || "").trim().toUpperCase();
-    if (!code) throw new Error("缺少板块代码");
+  async function loadCnSectorStocks(boardCodeOrCodes, limit = 20) {
+    const codes = (Array.isArray(boardCodeOrCodes)
+      ? boardCodeOrCodes
+      : String(boardCodeOrCodes || "").split(",")
+    )
+      .map((c) => String(c || "").trim().toUpperCase())
+      .filter(Boolean);
+
+    if (!codes.length) throw new Error("缺少板块代码");
 
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
-    const path =
-      "/api/qt/clist/get?pn=1&pz=" +
-      take +
-      "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
-      encodeURIComponent("b:" + code + "+f:!50") +
-      "&fields=" +
-      encodeURIComponent("f12,f13,f14,f2,f3") +
-      "&ut=" +
-      EAST_UT +
-      "&_=" +
-      Date.now();
+    // 多子板块时多取一些再合并去重，避免漏掉强势股
+    const perBoard = codes.length === 1 ? take : Math.min(50, Math.max(take, 30));
 
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
-    const raw = json?.data?.diff;
-    const page = Array.isArray(raw)
-      ? raw
-      : raw && typeof raw === "object"
-        ? Object.values(raw)
-        : [];
-
-    return page
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
+    const pages = await Promise.all(
+      codes.map(async (code) => {
+        const path =
+          "/api/qt/clist/get?pn=1&pz=" +
+          perBoard +
+          "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
+          encodeURIComponent("b:" + code + "+f:!50") +
+          "&fields=" +
+          encodeURIComponent("f12,f13,f14,f2,f3") +
+          "&ut=" +
+          EAST_UT +
+          "&_=" +
+          Date.now();
+        try {
+          const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+          const raw = json?.data?.diff;
+          return Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === "object"
+              ? Object.values(raw)
+              : [];
+        } catch (_) {
+          return [];
         }
-        const change = Number(item.f3);
-        if (Number.isNaN(change)) return null;
-        const price = Number(item.f2);
-        const stockCode = String(item.f12);
-        const market = item.f13 != null ? Number(item.f13) : null;
-        return {
-          code: stockCode,
-          name: String(item.f14 || stockCode),
-          price: Number.isNaN(price) || price === 0 ? null : price,
-          change: Math.round(change * 100) / 100,
-          market: Number.isNaN(market) ? null : market
-        };
       })
-      .filter(Boolean)
-      .sort((a, b) => b.change - a.change)
-      .slice(0, take);
+    );
+
+    const seen = new Set();
+    const list = [];
+    pages.flat().forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const stockCode = String(item.f12);
+      if (seen.has(stockCode)) return;
+      const change = Number(item.f3);
+      if (Number.isNaN(change)) return;
+      seen.add(stockCode);
+      const price = Number(item.f2);
+      const market = item.f13 != null ? Number(item.f13) : null;
+      list.push({
+        code: stockCode,
+        name: String(item.f14 || stockCode),
+        price: Number.isNaN(price) || price === 0 ? null : price,
+        change: Math.round(change * 100) / 100,
+        market: Number.isNaN(market) ? null : market
+      });
+    });
+
+    return list.sort((a, b) => b.change - a.change).slice(0, take);
   }
 
   /**

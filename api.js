@@ -761,6 +761,86 @@
     return klines.slice(startIdx);
   }
 
+  /**
+   * A 股板块涨跌幅列表（东方财富）
+   * GET {push2|push2delay}/api/qt/clist/get
+   *
+   * kind:
+   *   industry 行业板块  fs=m:90+t:2+f:!50
+   *   concept  概念板块  fs=m:90+t:3+f:!50
+   *
+   * 注意：东财 fs 分隔符须用 +（空格经 encode 后会匹配错数据）；单页最多约 100 条，需分页。
+   *
+   * 字段：f12 代码, f14 名称, f3 涨跌幅, f104 上涨家数, f105 下跌家数,
+   *       f128 领涨股, f136 领涨股涨跌幅
+   *
+   * @param {"industry"|"concept"} kind
+   * @returns {Promise<Array<{code,name,change,upCount,downCount,leader,leaderChange}>>}
+   */
+  async function loadCnSectorBoards(kind = "industry") {
+    const fs =
+      kind === "concept" ? "m:90+t:3+f:!50" : "m:90+t:2+f:!50";
+    const fields = "f12,f14,f3,f104,f105,f128,f136";
+    const pageSize = 100;
+    const maxPages = 10;
+    const all = [];
+    const seen = new Set();
+
+    for (let pn = 1; pn <= maxPages; pn++) {
+      const path =
+        "/api/qt/clist/get?pn=" +
+        pn +
+        "&pz=" +
+        pageSize +
+        "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
+        encodeURIComponent(fs) +
+        "&fields=" +
+        encodeURIComponent(fields) +
+        "&ut=" +
+        EAST_UT +
+        "&_=" +
+        Date.now();
+
+      const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+      const raw = json?.data?.diff;
+      const page = Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === "object"
+          ? Object.values(raw)
+          : [];
+
+      if (!page.length) break;
+
+      page.forEach((item) => {
+        if (!item || item.f14 == null || item.f3 == null || item.f3 === "-") {
+          return;
+        }
+        const code = String(item.f12 || "");
+        if (code && seen.has(code)) return;
+        const change = Number(item.f3);
+        if (Number.isNaN(change)) return;
+        if (code) seen.add(code);
+        const leaderChange = Number(item.f136);
+        all.push({
+          code,
+          name: String(item.f14),
+          change: Math.round(change * 100) / 100,
+          upCount: Number(item.f104) || 0,
+          downCount: Number(item.f105) || 0,
+          leader: item.f128 && item.f128 !== "-" ? String(item.f128) : "",
+          leaderChange: Number.isNaN(leaderChange)
+            ? null
+            : Math.round(leaderChange * 100) / 100
+        });
+      });
+
+      const total = Number(json?.data?.total) || 0;
+      if (page.length < pageSize || (total > 0 && all.length >= total)) break;
+    }
+
+    return all.sort((a, b) => b.change - a.change);
+  }
+
   global.MarketAPI = {
     // 工具
     quoteKey,
@@ -775,6 +855,7 @@
     loadIntradayTrends,
     loadDailyKlines,
     loadStockMarketCap,
+    loadCnSectorBoards,
     resolveStock,
     enrichUsPreMarket,
     // 区间计算

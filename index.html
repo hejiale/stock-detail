@@ -94,6 +94,36 @@
     </div>
   </div>
 
+  <div class="board-modal" id="boardModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-board-close></div>
+    <div class="board-modal-panel" role="dialog" aria-modal="true" aria-labelledby="boardModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="boardModalName">A股板块涨幅</div>
+          <div class="sub" id="boardModalSub">按涨跌幅排序</div>
+        </div>
+        <button class="board-modal-close" type="button" data-board-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-tabs" id="boardTabs">
+        <button class="board-tab active" type="button" data-board-kind="industry">行业板块</button>
+        <button class="board-tab" type="button" data-board-kind="concept">概念板块</button>
+      </div>
+      <div class="board-list-head">
+        <div>#</div>
+        <div>板块名称</div>
+        <div style="text-align:right">涨跌幅%</div>
+      </div>
+      <div class="board-modal-body">
+        <div id="boardList"></div>
+        <div class="board-status show" id="boardStatus">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <script src="data.js"></script>
   <script src="api.js"></script>
   <script>
@@ -104,6 +134,7 @@
       loadIntradayTrends,
       loadDailyKlines,
       loadStockMarketCap,
+      loadCnSectorBoards,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock,
@@ -713,6 +744,105 @@
       setChartModalMcap(null);
     }
 
+    function setBoardStatus(msg) {
+      const el = document.getElementById("boardStatus");
+      if (!el) return;
+      if (!msg) {
+        el.classList.remove("show");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add("show");
+    }
+
+    function renderBoardList(list) {
+      const wrap = document.getElementById("boardList");
+      if (!wrap) return;
+
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      const upArrow =
+        '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3.2 13.2 11H2.8L8 3.2z"/></svg>';
+      const downArrow =
+        '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12.8 2.8 5h10.4L8 12.8z"/></svg>';
+
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const tone = toneClass(item.change);
+          const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
+          const metaParts = [];
+          if (item.upCount || item.downCount) {
+            metaParts.push(`涨${item.upCount} / 跌${item.downCount}`);
+          }
+          if (item.leader) {
+            const leaderChg =
+              item.leaderChange == null ? "" : " " + formatPct(item.leaderChange);
+            metaParts.push(`领涨 ${item.leader}${leaderChg}`);
+          }
+          return `
+            <div class="board-row">
+              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
+              <div class="board-info">
+                <div class="board-name">${item.name}</div>
+                ${metaParts.length ? `<div class="board-meta">${metaParts.join(" · ")}</div>` : ""}
+              </div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${arrow}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadBoardKind(kind) {
+      const requestId = (loadBoardKind._req = (loadBoardKind._req || 0) + 1);
+      const kindLabel = kind === "concept" ? "概念" : "行业";
+      document.getElementById("boardModalSub").textContent = `加载${kindLabel}板块中…`;
+      setBoardStatus("加载中…");
+      document.getElementById("boardList").innerHTML = "";
+
+      document.querySelectorAll("[data-board-kind]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.boardKind === kind);
+      });
+
+      try {
+        const list = await loadCnSectorBoards(kind);
+        if (requestId !== loadBoardKind._req) return;
+        openBoardModal._kind = kind;
+        openBoardModal._list = list;
+        document.getElementById("boardModalSub").textContent =
+          `共 ${list.length} 个${kindLabel}板块 · 按涨跌幅排序`;
+        renderBoardList(list);
+        setBoardStatus(list.length ? "" : "暂无板块数据");
+      } catch (err) {
+        if (requestId !== loadBoardKind._req) return;
+        document.getElementById("boardModalSub").textContent = "加载失败";
+        setBoardStatus(err?.message || "板块数据加载失败，请稍后重试");
+      }
+    }
+
+    async function openBoardModal() {
+      const modal = document.getElementById("boardModal");
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+      const kind = openBoardModal._kind || "industry";
+      await loadBoardKind(kind);
+    }
+
+    function closeBoardModal() {
+      loadBoardKind._req = (loadBoardKind._req || 0) + 1;
+      const modal = document.getElementById("boardModal");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      if (!document.getElementById("chartModal")?.classList.contains("show")) {
+        document.body.style.overflow = "";
+      }
+      setBoardStatus("");
+    }
+
     async function syncFundQuotes(fundId) {
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
       if (!btn || btn.disabled) return;
@@ -860,7 +990,16 @@
           <div class="fund-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
-                <div class="name">${fund.fundName}</div>
+                <div class="name-row">
+                  <div class="name">${fund.fundName}</div>
+                  ${fund.id === "cnSemi" ? `
+                    <button class="btn-board" type="button" data-open-board title="查看A股板块涨幅">
+                      板块
+                      <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                        <path d="M2.2 4.2 6 8l3.8-3.8L8.9 3.3 6 6.2 3.1 3.3 2.2 4.2z"/>
+                      </svg>
+                    </button>` : ""}
+                </div>
                 <div class="sub">${metaSub}</div>
               </div>
               <button class="btn btn-sync" type="button" data-sync="${fund.id}">
@@ -1115,6 +1254,22 @@
     }
 
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-board-close]")) {
+        closeBoardModal();
+        return;
+      }
+
+      const boardKindBtn = e.target.closest("[data-board-kind]");
+      if (boardKindBtn) {
+        loadBoardKind(boardKindBtn.dataset.boardKind);
+        return;
+      }
+
+      if (e.target.closest("[data-open-board]")) {
+        openBoardModal();
+        return;
+      }
+
       if (e.target.closest("[data-chart-close]")) {
         closeChartModal();
         return;
@@ -1210,6 +1365,11 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        const boardModal = document.getElementById("boardModal");
+        if (boardModal.classList.contains("show")) {
+          closeBoardModal();
+          return;
+        }
         const modal = document.getElementById("chartModal");
         if (modal.classList.contains("show")) closeChartModal();
         return;

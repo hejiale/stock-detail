@@ -45,12 +45,16 @@
     <div class="chart-modal-panel" role="dialog" aria-modal="true" aria-labelledby="chartModalName">
       <div class="chart-modal-head">
         <div class="chart-modal-title">
-          <div class="name" id="chartModalName">--</div>
+          <button class="chart-name-btn" type="button" id="chartModalNameBtn" data-open-profile title="查看个股资料">
+            <span class="name" id="chartModalName">--</span>
+            <svg class="chart-name-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
+            </svg>
+          </button>
           <div class="sub" id="chartModalSub">当日分时走势</div>
           <div class="chart-modal-meta">
             <span class="price flat" id="chartModalPrice">--</span>
             <span class="chg flat" id="chartModalChg">--</span>
-            <span class="mcap" id="chartModalMcap">市值 --</span>
           </div>
         </div>
         <button class="chart-modal-close" type="button" data-chart-close aria-label="关闭">
@@ -165,6 +169,48 @@
     </div>
   </div>
 
+  <div class="board-modal profile-modal" id="profileModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-profile-close></div>
+    <div class="board-modal-panel profile-panel" role="dialog" aria-modal="true" aria-labelledby="profileModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="profileModalName">--</div>
+          <div class="sub" id="profileModalSub">个股资料</div>
+        </div>
+        <button class="board-modal-close" type="button" data-profile-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="profile-mcap" id="profileMcap">
+        <div class="profile-mcap-item">
+          <div class="label">总市值</div>
+          <div class="value" id="profileTotalMcap">--</div>
+        </div>
+        <div class="profile-mcap-item">
+          <div class="label">流通市值</div>
+          <div class="value" id="profileFloatMcap">--</div>
+        </div>
+      </div>
+      <div class="board-tabs" id="profileTabs">
+        <button class="board-tab active" type="button" data-profile-kind="all">全部</button>
+        <button class="board-tab" type="button" data-profile-kind="annual">年度</button>
+        <button class="board-tab" type="button" data-profile-kind="quarter">季度</button>
+      </div>
+      <div class="profile-list-head">
+        <div>报告期</div>
+        <div style="text-align:right">营收</div>
+        <div style="text-align:right">净利润</div>
+        <div style="text-align:right">负债</div>
+      </div>
+      <div class="board-modal-body profile-body">
+        <div id="profileList"></div>
+        <div class="board-status show" id="profileStatus">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <script src="data.js"></script>
   <script src="api.js"></script>
   <script>
@@ -174,7 +220,7 @@
       loadUsPreMarketQuotes,
       loadIntradayTrends,
       loadDailyKlines,
-      loadStockMarketCap,
+      loadStockProfile,
       loadCnSectorBoards,
       loadUsIndices,
       loadUsSectorBoards,
@@ -384,19 +430,20 @@
       return n.toFixed(2);
     }
 
-    /** 市值（元）格式化为 万 / 亿 / 万亿 */
+    /** 金额/市值（元）格式化为 万 / 亿 / 万亿 */
     function formatMarketCap(n) {
-      if (n == null || Number.isNaN(n) || n <= 0) return "--";
-      if (n >= 1e12) return (n / 1e12).toFixed(2) + "万亿";
-      if (n >= 1e8) return (n / 1e8).toFixed(2) + "亿";
-      if (n >= 1e4) return (n / 1e4).toFixed(2) + "万";
-      return n.toFixed(0);
+      if (n == null || Number.isNaN(n)) return "--";
+      const abs = Math.abs(n);
+      const sign = n < 0 ? "-" : "";
+      if (abs >= 1e12) return sign + (abs / 1e12).toFixed(2) + "万亿";
+      if (abs >= 1e8) return sign + (abs / 1e8).toFixed(2) + "亿";
+      if (abs >= 1e4) return sign + (abs / 1e4).toFixed(2) + "万";
+      return sign + abs.toFixed(0);
     }
 
-    function setChartModalMcap(total) {
-      const el = document.getElementById("chartModalMcap");
-      el.textContent =
-        total == null ? "市值 --" : "市值 " + formatMarketCap(total);
+    function formatYoy(n) {
+      if (n == null || Number.isNaN(n)) return "";
+      return `<span class="profile-yoy ${toneClass(n)}">${formatPct(n)}</span>`;
     }
 
     function setChartStatus(msg) {
@@ -713,11 +760,16 @@
       document.getElementById("chartModalPrice").className = "price flat";
       document.getElementById("chartModalChg").textContent = "--";
       document.getElementById("chartModalChg").className = "chg flat";
-      setChartModalMcap(null);
       resetPeriodValues();
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
 
-      openChartModal._state = { range: "day", trend: null, history: null, returns: null };
+      openChartModal._state = {
+        range: "day",
+        trend: null,
+        history: null,
+        returns: null,
+        holding
+      };
       openChartModal._lastSeries = null;
 
       modal.classList.add("show");
@@ -725,23 +777,19 @@
       document.body.style.overflow = "hidden";
       setChartStatus("加载分时与区间涨跌幅…");
 
-      const [trendResult, historyResult, mcapResult] = await Promise.allSettled([
+      const [trendResult, historyResult] = await Promise.allSettled([
         loadIntradayTrends(holding),
-        loadDailyKlines(holding),
-        loadStockMarketCap(holding)
+        loadDailyKlines(holding)
       ]);
 
       if (reqId !== chartRequestId) return;
-
-      setChartModalMcap(
-        mcapResult.status === "fulfilled" ? mcapResult.value?.total : null
-      );
 
       const state = {
         range: "day",
         trend: trendResult.status === "fulfilled" ? trendResult.value : null,
         history: historyResult.status === "fulfilled" ? historyResult.value : null,
-        returns: null
+        returns: null,
+        holding
       };
 
       if (state.history) {
@@ -779,13 +827,158 @@
       chartRequestId += 1;
       openChartModal._state = null;
       openChartModal._lastSeries = null;
+      if (document.getElementById("profileModal")?.classList.contains("show")) {
+        closeProfileModal();
+      }
       const modal = document.getElementById("chartModal");
       modal.classList.remove("show");
       modal.setAttribute("aria-hidden", "true");
       document.body.style.overflow = "";
       setChartStatus("");
       resetPeriodValues();
-      setChartModalMcap(null);
+    }
+
+    function setProfileStatus(msg) {
+      const el = document.getElementById("profileStatus");
+      if (!el) return;
+      if (!msg) {
+        el.classList.remove("show");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add("show");
+    }
+
+    function renderProfileList(reports, kind) {
+      const wrap = document.getElementById("profileList");
+      if (!wrap) return;
+      const list = (reports || []).filter((r) => {
+        if (kind === "annual") return r.kind === "annual";
+        if (kind === "quarter") return r.kind === "quarter";
+        return true;
+      });
+
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      wrap.innerHTML = list
+        .map((r) => {
+          const liab =
+            r.liabilities != null
+              ? formatMarketCap(r.liabilities)
+              : r.debtRatio != null
+                ? r.debtRatio.toFixed(1) + "%"
+                : "--";
+          const liabHint =
+            r.liabilities == null && r.debtRatio != null ? "资产负债率" : "";
+          return `
+            <div class="profile-row">
+              <div class="profile-period">
+                <div class="period-label">${r.label || r.date || "--"}</div>
+                <div class="period-date">${r.date || ""}</div>
+              </div>
+              <div class="profile-metric">
+                <div class="metric-main">${formatMarketCap(r.revenue)}</div>
+                ${formatYoy(r.revenueYoy)}
+              </div>
+              <div class="profile-metric">
+                <div class="metric-main">${formatMarketCap(r.profit)}</div>
+                ${formatYoy(r.profitYoy)}
+              </div>
+              <div class="profile-metric">
+                <div class="metric-main" title="${liabHint}">${liab}</div>
+              </div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    let profileRequestId = 0;
+
+    async function openProfileModal() {
+      const holding = openChartModal._state?.holding;
+      if (!holding) {
+        showToast("暂无个股信息");
+        return;
+      }
+
+      const modal = document.getElementById("profileModal");
+      const reqId = ++profileRequestId;
+      const name = document.getElementById("chartModalName")?.textContent || holding.name;
+
+      document.getElementById("profileModalName").textContent = name;
+      document.getElementById("profileModalSub").textContent =
+        `代码 ${holding.code} · 加载中…`;
+      document.getElementById("profileTotalMcap").textContent = "--";
+      document.getElementById("profileFloatMcap").textContent = "--";
+      document.getElementById("profileList").innerHTML = "";
+      document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.profileKind === "all");
+      });
+      openProfileModal._kind = "all";
+      openProfileModal._data = null;
+
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      setProfileStatus("加载个股资料…");
+
+      try {
+        const profile = await loadStockProfile(holding);
+        if (reqId !== profileRequestId) return;
+        openProfileModal._data = profile;
+
+        document.getElementById("profileModalName").textContent =
+          profile.name || name;
+        document.getElementById("profileModalSub").textContent =
+          `代码 ${profile.code} · 金额单位：${profile.currencyLabel || "本币"}`;
+        document.getElementById("profileTotalMcap").textContent =
+          formatMarketCap(profile.marketCap?.total);
+        document.getElementById("profileFloatMcap").textContent =
+          formatMarketCap(profile.marketCap?.float);
+
+        if (profile.financeError && !profile.reports?.length) {
+          setProfileStatus(profile.financeError);
+          return;
+        }
+
+        renderProfileList(profile.reports, "all");
+        setProfileStatus(
+          profile.reports?.length
+            ? ""
+            : profile.financeError || "暂无财务数据"
+        );
+      } catch (err) {
+        if (reqId !== profileRequestId) return;
+        setProfileStatus(err.message || "加载失败");
+      }
+    }
+
+    function setProfileKind(kind) {
+      openProfileModal._kind = kind;
+      document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.profileKind === kind);
+      });
+      const data = openProfileModal._data;
+      if (!data) return;
+      renderProfileList(data.reports, kind);
+      const filtered = (data.reports || []).filter((r) => {
+        if (kind === "annual") return r.kind === "annual";
+        if (kind === "quarter") return r.kind === "quarter";
+        return true;
+      });
+      setProfileStatus(filtered.length ? "" : "该分类暂无数据");
+    }
+
+    function closeProfileModal() {
+      profileRequestId += 1;
+      openProfileModal._data = null;
+      const modal = document.getElementById("profileModal");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      setProfileStatus("");
     }
 
     function setBoardStatus(msg) {
@@ -1467,6 +1660,22 @@
         return;
       }
 
+      if (e.target.closest("[data-profile-close]")) {
+        closeProfileModal();
+        return;
+      }
+
+      const profileKindBtn = e.target.closest("[data-profile-kind]");
+      if (profileKindBtn) {
+        setProfileKind(profileKindBtn.dataset.profileKind);
+        return;
+      }
+
+      if (e.target.closest("[data-open-profile]")) {
+        openProfileModal();
+        return;
+      }
+
       if (e.target.closest("[data-chart-close]")) {
         closeChartModal();
         return;
@@ -1562,6 +1771,11 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        const profileModal = document.getElementById("profileModal");
+        if (profileModal?.classList.contains("show")) {
+          closeProfileModal();
+          return;
+        }
         const usBoardModal = document.getElementById("usBoardModal");
         if (usBoardModal.classList.contains("show")) {
           closeUsBoardModal();

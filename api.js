@@ -462,12 +462,12 @@
    * 东方财富总市值 / 流通市值
    * ulist 字段：f20 总市值、f21 流通市值（单位：元）
    *
-   * @returns {Promise<{ total: number|null, float: number|null }>}
+   * @returns {Promise<{ total: number|null, float: number|null, name: string|null }>}
    */
   async function loadStockMarketCap(holding) {
     const secid = toEastSecId(holding);
     const path =
-      "/api/qt/ulist.np/get?fltt=2&fields=f12,f20,f21&secids=" +
+      "/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f20,f21&secids=" +
       encodeURIComponent(secid) +
       "&ut=" +
       EAST_UT +
@@ -482,7 +482,291 @@
     const floatCap = Number(item.f21);
     return {
       total: !Number.isNaN(total) && total > 0 ? total : null,
-      float: !Number.isNaN(floatCap) && floatCap > 0 ? floatCap : null
+      float: !Number.isNaN(floatCap) && floatCap > 0 ? floatCap : null,
+      name: item.f14 ? String(item.f14) : null
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 个股资料（市值 + 财报）
+  // ---------------------------------------------------------------------------
+
+  const EAST_DC_WEB = "https://datacenter-web.eastmoney.com/api/data/v1/get";
+  const EAST_DC_SEC = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
+  /** 东财海外资产负债表「总负债」科目 */
+  const EAST_LIAB_ITEM = "004011999";
+
+  /** 市场归类：CN / US / HK / JP / KR */
+  function getMarketKind(holding) {
+    const m = Number(holding.market);
+    if (m === 105 || m === 106) return "US";
+    if (m === 116) return "HK";
+    if (m === 176) return "JP";
+    if (m === 177) return "KR";
+    if (m === 0 || m === 1) return "CN";
+    if (/[A-Za-z]/.test(String(holding.code || ""))) return "US";
+    return "CN";
+  }
+
+  function normalizeReportDate(d) {
+    return String(d || "").slice(0, 10);
+  }
+
+  function numOrNull(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** 年报 / 季报（含中报） */
+  function classifyPeriod(label, reportType) {
+    const s = String(label || "") + " " + String(reportType || "");
+    if (/年报|年度|\/FY|\bFY\b/.test(s)) return "annual";
+    return "quarter";
+  }
+
+  async function fetchDatacenterJson(url) {
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!resp.ok) throw new Error("财务数据请求失败");
+    const json = await resp.json();
+    if (json && json.success === false) {
+      throw new Error(json.message || "财务数据请求失败");
+    }
+    return json;
+  }
+
+  function buildDatacenterUrl(base, params) {
+    const q = Object.keys(params)
+      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
+      .join("&");
+    return base + "?" + q;
+  }
+
+  /** 美股 SECUCODE：纳斯达克 .O / 纽交所 .N */
+  function toUsSecuCode(holding) {
+    const code = String(holding.code || "").toUpperCase();
+    const suffix = Number(holding.market) === 106 ? ".N" : ".O";
+    return code + suffix;
+  }
+
+  /** 港股 SECUCODE：5 位补零 + .HK */
+  function toHkSecuCode(holding) {
+    const digits = String(holding.code || "").replace(/\D/g, "");
+    if (!digits) return "";
+    return digits.padStart(5, "0") + ".HK";
+  }
+
+  function mapLiabilityByDate(rows) {
+    const map = {};
+    (rows || []).forEach((row) => {
+      const d = normalizeReportDate(row.REPORT_DATE);
+      const amt = numOrNull(row.AMOUNT);
+      if (d && amt != null) map[d] = amt;
+    });
+    return map;
+  }
+
+  async function loadCnFinancialReports(code) {
+    const filter = '(SECURITY_CODE="' + code + '")';
+    const [perfJson, balJson] = await Promise.all([
+      fetchDatacenterJson(
+        buildDatacenterUrl(EAST_DC_WEB, {
+          reportName: "RPT_LICO_FN_CPD",
+          columns:
+            "SECURITY_CODE,SECURITY_NAME_ABBR,REPORTDATE,DATATYPE,TOTAL_OPERATE_INCOME,PARENT_NETPROFIT,YSTZ,SJLTZ",
+          filter,
+          pageNumber: "1",
+          pageSize: "12",
+          sortColumns: "REPORTDATE",
+          sortTypes: "-1",
+          source: "WEB",
+          client: "WEB"
+        })
+      ),
+      fetchDatacenterJson(
+        buildDatacenterUrl(EAST_DC_WEB, {
+          reportName: "RPT_DMSK_FN_BALANCE",
+          columns: "REPORT_DATE,TOTAL_LIABILITIES",
+          filter,
+          pageNumber: "1",
+          pageSize: "12",
+          sortColumns: "REPORT_DATE",
+          sortTypes: "-1",
+          source: "WEB",
+          client: "WEB"
+        })
+      )
+    ]);
+
+    const liabMap = {};
+    (balJson?.result?.data || []).forEach((row) => {
+      const d = normalizeReportDate(row.REPORT_DATE);
+      const amt = numOrNull(row.TOTAL_LIABILITIES);
+      if (d && amt != null) liabMap[d] = amt;
+    });
+
+    const reports = (perfJson?.result?.data || []).map((row) => {
+      const date = normalizeReportDate(row.REPORTDATE);
+      const label = String(row.DATATYPE || date);
+      return {
+        date,
+        label,
+        kind: classifyPeriod(label, ""),
+        revenue: numOrNull(row.TOTAL_OPERATE_INCOME),
+        profit: numOrNull(row.PARENT_NETPROFIT),
+        liabilities: liabMap[date] ?? null,
+        revenueYoy: numOrNull(row.YSTZ),
+        profitYoy: numOrNull(row.SJLTZ),
+        debtRatio: null
+      };
+    });
+
+    const name = perfJson?.result?.data?.[0]?.SECURITY_NAME_ABBR || null;
+    return { name, currency: "CNY", currencyLabel: "人民币", reports };
+  }
+
+  async function loadOverseasFinancialReports(secucode, marketKind) {
+    const isHk = marketKind === "HK";
+    const mainReport = isHk
+      ? "RPT_HKF10_FN_GMAININDICATOR"
+      : "RPT_USF10_FN_GMAININDICATOR";
+    const balReport = isHk ? "RPT_HKF10_FN_BALANCE" : "RPT_USF10_FN_BALANCE";
+    const filter = '(SECUCODE="' + secucode + '")';
+    const mainColumns = isHk
+      ? "SECUCODE,SECURITY_NAME_ABBR,REPORT_DATE,REPORT_TYPE,REPORT_DATA_TYPE,OPERATE_INCOME,HOLDER_PROFIT,OPERATE_INCOME_YOY,HOLDER_PROFIT_YOY,DEBT_ASSET_RATIO,CURRENCY_ABBR"
+      : "SECUCODE,SECURITY_NAME_ABBR,REPORT_DATE,REPORT_TYPE,REPORT_DATA_TYPE,OPERATE_INCOME,PARENT_HOLDER_NETPROFIT,OPERATE_INCOME_YOY,PARENT_HOLDER_NETPROFIT_YOY,DEBT_ASSET_RATIO,CURRENCY_ABBR";
+
+    const [mainJson, balJson] = await Promise.all([
+      fetchDatacenterJson(
+        buildDatacenterUrl(EAST_DC_SEC, {
+          reportName: mainReport,
+          columns: mainColumns,
+          filter,
+          pageNumber: "1",
+          pageSize: "12",
+          sortColumns: "REPORT_DATE",
+          sortTypes: "-1",
+          source: "SECURITIES",
+          client: "PC"
+        })
+      ),
+      fetchDatacenterJson(
+        buildDatacenterUrl(EAST_DC_SEC, {
+          reportName: balReport,
+          columns: "ITEM_NAME,STD_ITEM_CODE,AMOUNT,REPORT_DATE",
+          filter: filter + '(STD_ITEM_CODE="' + EAST_LIAB_ITEM + '")',
+          pageNumber: "1",
+          pageSize: "12",
+          sortColumns: "REPORT_DATE",
+          sortTypes: "-1",
+          source: "SECURITIES",
+          client: "PC"
+        })
+      ).catch(() => null)
+    ]);
+
+    const rows = mainJson?.result?.data || [];
+    if (!rows.length) throw new Error("暂无财务数据");
+
+    const liabMap = mapLiabilityByDate(balJson?.result?.data);
+    const currency = String(rows[0].CURRENCY_ABBR || (isHk ? "HKD" : "USD"));
+    const currencyLabel =
+      currency === "HKD" ? "港元" : currency === "CNY" ? "人民币" : "美元";
+
+    const reports = rows.map((row) => {
+      const date = normalizeReportDate(row.REPORT_DATE);
+      const label = String(row.REPORT_DATA_TYPE || row.REPORT_TYPE || date);
+      return {
+        date,
+        label,
+        kind: classifyPeriod(label, row.REPORT_TYPE),
+        revenue: numOrNull(row.OPERATE_INCOME),
+        profit: numOrNull(
+          isHk ? row.HOLDER_PROFIT : row.PARENT_HOLDER_NETPROFIT
+        ),
+        liabilities: liabMap[date] ?? null,
+        revenueYoy: numOrNull(row.OPERATE_INCOME_YOY),
+        profitYoy: numOrNull(
+          isHk ? row.HOLDER_PROFIT_YOY : row.PARENT_HOLDER_NETPROFIT_YOY
+        ),
+        debtRatio: numOrNull(row.DEBT_ASSET_RATIO)
+      };
+    });
+
+    return {
+      name: rows[0].SECURITY_NAME_ABBR || null,
+      currency,
+      currencyLabel,
+      reports
+    };
+  }
+
+  /**
+   * 个股资料：市值 + 近年营收/利润/负债
+   * @returns {Promise<{
+   *   name, code, marketKind, currency, currencyLabel,
+   *   marketCap: { total, float },
+   *   reports: Array,
+   *   financeError?: string
+   * }>}
+   */
+  async function loadStockProfile(holding) {
+    const marketKind = getMarketKind(holding);
+    const code = String(holding.code || "");
+
+    const mcapPromise = loadStockMarketCap(holding).catch(() => ({
+      total: null,
+      float: null,
+      name: null
+    }));
+
+    let financePromise;
+    if (marketKind === "CN") {
+      financePromise = loadCnFinancialReports(code);
+    } else if (marketKind === "US") {
+      const primary = toUsSecuCode(holding);
+      const fallback =
+        Number(holding.market) === 106
+          ? String(holding.code || "").toUpperCase() + ".O"
+          : String(holding.code || "").toUpperCase() + ".N";
+      financePromise = loadOverseasFinancialReports(primary, "US").catch((err) => {
+        if (fallback === primary) throw err;
+        return loadOverseasFinancialReports(fallback, "US");
+      });
+    } else if (marketKind === "HK") {
+      financePromise = loadOverseasFinancialReports(toHkSecuCode(holding), "HK");
+    } else {
+      financePromise = Promise.reject(new Error("该市场暂不支持财务数据"));
+    }
+
+    const [mcapResult, financeResult] = await Promise.allSettled([
+      mcapPromise,
+      financePromise
+    ]);
+
+    const mcap =
+      mcapResult.status === "fulfilled"
+        ? mcapResult.value
+        : { total: null, float: null, name: null };
+    const finance =
+      financeResult.status === "fulfilled" ? financeResult.value : null;
+
+    return {
+      name: finance?.name || mcap.name || holding.name || code,
+      code,
+      marketKind,
+      currency: finance?.currency || (marketKind === "CN" ? "CNY" : "USD"),
+      currencyLabel:
+        finance?.currencyLabel ||
+        (marketKind === "CN" ? "人民币" : marketKind === "HK" ? "港元" : "美元"),
+      marketCap: {
+        total: mcap.total,
+        float: mcap.float
+      },
+      reports: finance?.reports || [],
+      financeError:
+        financeResult.status === "rejected"
+          ? financeResult.reason?.message || "暂无财务数据"
+          : null
     };
   }
 
@@ -983,6 +1267,8 @@
     loadIntradayTrends,
     loadDailyKlines,
     loadStockMarketCap,
+    loadStockProfile,
+    getMarketKind,
     loadCnSectorBoards,
     loadUsIndices,
     loadUsSectorBoards,

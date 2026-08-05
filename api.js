@@ -6,7 +6,7 @@
  *   之后通过 window.MarketAPI 调用
  *
  * 数据源：
- *   1. 东方财富 push2 / push2his（实时报价、分时、日 K）
+ *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器侧常因 Referer 校验失败）
  *   3. Yahoo Finance chart（美股盘前/盘后涨跌幅；浏览器经 CORS 中继）
  *
@@ -21,6 +21,43 @@
 
   /** 东方财富接口常用 ut 参数（公开行情页同款） */
   const EAST_UT = "fa5fd1943c7b386f172d6893dbfba10b";
+
+  /**
+   * 实时/分时主机：push2 部分网络会 TLS 中断，delay 作兜底
+   * 日 K 主机：push2his 为主，delay 仅作连通性兜底（可能无 klines）
+   */
+  const EAST_PUSH_HOSTS = [
+    "https://push2.eastmoney.com",
+    "https://push2delay.eastmoney.com"
+  ];
+  const EAST_HIS_HOSTS = [
+    "https://push2his.eastmoney.com",
+    "https://push2delay.eastmoney.com"
+  ];
+
+  /**
+   * 按主机列表依次请求东财 JSON，直到成功
+   * @param {string[]} hosts
+   * @param {string} pathWithQuery 以 / 开头的路径+查询串
+   */
+  async function fetchEastMoneyJson(hosts, pathWithQuery) {
+    let lastError = null;
+    for (let i = 0; i < hosts.length; i++) {
+      try {
+        const resp = await fetch(hosts[i] + pathWithQuery, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("行情接口请求失败");
+          continue;
+        }
+        return await resp.json();
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("行情接口请求失败");
+  }
 
   // ---------------------------------------------------------------------------
   // 代码转换
@@ -120,32 +157,42 @@
 
   /**
    * 东方财富批量实时报价
-   * GET https://push2.eastmoney.com/api/qt/ulist.np/get
+   * GET {push2|push2delay}/api/qt/ulist.np/get
    *
    * 请求字段：
-   *   f12 代码, f14 名称, f2 最新价, f3 涨跌幅(%)
+   *   f12 代码, f14 名称, f2 最新价, f3 涨跌幅(%), f18 昨收
+   *   盘后/delay 常出现 f2=0，此时用 f18 作展示价
    *
    * @param {Array} holdings
    * @returns {Promise<Object>} code(大写) -> { name, price, change }
    */
   async function loadEastMoneyQuotes(holdings) {
     const secids = holdings.map(toEastSecId).join(",");
-    const url =
-      "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3&secids=" +
+    const path =
+      "/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3,f18&secids=" +
       encodeURIComponent(secids) +
+      "&ut=" +
+      EAST_UT +
       "&_=" +
       Date.now();
 
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error("行情接口请求失败");
-    const json = await resp.json();
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
     const list = json?.data?.diff || [];
     const map = {};
     list.forEach((item) => {
       if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const live = Number(item.f2);
+      const prev = Number(item.f18);
+      const price =
+        !Number.isNaN(live) && live !== 0
+          ? live
+          : !Number.isNaN(prev) && prev !== 0
+            ? prev
+            : NaN;
+      if (Number.isNaN(price)) return;
       map[String(item.f12).toUpperCase()] = {
         name: item.f14,
-        price: Number(item.f2),
+        price,
         change: Math.round(Number(item.f3) * 100) / 100
       };
     });
@@ -413,7 +460,7 @@
 
   /**
    * 东方财富当日分时
-   * GET https://push2.eastmoney.com/api/qt/stock/trends2/get
+   * GET {push2|push2delay}/api/qt/stock/trends2/get
    *
    * trends 每项：时间,开盘,现价,最高,最低,成交量,成交额,均价
    *
@@ -422,8 +469,8 @@
    */
   async function loadIntradayTrends(holding) {
     const secid = toEastSecId(holding);
-    const url =
-      "https://push2.eastmoney.com/api/qt/stock/trends2/get" +
+    const path =
+      "/api/qt/stock/trends2/get" +
       "?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13" +
       "&fields2=f51,f52,f53,f54,f55,f56,f57,f58" +
       "&ut=" +
@@ -433,9 +480,12 @@
       "&_=" +
       Date.now();
 
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error("分时数据请求失败");
-    const json = await resp.json();
+    let json;
+    try {
+      json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    } catch (_) {
+      throw new Error("分时数据请求失败");
+    }
     const data = json?.data;
     if (!data || !Array.isArray(data.trends) || !data.trends.length) {
       throw new Error("暂无当日分时数据");
@@ -475,7 +525,7 @@
 
   /**
    * 东方财富日 K 线（前复权）
-   * GET https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * GET {push2his|push2delay}/api/qt/stock/kline/get
    *
    * 参数：
    *   klt=101 日线
@@ -489,8 +539,8 @@
    */
   async function loadDailyKlines(holding) {
     const secid = toEastSecId(holding);
-    const url =
-      "https://push2his.eastmoney.com/api/qt/stock/kline/get" +
+    const path =
+      "/api/qt/stock/kline/get" +
       "?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13" +
       "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61" +
       "&ut=" +
@@ -500,12 +550,30 @@
       "&_=" +
       Date.now();
 
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error("历史行情请求失败");
-    const json = await resp.json();
-    const data = json?.data;
-    if (!data || !Array.isArray(data.klines) || !data.klines.length) {
-      throw new Error("暂无历史行情");
+    let data = null;
+    let lastError = null;
+    for (let i = 0; i < EAST_HIS_HOSTS.length; i++) {
+      try {
+        const resp = await fetch(EAST_HIS_HOSTS[i] + path, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("历史行情请求失败");
+          continue;
+        }
+        const json = await resp.json();
+        const candidate = json?.data;
+        if (candidate && Array.isArray(candidate.klines) && candidate.klines.length) {
+          data = candidate;
+          break;
+        }
+        lastError = new Error("暂无历史行情");
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (!data) {
+      throw lastError || new Error("暂无历史行情");
     }
 
     const klines = data.klines

@@ -1013,8 +1013,79 @@ header p {
   border-radius: 10px;
 }
 
+.board-row-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.board-row-btn:hover {
+  background: #f1f5f9;
+}
+
+.board-row-btn:hover .board-name,
+.board-row-btn:hover .board-name-arrow {
+  color: #1677ff;
+}
+
+.board-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.board-name-row .board-name {
+  min-width: 0;
+}
+
+.board-name-arrow {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #94a3b8;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.board-row-btn:hover .board-name-arrow {
+  transform: translateX(2px);
+}
+
 .board-row:nth-child(odd) {
   background: #f8fafc;
+}
+
+.board-row-btn:nth-child(odd) {
+  background: #f8fafc;
+}
+
+.board-row-btn:nth-child(odd):hover {
+  background: #f1f5f9;
+}
+
+.board-stocks-modal {
+  z-index: 125;
+}
+
+.board-stocks-head {
+  grid-template-columns: 36px 1fr 72px 88px;
+}
+
+.board-stock-row {
+  grid-template-columns: 36px 1fr 72px 88px;
+}
+
+.board-price {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
 }
 
 .board-rank {

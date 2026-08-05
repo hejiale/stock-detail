@@ -128,6 +128,33 @@
     </div>
   </div>
 
+  <div class="board-modal board-stocks-modal" id="boardStocksModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-board-stocks-close></div>
+    <div class="board-modal-panel board-stocks-panel" role="dialog" aria-modal="true" aria-labelledby="boardStocksModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="boardStocksModalName">板块成分</div>
+          <div class="sub" id="boardStocksModalSub">涨幅前 20</div>
+        </div>
+        <button class="board-modal-close" type="button" data-board-stocks-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-list-head board-stocks-head">
+        <div>#</div>
+        <div>股票名称</div>
+        <div style="text-align:right">现价</div>
+        <div style="text-align:right">涨跌幅%</div>
+      </div>
+      <div class="board-modal-body">
+        <div id="boardStocksList"></div>
+        <div class="board-status show" id="boardStocksStatus">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <div class="board-modal" id="usBoardModal" aria-hidden="true">
     <div class="board-modal-backdrop" data-us-board-close></div>
     <div class="board-modal-panel us-board-panel" role="dialog" aria-modal="true" aria-labelledby="usBoardModalName">
@@ -237,6 +264,7 @@
       loadDailyKlines,
       loadStockProfile,
       loadCnSectorBoards,
+      loadCnSectorStocks,
       loadUsIndices,
       loadUsSectorBoards,
       loadUsStockRank,
@@ -1109,16 +1137,104 @@
             metaParts.push(`领涨 ${item.leader}${leaderChg}`);
           }
           return `
-            <div class="board-row">
+            <button class="board-row board-row-btn" type="button" data-board-code="${item.code}" data-board-name="${String(item.name).replace(/"/g, "&quot;")}" title="查看 ${String(item.name).replace(/"/g, "&quot;")} 涨幅前20">
+              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
+              <div class="board-info">
+                <div class="board-name-row">
+                  <span class="board-name">${item.name}</span>
+                  <svg class="board-name-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
+                  </svg>
+                </div>
+                ${metaParts.length ? `<div class="board-meta">${metaParts.join(" · ")}</div>` : ""}
+              </div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${arrow}</div>
+            </button>`;
+        })
+        .join("");
+    }
+
+    function setBoardStocksStatus(msg) {
+      const el = document.getElementById("boardStocksStatus");
+      if (!el) return;
+      if (!msg) {
+        el.classList.remove("show");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add("show");
+    }
+
+    function renderBoardStocksList(list) {
+      const wrap = document.getElementById("boardStocksList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      const upArrow =
+        '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
+      const downArrow =
+        '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
+
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const tone = toneClass(item.change);
+          const arrow = item.change > 0 ? upArrow : item.change < 0 ? downArrow : "";
+          return `
+            <div class="board-row board-stock-row">
               <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name">${item.name}</div>
-                ${metaParts.length ? `<div class="board-meta">${metaParts.join(" · ")}</div>` : ""}
+                <div class="board-meta">${item.code}</div>
               </div>
+              <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${arrow}</div>
             </div>`;
         })
         .join("");
+    }
+
+    let boardStocksRequestId = 0;
+
+    async function openBoardStocksModal(boardCode, boardName) {
+      if (!boardCode) return;
+      const modal = document.getElementById("boardStocksModal");
+      const reqId = ++boardStocksRequestId;
+
+      document.getElementById("boardStocksModalName").textContent =
+        boardName || boardCode;
+      document.getElementById("boardStocksModalSub").textContent =
+        `${boardCode} · 加载涨幅榜…`;
+      document.getElementById("boardStocksList").innerHTML = "";
+      setBoardStocksStatus("加载成分股涨幅…");
+
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+
+      try {
+        const list = await loadCnSectorStocks(boardCode, 20);
+        if (reqId !== boardStocksRequestId) return;
+        document.getElementById("boardStocksModalSub").textContent =
+          `${boardCode} · 涨幅前 ${list.length} 只`;
+        renderBoardStocksList(list);
+        setBoardStocksStatus(list.length ? "" : "暂无成分股数据");
+      } catch (err) {
+        if (reqId !== boardStocksRequestId) return;
+        document.getElementById("boardStocksModalSub").textContent =
+          `${boardCode} · 加载失败`;
+        setBoardStocksStatus(err?.message || "成分股加载失败");
+      }
+    }
+
+    function closeBoardStocksModal() {
+      boardStocksRequestId += 1;
+      const modal = document.getElementById("boardStocksModal");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      setBoardStocksStatus("");
     }
 
     async function loadBoardKind(kind) {
@@ -1159,12 +1275,16 @@
 
     function closeBoardModal() {
       loadBoardKind._req = (loadBoardKind._req || 0) + 1;
+      if (document.getElementById("boardStocksModal")?.classList.contains("show")) {
+        closeBoardStocksModal();
+      }
       const modal = document.getElementById("boardModal");
       modal.classList.remove("show");
       modal.setAttribute("aria-hidden", "true");
       if (
         !document.getElementById("chartModal")?.classList.contains("show") &&
-        !document.getElementById("usBoardModal")?.classList.contains("show")
+        !document.getElementById("usBoardModal")?.classList.contains("show") &&
+        !document.getElementById("profileModal")?.classList.contains("show")
       ) {
         document.body.style.overflow = "";
       }
@@ -1730,6 +1850,11 @@
         return;
       }
 
+      if (e.target.closest("[data-board-stocks-close]")) {
+        closeBoardStocksModal();
+        return;
+      }
+
       if (e.target.closest("[data-board-close]")) {
         closeBoardModal();
         return;
@@ -1738,6 +1863,15 @@
       const boardKindBtn = e.target.closest("[data-board-kind]");
       if (boardKindBtn) {
         loadBoardKind(boardKindBtn.dataset.boardKind);
+        return;
+      }
+
+      const boardRowBtn = e.target.closest("[data-board-code]");
+      if (boardRowBtn) {
+        openBoardStocksModal(
+          boardRowBtn.dataset.boardCode,
+          boardRowBtn.dataset.boardName
+        );
         return;
       }
 
@@ -1862,6 +1996,11 @@
         const profileModal = document.getElementById("profileModal");
         if (profileModal?.classList.contains("show")) {
           closeProfileModal();
+          return;
+        }
+        const boardStocksModal = document.getElementById("boardStocksModal");
+        if (boardStocksModal?.classList.contains("show")) {
+          closeBoardStocksModal();
           return;
         }
         const usBoardModal = document.getElementById("usBoardModal");

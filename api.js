@@ -1183,6 +1183,62 @@
   }
 
   /**
+   * A 股板块成分股（按涨跌幅降序）
+   * GET {push2}/api/qt/clist/get  fs=b:BK1625+f:!50  fid=f3
+   *
+   * @param {string} boardCode 如 BK1625
+   * @param {number} [limit=20]
+   * @returns {Promise<Array<{ code, name, price, change, market }>>}
+   */
+  async function loadCnSectorStocks(boardCode, limit = 20) {
+    const code = String(boardCode || "").trim().toUpperCase();
+    if (!code) throw new Error("缺少板块代码");
+
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const path =
+      "/api/qt/clist/get?pn=1&pz=" +
+      take +
+      "&po=1&np=1&fltt=2&invt=2&fid=f3&fs=" +
+      encodeURIComponent("b:" + code + "+f:!50") +
+      "&fields=" +
+      encodeURIComponent("f12,f13,f14,f2,f3") +
+      "&ut=" +
+      EAST_UT +
+      "&_=" +
+      Date.now();
+
+    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const raw = json?.data?.diff;
+    const page = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object"
+        ? Object.values(raw)
+        : [];
+
+    return page
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        if (Number.isNaN(change)) return null;
+        const price = Number(item.f2);
+        const stockCode = String(item.f12);
+        const market = item.f13 != null ? Number(item.f13) : null;
+        return {
+          code: stockCode,
+          name: String(item.f14 || stockCode),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: Math.round(change * 100) / 100,
+          market: Number.isNaN(market) ? null : market
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.change - a.change)
+      .slice(0, take);
+  }
+
+  /**
    * 美股三大指数：道琼斯 / 纳斯达克 / 标普500
    * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
    */
@@ -1327,6 +1383,7 @@
     loadStockProfile,
     getMarketKind,
     loadCnSectorBoards,
+    loadCnSectorStocks,
     loadUsIndices,
     loadUsSectorBoards,
     loadUsStockRank,

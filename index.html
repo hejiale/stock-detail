@@ -810,9 +810,9 @@
       }
 
       const upArrow =
-        '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3.2 13.2 11H2.8L8 3.2z"/></svg>';
+        '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
       const downArrow =
-        '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12.8 2.8 5h10.4L8 12.8z"/></svg>';
+        '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
 
       wrap.innerHTML = list
         .map((item, i) => {
@@ -904,10 +904,10 @@
 
     function chgArrowHtml(change) {
       if (change > 0) {
-        return '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3.2 13.2 11H2.8L8 3.2z"/></svg>';
+        return '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
       }
       if (change < 0) {
-        return '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12.8 2.8 5h10.4L8 12.8z"/></svg>';
+        return '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
       }
       return "";
     }
@@ -1240,14 +1240,10 @@
                       ${viewOnly ? "readonly tabindex=\"-1\"" : ""}
                     />
                     <span class="change-icon up-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 3.2 13.2 11H2.8L8 3.2z"/>
-                      </svg>
+                      <img src="aesc.png" alt="" />
                     </span>
                     <span class="change-icon down-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 12.8 2.8 5h10.4L8 12.8z"/>
-                      </svg>
+                      <img src="desc.png" alt="" />
                     </span>
                   </div>
                 </div>

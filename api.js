@@ -426,35 +426,40 @@
     if (!usHoldings.length) return {};
 
     const codes = usHoldings.map((h) => quoteKey(h.code));
-    const map = {};
+    const codesParam = encodeURIComponent(codes.join(","));
 
-    // 1) 本地代理（node serve.mjs）
+    // 同域优先；若页面用 Live Server / file 打开，再打本地代理（需 node serve.mjs）
+    const proxyBases = [];
     if (typeof location !== "undefined" && location.protocol !== "file:") {
+      proxyBases.push("");
+    }
+    proxyBases.push("http://127.0.0.1:8787", "http://localhost:8787");
+
+    for (let i = 0; i < proxyBases.length; i++) {
+      const base = proxyBases[i];
       try {
-        const resp = await fetch(
-          "/api/us-premarket?codes=" + encodeURIComponent(codes.join(","))
-        );
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && typeof data === "object" && !data.error) {
-            Object.keys(data).forEach((code) => {
-              const row = data[code];
-              if (!row || row.preChange == null || Number.isNaN(row.preChange)) return;
-              map[quoteKey(code)] = {
-                name: row.name,
-                price: row.price,
-                preChange: row.preChange
-              };
-            });
-            if (Object.keys(map).length) return map;
-          }
-        }
+        const resp = await fetch(base + "/api/us-premarket?codes=" + codesParam);
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        if (!data || typeof data !== "object" || data.error) continue;
+        const map = {};
+        Object.keys(data).forEach((code) => {
+          const row = data[code];
+          if (!row || row.preChange == null || Number.isNaN(Number(row.preChange))) return;
+          map[quoteKey(code)] = {
+            name: row.name,
+            price: row.price,
+            preChange: Number(row.preChange)
+          };
+        });
+        if (Object.keys(map).length) return map;
       } catch (_) {
-        // 继续尝试直连
+        // 试下一个代理地址
       }
     }
 
-    // 2) 直连百度（扩展/部分环境可能可用；普通网页通常 CORS 失败）
+    // 直连百度（扩展/部分环境可能可用；普通网页通常 CORS 失败）
+    const map = {};
     let cursor = 0;
     const concurrency = Math.min(4, usHoldings.length);
 

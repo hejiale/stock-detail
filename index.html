@@ -9,7 +9,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1><img class="title-icon" src="icon_licai.png" alt="" aria-hidden="true" />基金持仓收益估算</h1>
+      <h1><img class="title-icon" src="assets/icon_licai.png" alt="" aria-hidden="true" />基金持仓收益估算</h1>
       <p>根据前十大持仓比例，输入各股票当日涨跌幅，估算基金当日收益。</p>
     </header>
 
@@ -270,9 +270,9 @@
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
     const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
     const MAIN_TABS = [
-      { id: "cnSemi", name: "A股", icon: "gupiao.png" },
-      { id: "usSemi", name: "美股", icon: "gupiao.png" },
-      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png", iconClass: "tab-icon-sm" }
+      { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
+      { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
+      { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
@@ -1427,10 +1427,10 @@
 
     function chgArrowHtml(change) {
       if (change > 0) {
-        return '<img class="chg-arrow" src="aesc.png" alt="" aria-hidden="true" />';
+        return '<img class="chg-arrow" src="assets/aesc.png" alt="" aria-hidden="true" />';
       }
       if (change < 0) {
-        return '<img class="chg-arrow" src="desc.png" alt="" aria-hidden="true" />';
+        return '<img class="chg-arrow" src="assets/desc.png" alt="" aria-hidden="true" />';
       }
       return "";
     }
@@ -1658,7 +1658,7 @@
                     data-remove-code="${h.code}"
                     title="移除自选"
                     aria-label="移除 ${h.name}"
-                  ><img src="quxiao_zixuan.png" alt="移除" /></button>` : ""}
+                  ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>` : ""}
               </div>
               ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
               <div class="pre-change" data-pre-change data-fund="${fund.id}" data-index="${i}">--</div>
@@ -1674,10 +1674,10 @@
                   ${viewOnly ? "readonly tabindex=\"-1\"" : ""}
                 />
                 <span class="change-icon up-icon" aria-hidden="true">
-                  <img src="aesc.png" alt="" />
+                  <img src="assets/aesc.png" alt="" />
                 </span>
                 <span class="change-icon down-icon" aria-hidden="true">
-                  <img src="desc.png" alt="" />
+                  <img src="assets/desc.png" alt="" />
                 </span>
               </div>
             </div>`;
@@ -1733,11 +1733,11 @@
                 spellcheck="false"
               />
               <button class="btn btn-add" type="button" data-add-stock="${fund.id}" aria-label="添加股票" title="添加">
-                <img src="add_zixuan.png" alt="添加" />
+                <img src="assets/add_zixuan.png" alt="添加" />
               </button>
               ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
               <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}" aria-label="板块">
-                <img src="bankuai.png" alt="板块" />
+                <img src="assets/bankuai.png" alt="板块" />
               </button>` : ""}
             </div>`
         : "";
@@ -1750,7 +1750,7 @@
                 <div class="sub">${metaSub}</div>
               </div>
               <button class="btn-sync" type="button" data-sync="${fund.id}" title="推送实时涨跌幅" aria-label="推送实时涨跌幅">
-                <img src="pull.png" alt="推送" />
+                <img src="assets/pull.png" alt="推送" />
               </button>
             </div>
             ${addStockHtml}
@@ -1793,7 +1793,7 @@
         const fund = window.FUND_HOLDINGS[id];
         if (!fund) return "";
         const isActive = id === activeWatchFundId;
-        const icon = isActive ? "select_jijin.png" : "jijin.png";
+        const icon = isActive ? "assets/select_jijin.png" : "assets/jijin.png";
         return `<button class="fund-pick${
           isActive ? " active" : ""
         }" type="button" data-fund-pick="${id}"><span class="fund-pick-label">${fund.name}</span><img class="fund-pick-icon" src="${icon}" alt="" aria-hidden="true" /></button>`;

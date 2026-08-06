@@ -1724,17 +1724,19 @@
       const addStockHtml = CUSTOMIZABLE_FUNDS.has(fund.id)
         ? `
             <div class="add-stock">
-              <input
-                type="text"
-                class="add-stock-input"
-                data-add-code="${fund.id}"
-                placeholder="${fund.market === "US" ? "输入美股代码，如 NVDA" : "沪/深/北交所代码，如 600519、000001、920001"}"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <button class="btn btn-add" type="button" data-add-stock="${fund.id}" aria-label="添加股票" title="添加">
-                <img src="assets/add_zixuan.png" alt="添加" />
-              </button>
+              <div class="add-stock-field">
+                <input
+                  type="text"
+                  class="add-stock-input"
+                  data-add-code="${fund.id}"
+                  placeholder="${fund.market === "US" ? "输入美股代码，如 NVDA" : "沪/深/北交所代码，如 600519、000001、920001"}"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="btn btn-add" type="button" data-add-stock="${fund.id}" aria-label="添加股票" title="添加">
+                  <img src="assets/add_zixuan.png" alt="添加" />
+                </button>
+              </div>
               ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
               <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}" aria-label="板块">
                 <img src="assets/bankuai.png" alt="板块" />

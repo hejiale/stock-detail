@@ -1428,16 +1428,48 @@
         return;
       }
       wrap.innerHTML = list
-        .map((item) => {
+        .map((item, i) => {
           const tone = toneClass(item.change);
           return `
-            <div class="us-index-card">
-              <div class="idx-name">${item.name}</div>
-              <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+            <div class="us-index-card" data-us-index="${i}">
+              <div class="idx-head">
+                <div class="idx-name">${item.name}</div>
+                <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+              </div>
               <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
+              <canvas class="idx-chart" data-us-spark="${i}" aria-hidden="true"></canvas>
             </div>`;
         })
         .join("");
+    }
+
+    async function paintUsIndexSparklines(list) {
+      const results = await Promise.allSettled(
+        list.map((item) =>
+          loadIntradayTrends({ code: item.code, market: item.market, name: item.name })
+        )
+      );
+      const trends = results.map((result) =>
+        result.status === "fulfilled" ? result.value : null
+      );
+      openUsBoardModal._trends = trends;
+      trends.forEach((trend, i) => {
+        if (!trend) return;
+        const canvas = document.querySelector(`[data-us-spark="${i}"]`);
+        if (!canvas) return;
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
+    }
+
+    function redrawUsIndexSparklines() {
+      const trends = openUsBoardModal._trends;
+      if (!trends?.length) return;
+      trends.forEach((trend, i) => {
+        if (!trend) return;
+        const canvas = document.querySelector(`[data-us-spark="${i}"]`);
+        if (!canvas) return;
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
     }
 
     function renderUsStockRank(list) {
@@ -1495,8 +1527,13 @@
         const indices = await loadUsIndices();
         if (requestId !== openUsBoardModal._req) return;
 
+        openUsBoardModal._indices = indices;
         renderUsIndices(indices);
         setStatus("usBoardStatus", "");
+        requestAnimationFrame(() => {
+          if (requestId !== openUsBoardModal._req) return;
+          paintUsIndexSparklines(indices).catch(() => {});
+        });
         await loadUsRankKind(rank);
       } catch (err) {
         if (requestId !== openUsBoardModal._req) return;
@@ -2096,6 +2133,10 @@
       const boardModal = document.getElementById("boardModal");
       if (boardModal?.classList.contains("show")) {
         redrawCnIndexSparklines();
+      }
+      const usBoardModal = document.getElementById("usBoardModal");
+      if (usBoardModal?.classList.contains("show")) {
+        redrawUsIndexSparklines();
       }
     });
 

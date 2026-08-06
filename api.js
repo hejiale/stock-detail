@@ -1457,31 +1457,39 @@
    * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
    */
   async function loadUsIndices() {
+    const defs = [
+      { code: "DJIA", market: 100, name: "道琼斯" },
+      { code: "NDX", market: 100, name: "纳斯达克" },
+      { code: "SPX", market: 100, name: "标普500" }
+    ];
     const json = await fetchEastUlist(
-      "100.DJIA,100.NDX,100.SPX",
+      defs.map((d) => d.market + "." + d.code).join(","),
       "f2,f3,f12,f14"
     );
-    const order = { DJIA: 0, NDX: 1, SPX: 2 };
-    const shortName = { DJIA: "道琼斯", NDX: "纳斯达克", SPX: "标普500" };
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const change = Number(item.f3);
+      const price = Number(item.f2);
+      if (Number.isNaN(change)) return;
+      byCode.set(String(item.f12).toUpperCase(), {
+        code: String(item.f12).toUpperCase(),
+        price: Number.isNaN(price) ? null : price,
+        change: round2(change)
+      });
+    });
 
-    return normalizeEastDiff(json)
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const code = String(item.f12).toUpperCase();
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
+    return defs
+      .map((d) => {
+        const q = byCode.get(d.code);
+        if (!q) return null;
         return {
-          code,
-          name: shortName[code] || String(item.f14 || code),
-          price: Number.isNaN(price) ? null : price,
-          change: round2(change)
+          ...q,
+          market: d.market,
+          name: d.name
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => (order[a.code] ?? 9) - (order[b.code] ?? 9));
+      .filter(Boolean);
   }
 
   /**

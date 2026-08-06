@@ -27,6 +27,8 @@
       </button>
     </div>
 
+    <div class="fund-picker" id="fundPicker" hidden role="tablist" aria-label="自选基金"></div>
+
     <div id="panels"></div>
   </div>
 
@@ -267,8 +269,16 @@
     const STORAGE_KEY = "fund_daily_returns_v1";
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
     const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
+    const MAIN_TABS = [
+      { id: "cnSemi", name: "A股" },
+      { id: "usSemi", name: "美股" },
+      { id: "funds", name: "自选基金" }
+    ];
+    const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
     const pageState = {};
+    let activeMainTab = "cnSemi";
+    let activeWatchFundId = "dongfang";
     const MODAL_IDS = [
       "chartModal",
       "profileModal",
@@ -313,8 +323,13 @@
       });
     }
 
+    function isWatchFund(fundId) {
+      return WATCH_FUND_IDS.includes(fundId);
+    }
+
     function getActiveFundId() {
-      return document.querySelector(".tab.active")?.dataset.tab || "dongfang";
+      if (activeMainTab === "funds") return activeWatchFundId;
+      return activeMainTab === "usSemi" ? "usSemi" : "cnSemi";
     }
 
     function rerender(activeFundId) {
@@ -1773,30 +1788,40 @@
       applyAllChangeColors(fundId);
     }
 
+    function renderFundPicker() {
+      const picker = document.getElementById("fundPicker");
+      if (!picker) return;
+      picker.innerHTML = WATCH_FUND_IDS.map((id) => {
+        const fund = window.FUND_HOLDINGS[id];
+        if (!fund) return "";
+        return `<button class="fund-pick${
+          id === activeWatchFundId ? " active" : ""
+        }" type="button" data-fund-pick="${id}">${fund.name}</button>`;
+      }).join("");
+      picker.hidden = activeMainTab !== "funds";
+    }
+
     function renderTabs() {
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
-      const activeId = getActiveFundId();
-      tabsEl.innerHTML = Object.values(window.FUND_HOLDINGS)
-        .map(
-          (fund, i) =>
-            `<button class="tab${
-              fund.id === activeId || (!window.FUND_HOLDINGS[activeId] && i === 0)
-                ? " active"
-                : ""
-            }" data-tab="${fund.id}" type="button">${fund.name}</button>`
-        )
-        .join("");
+      tabsEl.innerHTML = MAIN_TABS.map(
+        (tab) =>
+          `<button class="tab${
+            tab.id === activeMainTab ? " active" : ""
+          }" data-tab="${tab.id}" type="button">${tab.name}</button>`
+      ).join("");
     }
 
     function render() {
       renderTabs();
+      renderFundPicker();
       const panels = document.getElementById("panels");
       panels.innerHTML = "";
       const funds = Object.values(window.FUND_HOLDINGS);
-      funds.forEach((fund, index) => {
+      const activeFundId = getActiveFundId();
+      funds.forEach((fund) => {
         setCurrentPage(fund.id, getCurrentPage(fund.id));
-        panels.appendChild(buildPanelElement(fund, index === 0));
+        panels.appendChild(buildPanelElement(fund, fund.id === activeFundId));
         updatePagerUI(fund.id);
       });
       applyAllChangeColors();
@@ -1935,20 +1960,38 @@
       if (nextBtn) nextBtn.disabled = index < 0 || index >= tabs.length - 1;
     }
 
-    function switchTab(fundId, { forceSync = false } = {}) {
-      const tabs = getTabButtons();
-      const tab = tabs.find((t) => t.dataset.tab === fundId);
-      if (!tab) return;
-
-      const alreadyActive = tab.classList.contains("active");
-      tabs.forEach((t) => t.classList.remove("active"));
+    function applyActivePanel(fundId) {
       document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-      tab.classList.add("active");
-
       const panel = document.querySelector(`[data-panel="${fundId}"]`);
       if (panel) panel.classList.add("active");
+    }
 
-      tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    function switchTab(tabOrFundId, { forceSync = false } = {}) {
+      const prevFundId = getActiveFundId();
+
+      if (isWatchFund(tabOrFundId)) {
+        activeMainTab = "funds";
+        activeWatchFundId = tabOrFundId;
+      } else if (tabOrFundId === "funds") {
+        activeMainTab = "funds";
+        if (!isWatchFund(activeWatchFundId)) {
+          activeWatchFundId = WATCH_FUND_IDS[0];
+        }
+      } else if (tabOrFundId === "usSemi") {
+        activeMainTab = "usSemi";
+      } else {
+        activeMainTab = "cnSemi";
+      }
+
+      const fundId = getActiveFundId();
+      const alreadyActive = prevFundId === fundId && !forceSync;
+
+      renderTabs();
+      renderFundPicker();
+      applyActivePanel(fundId);
+
+      const tab = getTabButtons().find((t) => t.dataset.tab === activeMainTab);
+      tab?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
       updateTabArrows();
 
       if (!alreadyActive || forceSync) {
@@ -2066,6 +2109,12 @@
         return;
       }
 
+      const fundPick = e.target.closest("[data-fund-pick]");
+      if (fundPick) {
+        switchTab(fundPick.dataset.fundPick);
+        return;
+      }
+
       const syncBtn = e.target.closest("[data-sync]");
       if (syncBtn) {
         syncFundQuotes(syncBtn.dataset.sync);
@@ -2149,6 +2198,7 @@
 
     applyCustomHoldings();
     render();
+    switchTab(activeMainTab, { forceSync: true });
     updateTabArrows();
   </script>
 </body>

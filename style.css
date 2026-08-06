@@ -117,9 +117,8 @@ header p {
   color: var(--muted);
   cursor: pointer;
   transition: 0.2s ease;
-  flex: 0 0 25%;
-  width: 25%;
-  min-width: 25%;
+  flex: 1 1 0;
+  min-width: 0;
   box-sizing: border-box;
   white-space: nowrap;
   text-align: center;
@@ -129,6 +128,51 @@ header p {
   background: var(--card);
   color: var(--accent);
   box-shadow: var(--shadow);
+}
+
+.fund-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: -4px 0 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 2px 4px;
+}
+
+.fund-picker[hidden] {
+  display: none;
+}
+
+.fund-picker::-webkit-scrollbar {
+  display: none;
+}
+
+.fund-pick {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: 0.15s ease;
+  white-space: nowrap;
+}
+
+.fund-pick:hover {
+  color: var(--accent);
+}
+
+.fund-pick.active {
+  background: var(--accent-soft);
+  border-color: #bfd6ff;
+  color: var(--accent);
 }
 
 .panel { display: none; }

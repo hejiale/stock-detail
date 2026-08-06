@@ -6,8 +6,8 @@
  *   之后通过 window.MarketAPI 调用
  *
  * 数据源：
- *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
- *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；美股盘前/盘后涨跌幅）
+ *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K、美股盘前/盘后；push2 不可达时回退 delay）
+ *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -227,6 +227,33 @@
     );
   }
 
+  /**
+   * 是否处于美股盘前/盘后（America/New_York）
+   * 盘前 04:00–09:30，盘后 16:00–20:00；周末视为否
+   */
+  function isUsExtendedSession(date = new Date()) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(date);
+      const get = (type) => parts.find((p) => p.type === type)?.value;
+      const wd = get("weekday");
+      if (wd === "Sat" || wd === "Sun") return false;
+      let hour = Number(get("hour"));
+      const minute = Number(get("minute"));
+      if (Number.isNaN(hour) || Number.isNaN(minute)) return false;
+      if (hour === 24) hour = 0;
+      const mins = hour * 60 + minute;
+      return (mins >= 4 * 60 && mins < 9 * 60 + 30) || (mins >= 16 * 60 && mins < 20 * 60);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /** 报价 map 的统一 key（美股代码大小写不一致时用） */
   function quoteKey(code) {
     return String(code).toUpperCase();
@@ -357,23 +384,35 @@
   }
 
   /**
-   * 美股盘前/盘后涨跌幅（新浪 hq.sinajs.cn，gb_ 字段 22）
+   * 美股盘前/盘后涨跌幅（东方财富最新价相对昨收；仅扩展时段）
+   * 新浪有独立盘前字段，但浏览器非 sina Referer 会被 Forbidden。
    * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
    */
   async function loadUsPreMarketQuotes(holdings) {
     const usHoldings = holdings.filter(isUsHolding);
-    if (!usHoldings.length) return {};
+    if (!usHoldings.length || !isUsExtendedSession()) return {};
 
     try {
-      const sinaMap = await loadSinaQuotes(usHoldings);
+      const json = await fetchEastUlist(
+        usHoldings.map(toEastSecId).join(","),
+        "f12,f14,f2,f3,f18"
+      );
       const map = {};
-      Object.keys(sinaMap).forEach((code) => {
-        const q = sinaMap[code];
-        if (!q || q.preChange == null || Number.isNaN(q.preChange)) return;
-        map[quoteKey(code)] = {
-          name: q.name,
-          price: q.price,
-          preChange: q.preChange
+      normalizeEastDiff(json).forEach((item) => {
+        if (!item || item.f12 == null) return;
+        const live = Number(item.f2);
+        const prev = Number(item.f18);
+        const price =
+          !Number.isNaN(live) && live !== 0
+            ? live
+            : !Number.isNaN(Number(item.f3)) && !Number.isNaN(prev) && prev !== 0
+              ? prev * (1 + Number(item.f3) / 100)
+              : NaN;
+        if (Number.isNaN(price) || !prev || Number.isNaN(prev) || prev === 0) return;
+        map[String(item.f12).toUpperCase()] = {
+          name: item.f14,
+          price,
+          preChange: round2(((price - prev) / prev) * 100)
         };
       });
       return map;
@@ -1457,6 +1496,7 @@
     toEastSecId,
     toSinaSymbol,
     isUsHolding,
+    isUsExtendedSession,
     // 请求
     loadQuotes,
     loadEastMoneyQuotes,

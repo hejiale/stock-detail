@@ -263,7 +263,8 @@
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock,
-      isUsHolding
+      isUsHolding,
+      isUsExtendedSession
     } = window.MarketAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
@@ -1622,7 +1623,8 @@
           ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
           : `已同步 ${ok} 只股票实时涨跌幅`;
         if (usOnPage.length) {
-          msg += preOk ? `，盘前 ${preOk} 只` : "，盘前暂不可用";
+          if (preOk) msg += `，盘前 ${preOk} 只`;
+          else if (isUsExtendedSession()) msg += "，盘前暂不可用";
         }
         showToast(msg);
       } catch (err) {

@@ -6,8 +6,9 @@
  *   之后通过 window.MarketAPI 调用
  *
  * 数据源：
- *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K、美股盘前/盘后；push2 不可达时回退 delay）
+ *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
+ *   3. 百度股市通（美股实时盘前/盘后；需经本地 serve.mjs 代理，避免 CORS）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -384,41 +385,102 @@
   }
 
   /**
-   * 美股盘前/盘后涨跌幅（东方财富最新价相对昨收；仅扩展时段）
-   * 新浪有独立盘前字段，但浏览器非 sina Referer 会被 Forbidden。
+   * 解析百度盘前/盘后涨跌幅字符串（如 "+1.24%"）
+   * @returns {number|null}
+   */
+  function parseSignedPct(s) {
+    if (s == null || s === "") return null;
+    const n = Number(String(s).replace(/[+%\s]/g, ""));
+    return Number.isFinite(n) ? round2(n) : null;
+  }
+
+  /**
+   * 从百度 getquotation Result 中取盘前/盘后信息
+   * 盘前涨跌幅相对上一交易时段末价（常为昨盘后价），不是相对常规昨收
+   */
+  function pickBaiduExtInfo(result) {
+    if (!result) return null;
+    for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo"]) {
+      const info = result[key];
+      if (!info || info.type === "" || info.price == null || info.price === "") continue;
+      const price = Number(info.price);
+      const preChange = parseSignedPct(info.ratio);
+      if (!Number.isFinite(price) || preChange == null) continue;
+      return {
+        name: result.basicinfos?.name,
+        price,
+        preChange
+      };
+    }
+    return null;
+  }
+
+  /**
+   * 美股盘前/盘后涨跌幅（百度股市通实时盘前价）
+   * 浏览器直连百度会被 CORS 拦；经本地 serve.mjs 的 /api/us-premarket 代理。
+   * 东财/腾讯在盘前时段仍常返回昨收盘后价，不能当实时盘前用。
    * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
    */
   async function loadUsPreMarketQuotes(holdings) {
     const usHoldings = holdings.filter(isUsHolding);
-    if (!usHoldings.length || !isUsExtendedSession()) return {};
+    if (!usHoldings.length) return {};
 
-    try {
-      const json = await fetchEastUlist(
-        usHoldings.map(toEastSecId).join(","),
-        "f12,f14,f2,f3,f18"
-      );
-      const map = {};
-      normalizeEastDiff(json).forEach((item) => {
-        if (!item || item.f12 == null) return;
-        const live = Number(item.f2);
-        const prev = Number(item.f18);
-        const price =
-          !Number.isNaN(live) && live !== 0
-            ? live
-            : !Number.isNaN(Number(item.f3)) && !Number.isNaN(prev) && prev !== 0
-              ? prev * (1 + Number(item.f3) / 100)
-              : NaN;
-        if (Number.isNaN(price) || !prev || Number.isNaN(prev) || prev === 0) return;
-        map[String(item.f12).toUpperCase()] = {
-          name: item.f14,
-          price,
-          preChange: round2(((price - prev) / prev) * 100)
-        };
-      });
-      return map;
-    } catch (_) {
-      return {};
+    const codes = usHoldings.map((h) => quoteKey(h.code));
+    const map = {};
+
+    // 1) 本地代理（node serve.mjs）
+    if (typeof location !== "undefined" && location.protocol !== "file:") {
+      try {
+        const resp = await fetch(
+          "/api/us-premarket?codes=" + encodeURIComponent(codes.join(","))
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && typeof data === "object" && !data.error) {
+            Object.keys(data).forEach((code) => {
+              const row = data[code];
+              if (!row || row.preChange == null || Number.isNaN(row.preChange)) return;
+              map[quoteKey(code)] = {
+                name: row.name,
+                price: row.price,
+                preChange: row.preChange
+              };
+            });
+            if (Object.keys(map).length) return map;
+          }
+        }
+      } catch (_) {
+        // 继续尝试直连
+      }
     }
+
+    // 2) 直连百度（扩展/部分环境可能可用；普通网页通常 CORS 失败）
+    let cursor = 0;
+    const concurrency = Math.min(4, usHoldings.length);
+
+    async function worker() {
+      while (cursor < usHoldings.length) {
+        const h = usHoldings[cursor++];
+        const code = quoteKey(h.code);
+        try {
+          const url =
+            "https://finance.pae.baidu.com/vapi/v1/getquotation?srcid=5353&group=quotation_minute_us&code=" +
+            encodeURIComponent(code) +
+            "&market_type=us&newFormat=1";
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const json = await resp.json();
+          const row = pickBaiduExtInfo(json?.Result);
+          if (!row) continue;
+          map[code] = row;
+        } catch (_) {
+          // 单只失败不影响其余
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return map;
   }
 
   /**

@@ -104,10 +104,6 @@
           </svg>
         </button>
       </div>
-      <div class="board-tabs" id="boardTabs">
-        <button class="board-tab active" type="button" data-board-kind="industry">行业板块</button>
-        <button class="board-tab" type="button" data-board-kind="concept">概念板块</button>
-      </div>
       <div class="board-list-head">
         <div>#</div>
         <div>板块名称</div>
@@ -152,7 +148,6 @@
       <div class="board-modal-head">
         <div class="board-modal-title">
           <div class="name" id="usBoardModalName">美股市场概况</div>
-          <div class="sub" id="usBoardModalSub">三大指数 · 涨跌榜</div>
         </div>
         <button class="board-modal-close" type="button" data-us-board-close aria-label="关闭">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -1201,28 +1196,22 @@
       setStatus("boardStocksStatus", "");
     }
 
-    async function loadBoardKind(kind) {
-      const requestId = (loadBoardKind._req = (loadBoardKind._req || 0) + 1);
-      const kindLabel = kind === "concept" ? "概念" : "行业";
-      document.getElementById("boardModalSub").textContent = `加载${kindLabel}板块中…`;
+    async function loadBoardList() {
+      const requestId = (loadBoardList._req = (loadBoardList._req || 0) + 1);
+      document.getElementById("boardModalSub").textContent = "加载行业板块中…";
       setStatus("boardStatus", "加载中…");
       document.getElementById("boardList").innerHTML = "";
 
-      document.querySelectorAll("[data-board-kind]").forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.boardKind === kind);
-      });
-
       try {
-        const list = await loadCnSectorBoards(kind);
-        if (requestId !== loadBoardKind._req) return;
-        openBoardModal._kind = kind;
+        const list = await loadCnSectorBoards("industry");
+        if (requestId !== loadBoardList._req) return;
         openBoardModal._list = list;
         document.getElementById("boardModalSub").textContent =
-          `共 ${list.length} 个${kindLabel}板块（相近已归类）· 按涨跌幅排序`;
+          `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`;
         renderBoardList(list);
         setStatus("boardStatus", list.length ? "" : "暂无板块数据");
       } catch (err) {
-        if (requestId !== loadBoardKind._req) return;
+        if (requestId !== loadBoardList._req) return;
         document.getElementById("boardModalSub").textContent = "加载失败";
         setStatus("boardStatus", err?.message || "板块数据加载失败，请稍后重试");
       }
@@ -1230,12 +1219,11 @@
 
     async function openBoardModal() {
       showModal("boardModal");
-      const kind = openBoardModal._kind || "industry";
-      await loadBoardKind(kind);
+      await loadBoardList();
     }
 
     function closeBoardModal() {
-      loadBoardKind._req = (loadBoardKind._req || 0) + 1;
+      loadBoardList._req = (loadBoardList._req || 0) + 1;
       if (document.getElementById("boardStocksModal")?.classList.contains("show")) {
         closeBoardStocksModal();
       }
@@ -1317,7 +1305,6 @@
 
     async function openUsBoardModal() {
       showModal("usBoardModal");
-      document.getElementById("usBoardModalSub").textContent = "加载中…";
       setStatus("usBoardStatus", "加载中…");
       document.getElementById("usIndexGrid").innerHTML = "";
       document.getElementById("usStockList").innerHTML = "";
@@ -1330,13 +1317,10 @@
         if (requestId !== openUsBoardModal._req) return;
 
         renderUsIndices(indices);
-        document.getElementById("usBoardModalSub").textContent =
-          `指数 ${indices.length} · 排行前 20`;
         setStatus("usBoardStatus", "");
         await loadUsRankKind(rank);
       } catch (err) {
         if (requestId !== openUsBoardModal._req) return;
-        document.getElementById("usBoardModalSub").textContent = "加载失败";
         setStatus("usBoardStatus", err?.message || "美股数据加载失败，请稍后重试");
       }
     }
@@ -1798,12 +1782,6 @@
 
       if (e.target.closest("[data-board-close]")) {
         closeBoardModal();
-        return;
-      }
-
-      const boardKindBtn = e.target.closest("[data-board-kind]");
-      if (boardKindBtn) {
-        loadBoardKind(boardKindBtn.dataset.boardKind);
         return;
       }
 

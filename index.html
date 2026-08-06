@@ -1203,7 +1203,7 @@
       document.getElementById("boardList").innerHTML = "";
 
       try {
-        const list = await loadCnSectorBoards("industry");
+        const list = await loadCnSectorBoards();
         if (requestId !== loadBoardList._req) return;
         openBoardModal._list = list;
         document.getElementById("boardModalSub").textContent =

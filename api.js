@@ -7,8 +7,7 @@
  *
  * 数据源：
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
- *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器侧常因 Referer 校验失败）
- *   3. Yahoo Finance chart（美股盘前/盘后涨跌幅；浏览器经 CORS 中继）
+ *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；美股盘前/盘后涨跌幅）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -358,130 +357,29 @@
   }
 
   /**
-   * 浏览器跨域拉取 JSON：先直连，失败再用 jina 中继（Yahoo 无 CORS；新浪需 Referer）
-   */
-  async function fetchJsonWithCorsFallback(url) {
-    try {
-      const resp = await fetch(url, {
-        headers: { Accept: "application/json" }
-      });
-      if (resp.ok) return await resp.json();
-    } catch (_) {
-      // 走中继
-    }
-
-    const relay = "https://r.jina.ai/" + url;
-    const resp2 = await fetch(relay, {
-      headers: { Accept: "application/json" }
-    });
-    if (!resp2.ok) throw new Error("行情中继请求失败");
-    const wrapped = await resp2.json();
-    const content = wrapped?.data?.content;
-    if (content == null || content === "") throw new Error("行情中继无数据");
-    return typeof content === "string" ? JSON.parse(content) : content;
-  }
-
-  /** Yahoo 美股代码：BRK.B → BRK-B */
-  function toYahooSymbol(code) {
-    return String(code || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\./g, "-");
-  }
-
-  /**
-   * 从 Yahoo chart 结果解析盘前/盘后涨跌幅（相对最近常规收盘价）
-   * @returns {number|null}
-   */
-  function preChangeFromYahooChart(result) {
-    if (!result?.meta || !result.timestamp?.length) return null;
-    const meta = result.meta;
-    const baseline = Number(meta.regularMarketPrice);
-    if (!baseline || Number.isNaN(baseline)) return null;
-
-    const timestamps = result.timestamp;
-    const closes = result.indicators?.quote?.[0]?.close || [];
-    const periods = meta.currentTradingPeriod || {};
-    const pre = periods.pre;
-    const post = periods.post;
-    const now = Math.floor(Date.now() / 1000);
-
-    function lastCloseInRange(start, end) {
-      if (start == null || end == null) return null;
-      for (let i = timestamps.length - 1; i >= 0; i--) {
-        const t = timestamps[i];
-        const px = closes[i];
-        if (t >= start && t < end && px != null && !Number.isNaN(Number(px))) {
-          return Number(px);
-        }
-      }
-      return null;
-    }
-
-    let extPrice = null;
-    if (post && now >= post.start) {
-      extPrice = lastCloseInRange(post.start, post.end);
-    }
-    if (extPrice == null && pre) {
-      extPrice = lastCloseInRange(pre.start, pre.end);
-    }
-    // 时段字段缺失时：取序列最新价（含盘前盘后）
-    if (extPrice == null) {
-      for (let i = closes.length - 1; i >= 0; i--) {
-        if (closes[i] != null && !Number.isNaN(Number(closes[i]))) {
-          extPrice = Number(closes[i]);
-          break;
-        }
-      }
-    }
-
-    if (extPrice == null || Math.abs(extPrice - baseline) < 1e-9) return null;
-    return round2(((extPrice - baseline) / baseline) * 100);
-  }
-
-  /**
-   * 美股盘前/盘后涨跌幅（Yahoo Finance 1m chart + includePrePost）
+   * 美股盘前/盘后涨跌幅（新浪 hq.sinajs.cn，gb_ 字段 22）
    * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
    */
-  async function loadUsPreMarketQuotes(holdings, concurrency = 4) {
+  async function loadUsPreMarketQuotes(holdings) {
     const usHoldings = holdings.filter(isUsHolding);
     if (!usHoldings.length) return {};
 
-    const map = {};
-    let cursor = 0;
-
-    async function worker() {
-      while (cursor < usHoldings.length) {
-        const h = usHoldings[cursor++];
-        const code = quoteKey(h.code);
-        const symbol = toYahooSymbol(h.code);
-        if (!symbol) continue;
-        try {
-          const url =
-            "https://query1.finance.yahoo.com/v8/finance/chart/" +
-            encodeURIComponent(symbol) +
-            "?interval=1m&range=1d&includePrePost=true";
-          const json = await fetchJsonWithCorsFallback(url);
-          const result = json?.chart?.result?.[0];
-          const preChange = preChangeFromYahooChart(result);
-          if (preChange == null || Number.isNaN(preChange)) continue;
-          map[code] = {
-            name: result?.meta?.shortName || h.name || code,
-            price: Number(result?.meta?.regularMarketPrice) || undefined,
-            preChange
-          };
-        } catch (_) {
-          // 单只失败不影响其余
-        }
-      }
+    try {
+      const sinaMap = await loadSinaQuotes(usHoldings);
+      const map = {};
+      Object.keys(sinaMap).forEach((code) => {
+        const q = sinaMap[code];
+        if (!q || q.preChange == null || Number.isNaN(q.preChange)) return;
+        map[quoteKey(code)] = {
+          name: q.name,
+          price: q.price,
+          preChange: q.preChange
+        };
+      });
+      return map;
+    } catch (_) {
+      return {};
     }
-
-    const workers = Array.from(
-      { length: Math.min(concurrency, usHoldings.length) },
-      () => worker()
-    );
-    await Promise.all(workers);
-    return map;
   }
 
   /**

@@ -270,9 +270,9 @@
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
     const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
     const MAIN_TABS = [
-      { id: "cnSemi", name: "A股" },
-      { id: "usSemi", name: "美股" },
-      { id: "funds", name: "自选基金" }
+      { id: "cnSemi", name: "A股", icon: "a_gu.png" },
+      { id: "usSemi", name: "美股", icon: "mei_gu.png" },
+      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
@@ -1804,12 +1804,14 @@
     function renderTabs() {
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
-      tabsEl.innerHTML = MAIN_TABS.map(
-        (tab) =>
-          `<button class="tab${
-            tab.id === activeMainTab ? " active" : ""
-          }" data-tab="${tab.id}" type="button">${tab.name}</button>`
-      ).join("");
+      tabsEl.innerHTML = MAIN_TABS.map((tab) => {
+        const icon = tab.icon
+          ? `<img class="tab-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
+          : "";
+        return `<button class="tab${
+          tab.id === activeMainTab ? " active" : ""
+        }" data-tab="${tab.id}" type="button"><span class="tab-label">${tab.name}</span>${icon}</button>`;
+      }).join("");
     }
 
     function render() {

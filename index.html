@@ -1482,7 +1482,6 @@
         : `
           <div class="actions">
             <button class="btn btn-primary" type="button" data-calc="${fund.id}">计算每日基金收益</button>
-            <button class="btn btn-ghost" type="button" data-clear="${fund.id}">清空输入</button>
           </div>
 
           <div class="result" id="result-${fund.id}">
@@ -1637,21 +1636,6 @@
         parts.push(`未填写：${missing.join("、")}（按 0 处理）。`);
       }
       detailEl.textContent = parts.join(" ");
-    }
-
-    function clearFund(fundId) {
-      const saved = loadInputs();
-      saved[fundId] = {};
-      saveInputs(saved);
-      document.querySelectorAll(`input[data-fund="${fundId}"]`).forEach((input) => {
-        input.value = "";
-        applyChangeColor(input);
-      });
-      document
-        .querySelectorAll(`[data-pre-change][data-fund="${fundId}"]`)
-        .forEach((el) => applyPreChangeDisplay(el, null));
-      const resultEl = document.getElementById(`result-${fundId}`);
-      if (resultEl) resultEl.classList.remove("show");
     }
 
     async function addCustomStock(fundId) {
@@ -1875,12 +1859,6 @@
       const calcBtn = e.target.closest("[data-calc]");
       if (calcBtn) {
         calcFund(calcBtn.dataset.calc);
-        return;
-      }
-
-      const clearBtn = e.target.closest("[data-clear]");
-      if (clearBtn) {
-        clearFund(clearBtn.dataset.clear);
         return;
       }
 

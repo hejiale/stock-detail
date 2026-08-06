@@ -147,6 +147,11 @@ header p {
   flex-shrink: 0;
 }
 
+.tab-icon-sm {
+  width: 14px;
+  height: 14px;
+}
+
 .tab.active {
   background: var(--card);
   color: var(--accent);
@@ -330,20 +335,29 @@ header p {
   width: 36px;
   height: 36px;
   padding: 0;
+  border: none;
   border-radius: 10px;
   font-size: 0;
-  background: linear-gradient(135deg, #1677ff, #3b8bff);
-  color: #fff;
-  box-shadow: 0 6px 14px rgba(22, 119, 255, 0.2);
+  background: transparent;
+  box-shadow: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
-.add-stock .btn-add svg {
-  width: 18px;
-  height: 18px;
+.add-stock .btn-add:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+.add-stock .btn-add img {
+  width: 28px;
+  height: 28px;
   display: block;
+  object-fit: contain;
 }
 
 .add-stock .btn-board {

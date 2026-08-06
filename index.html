@@ -272,7 +272,7 @@
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "gupiao.png" },
       { id: "usSemi", name: "美股", icon: "gupiao.png" },
-      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png" }
+      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
@@ -1733,9 +1733,7 @@
                 spellcheck="false"
               />
               <button class="btn btn-add" type="button" data-add-stock="${fund.id}" aria-label="添加股票" title="添加">
-                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <path d="M7.25 7.25V3.5h1.5v3.75H12.5v1.5H8.75V12.5h-1.5V8.75H3.5v-1.5h3.75z"/>
-                </svg>
+                <img src="add_zixuan.png" alt="添加" />
               </button>
               ${fund.id === "cnSemi" || fund.id === "usSemi" ? `
               <button class="btn-board" type="button" data-open-board="${fund.id === "usSemi" ? "us" : "cn"}" title="${fund.id === "usSemi" ? "查看美股市场概况" : "查看A股板块涨幅"}" aria-label="板块">
@@ -1805,8 +1803,9 @@
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
       tabsEl.innerHTML = MAIN_TABS.map((tab) => {
+        const iconClass = ["tab-icon", tab.iconClass].filter(Boolean).join(" ");
         const icon = tab.icon
-          ? `<img class="tab-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
+          ? `<img class="${iconClass}" src="${tab.icon}" alt="" aria-hidden="true" />`
           : "";
         return `<button class="tab${
           tab.id === activeMainTab ? " active" : ""

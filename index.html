@@ -1792,9 +1792,11 @@
       picker.innerHTML = WATCH_FUND_IDS.map((id) => {
         const fund = window.FUND_HOLDINGS[id];
         if (!fund) return "";
+        const isActive = id === activeWatchFundId;
+        const icon = isActive ? "select_jijin.png" : "jijin.png";
         return `<button class="fund-pick${
-          id === activeWatchFundId ? " active" : ""
-        }" type="button" data-fund-pick="${id}"><span class="fund-pick-label">${fund.name}</span><img class="fund-pick-icon" src="jijin.png" alt="" aria-hidden="true" /></button>`;
+          isActive ? " active" : ""
+        }" type="button" data-fund-pick="${id}"><span class="fund-pick-label">${fund.name}</span><img class="fund-pick-icon" src="${icon}" alt="" aria-hidden="true" /></button>`;
       }).join("");
       picker.hidden = activeMainTab !== "funds";
     }

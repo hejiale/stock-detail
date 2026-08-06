@@ -9,7 +9,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>基金持仓收益估算</h1>
+      <h1><img class="title-icon" src="icon_licai.png" alt="" aria-hidden="true" />基金持仓收益估算</h1>
       <p>根据前十大持仓比例，输入各股票当日涨跌幅，估算基金当日收益。</p>
     </header>
 
@@ -272,7 +272,7 @@
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "gupiao.png" },
       { id: "usSemi", name: "美股", icon: "gupiao.png" },
-      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png", iconClass: "tab-icon-funds" }
+      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
@@ -1805,9 +1805,8 @@
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
       tabsEl.innerHTML = MAIN_TABS.map((tab) => {
-        const iconClass = ["tab-icon", tab.iconClass].filter(Boolean).join(" ");
         const icon = tab.icon
-          ? `<img class="${iconClass}" src="${tab.icon}" alt="" aria-hidden="true" />`
+          ? `<img class="tab-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
           : "";
         return `<button class="tab${
           tab.id === activeMainTab ? " active" : ""

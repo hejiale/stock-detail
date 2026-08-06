@@ -39,6 +39,17 @@ header h1 {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+header .title-icon {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 header p {
@@ -134,11 +145,6 @@ header p {
   display: block;
   object-fit: contain;
   flex-shrink: 0;
-}
-
-.tab-icon-funds {
-  width: 24px;
-  height: 24px;
 }
 
 .tab.active {

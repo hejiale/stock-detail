@@ -477,17 +477,11 @@ header p {
 .pager {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
   background: #fafbfd;
-}
-
-.pager-info {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
 }
 
 .pager-btns {
@@ -1257,35 +1251,6 @@ header p {
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.us-sector-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.us-sector-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-}
-
-.us-sector-row:nth-child(odd) {
-  background: #f8fafc;
-}
-
-.us-sector-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .us-rank-tabs {

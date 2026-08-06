@@ -152,7 +152,7 @@
       <div class="board-modal-head">
         <div class="board-modal-title">
           <div class="name" id="usBoardModalName">美股市场概况</div>
-          <div class="sub" id="usBoardModalSub">三大指数 · 主要板块 · 涨跌榜</div>
+          <div class="sub" id="usBoardModalSub">三大指数 · 涨跌榜</div>
         </div>
         <button class="board-modal-close" type="button" data-us-board-close aria-label="关闭">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -164,10 +164,6 @@
         <div class="us-section">
           <div class="us-section-title">三大指数</div>
           <div class="us-index-grid" id="usIndexGrid"></div>
-        </div>
-        <div class="us-section">
-          <div class="us-section-title">主要板块</div>
-          <div class="us-sector-list" id="usSectorList"></div>
         </div>
         <div class="us-section">
           <div class="us-section-title">个股排行</div>
@@ -258,7 +254,6 @@
       loadCnSectorBoards,
       loadCnSectorStocks,
       loadUsIndices,
-      loadUsSectorBoards,
       loadUsStockRank,
       calcPeriodReturns,
       sliceKlinesForRange,
@@ -350,22 +345,9 @@
     }
 
     function updatePagerUI(fundId) {
-      const fund = window.FUND_HOLDINGS[fundId];
       const page = getCurrentPage(fundId);
-      const total = getTotalPages(fund);
       const panel = document.querySelector(`[data-panel="${fundId}"]`);
       if (!panel) return;
-
-      const info = panel.querySelector(".pager-info");
-      if (info) {
-        if (fund.holdings.length <= PAGE_SIZE) {
-          info.textContent = `共 ${fund.holdings.length} 条`;
-        } else {
-          const start = (page - 1) * PAGE_SIZE + 1;
-          const end = Math.min(page * PAGE_SIZE, fund.holdings.length);
-          info.textContent = `第 ${page}/${total} 页 · ${start}-${end} / ${fund.holdings.length}`;
-        }
-      }
 
       panel.querySelectorAll("[data-page-num]").forEach((btn) => {
         btn.classList.toggle("active", Number(btn.dataset.pageNum) === page);
@@ -383,11 +365,9 @@
     }
 
     function buildPagerHtml(fund) {
-      const total = getTotalPages(fund);
-      if (fund.holdings.length <= PAGE_SIZE) {
-        return `<div class="pager"><div class="pager-info">共 ${fund.holdings.length} 条</div></div>`;
-      }
+      if (fund.holdings.length <= PAGE_SIZE) return "";
 
+      const total = getTotalPages(fund);
       const pageBtns = Array.from({ length: total }, (_, i) => {
         const n = i + 1;
         return `<button class="pager-btn" type="button" data-page-num="${n}" data-fund-page="${fund.id}">${n}</button>`;
@@ -395,7 +375,6 @@
 
       return `
         <div class="pager">
-          <div class="pager-info"></div>
           <div class="pager-btns">
             ${pageBtns}
           </div>
@@ -1294,25 +1273,6 @@
         .join("");
     }
 
-    function renderUsSectors(list) {
-      const wrap = document.getElementById("usSectorList");
-      if (!wrap) return;
-      if (!list.length) {
-        wrap.innerHTML = '<div class="board-meta" style="padding:8px">暂无板块数据</div>';
-        return;
-      }
-      wrap.innerHTML = list
-        .map((item) => {
-          const tone = toneClass(item.change);
-          return `
-            <div class="us-sector-row">
-              <div class="us-sector-name">${item.name}</div>
-              <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
-            </div>`;
-        })
-        .join("");
-    }
-
     function renderUsStockRank(list) {
       const wrap = document.getElementById("usStockList");
       if (!wrap) return;
@@ -1360,23 +1320,18 @@
       document.getElementById("usBoardModalSub").textContent = "加载中…";
       setStatus("usBoardStatus", "加载中…");
       document.getElementById("usIndexGrid").innerHTML = "";
-      document.getElementById("usSectorList").innerHTML = "";
       document.getElementById("usStockList").innerHTML = "";
 
       const requestId = (openUsBoardModal._req = (openUsBoardModal._req || 0) + 1);
       const rank = openUsBoardModal._rank || "gainers";
 
       try {
-        const [indices, sectors] = await Promise.all([
-          loadUsIndices(),
-          loadUsSectorBoards()
-        ]);
+        const indices = await loadUsIndices();
         if (requestId !== openUsBoardModal._req) return;
 
         renderUsIndices(indices);
-        renderUsSectors(sectors);
         document.getElementById("usBoardModalSub").textContent =
-          `指数 ${indices.length} · 板块 ${sectors.length} · 排行前 20`;
+          `指数 ${indices.length} · 排行前 20`;
         setStatus("usBoardStatus", "");
         await loadUsRankKind(rank);
       } catch (err) {

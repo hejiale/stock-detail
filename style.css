@@ -153,8 +153,8 @@ header p {
 }
 
 .tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--card);
+  color: var(--accent);
   box-shadow: var(--shadow);
 }
 
@@ -208,10 +208,14 @@ header p {
   color: var(--accent);
 }
 
+.fund-pick.active:hover {
+  color: #fff;
+}
+
 .fund-pick.active {
-  background: var(--accent-soft);
-  border-color: #bfd6ff;
-  color: var(--accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .panel { display: none; }

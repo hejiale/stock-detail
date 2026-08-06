@@ -129,11 +129,16 @@ header p {
 }
 
 .tab-icon {
-  width: 28px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: block;
   object-fit: contain;
   flex-shrink: 0;
+}
+
+.tab-icon-funds {
+  width: 24px;
+  height: 24px;
 }
 
 .tab.active {
@@ -175,6 +180,17 @@ header p {
   box-shadow: var(--shadow);
   transition: 0.15s ease;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fund-pick-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .fund-pick:hover {

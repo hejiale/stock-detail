@@ -272,7 +272,7 @@
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "gupiao.png" },
       { id: "usSemi", name: "美股", icon: "gupiao.png" },
-      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png" }
+      { id: "funds", name: "自选基金", icon: "zixuan_jijin.png", iconClass: "tab-icon-funds" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin"];
     const PAGE_SIZE = 10;
@@ -1796,7 +1796,7 @@
         if (!fund) return "";
         return `<button class="fund-pick${
           id === activeWatchFundId ? " active" : ""
-        }" type="button" data-fund-pick="${id}">${fund.name}</button>`;
+        }" type="button" data-fund-pick="${id}"><span class="fund-pick-label">${fund.name}</span><img class="fund-pick-icon" src="jijin.png" alt="" aria-hidden="true" /></button>`;
       }).join("");
       picker.hidden = activeMainTab !== "funds";
     }
@@ -1805,8 +1805,9 @@
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
       tabsEl.innerHTML = MAIN_TABS.map((tab) => {
+        const iconClass = ["tab-icon", tab.iconClass].filter(Boolean).join(" ");
         const icon = tab.icon
-          ? `<img class="tab-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
+          ? `<img class="${iconClass}" src="${tab.icon}" alt="" aria-hidden="true" />`
           : "";
         return `<button class="tab${
           tab.id === activeMainTab ? " active" : ""

@@ -1410,6 +1410,49 @@
   }
 
   /**
+   * A 股主要市场指数（上交所 / 深交所 / 创业板 / 科创板 / 北交所）
+   * GET {push2}/api/qt/ulist.np/get
+   *
+   * @returns {Promise<Array<{code,name,label,market,price,change}>>}
+   */
+  async function loadCnIndices() {
+    const defs = [
+      { code: "000001", market: 1, label: "上交所" },
+      { code: "399001", market: 0, label: "深交所" },
+      { code: "399006", market: 0, label: "创业板" },
+      { code: "000688", market: 1, label: "科创板" },
+      { code: "899050", market: 0, label: "北交所" }
+    ];
+    const secids = defs.map((d) => d.market + "." + d.code).join(",");
+    const json = await fetchEastUlist(secids, "f2,f3,f12,f14");
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const change = Number(item.f3);
+      const price = Number(item.f2);
+      if (Number.isNaN(change)) return;
+      byCode.set(String(item.f12), {
+        code: String(item.f12),
+        name: String(item.f14 || item.f12),
+        price: Number.isNaN(price) ? null : price,
+        change: round2(change)
+      });
+    });
+
+    return defs
+      .map((d) => {
+        const q = byCode.get(d.code);
+        if (!q) return null;
+        return {
+          ...q,
+          market: d.market,
+          label: d.label
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /**
    * 美股三大指数：道琼斯 / 纳斯达克 / 标普500
    * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
    */
@@ -1520,6 +1563,7 @@
     getMarketKind,
     loadCnSectorBoards,
     loadCnSectorStocks,
+    loadCnIndices,
     loadUsIndices,
     loadUsSectorBoards,
     loadUsStockRank,

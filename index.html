@@ -104,13 +104,20 @@
           </svg>
         </button>
       </div>
-      <div class="board-list-head">
-        <div>#</div>
-        <div>板块名称</div>
-        <div style="text-align:right">涨跌幅%</div>
-      </div>
-      <div class="board-modal-body">
-        <div id="boardList"></div>
+      <div class="board-modal-body cn-board-body">
+        <div class="cn-section">
+          <div class="cn-section-title">市场指数</div>
+          <div class="cn-index-grid" id="cnIndexGrid"></div>
+        </div>
+        <div class="cn-section">
+          <div class="cn-section-title">行业板块</div>
+          <div class="board-list-head">
+            <div>#</div>
+            <div>板块名称</div>
+            <div style="text-align:right">涨跌幅%</div>
+          </div>
+          <div id="boardList"></div>
+        </div>
         <div class="board-status show" id="boardStatus">加载中…</div>
       </div>
     </div>
@@ -248,6 +255,7 @@
       loadStockProfile,
       loadCnSectorBoards,
       loadCnSectorStocks,
+      loadCnIndices,
       loadUsIndices,
       loadUsStockRank,
       calcPeriodReturns,
@@ -1075,6 +1083,143 @@
       setStatus("profileStatus", "");
     }
 
+    function drawSparkline(canvas, points, baseline) {
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || 120;
+      const cssH = canvas.clientHeight || 44;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      if (!points?.length) return;
+
+      const padY = 2;
+      const prices = points.map((p) => p.price);
+      let minP = Math.min(...prices);
+      let maxP = Math.max(...prices);
+      if (baseline != null) {
+        minP = Math.min(minP, baseline);
+        maxP = Math.max(maxP, baseline);
+      }
+      const span = maxP - minP || Math.abs(maxP) * 0.01 || 1;
+      minP -= span * 0.06;
+      maxP += span * 0.06;
+
+      const last = points[points.length - 1];
+      const lineColor =
+        baseline == null
+          ? "#1677ff"
+          : last.price >= baseline
+            ? "#e64545"
+            : "#12a150";
+
+      function xAt(i) {
+        if (points.length === 1) return cssW / 2;
+        return (i / (points.length - 1)) * cssW;
+      }
+      function yAt(price) {
+        return padY + ((maxP - price) / (maxP - minP)) * (cssH - padY * 2);
+      }
+
+      if (baseline != null) {
+        const y = yAt(baseline);
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(cssW, y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i);
+        const y = yAt(p.price);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      const lastX = xAt(points.length - 1);
+      ctx.lineTo(lastX, cssH);
+      ctx.lineTo(xAt(0), cssH);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, cssH);
+      grad.addColorStop(0, lineColor + "33");
+      grad.addColorStop(1, lineColor + "00");
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i);
+        const y = yAt(p.price);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    }
+
+    function renderCnIndices(list) {
+      const wrap = document.getElementById("cnIndexGrid");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = '<div class="board-meta" style="padding:8px">暂无指数数据</div>';
+        return;
+      }
+
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const tone = toneClass(item.change);
+          return `
+            <div class="cn-index-card" data-cn-index="${i}">
+              <div class="idx-head">
+                <div class="idx-name">${item.label || item.name}</div>
+                <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+              </div>
+              <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
+              <canvas class="idx-chart" data-cn-spark="${i}" aria-hidden="true"></canvas>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function paintCnIndexSparklines(list) {
+      const results = await Promise.allSettled(
+        list.map((item) =>
+          loadIntradayTrends({ code: item.code, market: item.market, name: item.name })
+        )
+      );
+      const trends = results.map((result) =>
+        result.status === "fulfilled" ? result.value : null
+      );
+      openBoardModal._trends = trends;
+      trends.forEach((trend, i) => {
+        if (!trend) return;
+        const canvas = document.querySelector(`[data-cn-spark="${i}"]`);
+        if (!canvas) return;
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
+    }
+
+    function redrawCnIndexSparklines() {
+      const trends = openBoardModal._trends;
+      if (!trends?.length) return;
+      trends.forEach((trend, i) => {
+        if (!trend) return;
+        const canvas = document.querySelector(`[data-cn-spark="${i}"]`);
+        if (!canvas) return;
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
+    }
+
     function renderBoardList(list) {
       const wrap = document.getElementById("boardList");
       if (!wrap) return;
@@ -1198,18 +1343,52 @@
 
     async function loadBoardList() {
       const requestId = (loadBoardList._req = (loadBoardList._req || 0) + 1);
-      document.getElementById("boardModalSub").textContent = "加载行业板块中…";
+      document.getElementById("boardModalSub").textContent = "加载市场指数与行业板块…";
       setStatus("boardStatus", "加载中…");
+      document.getElementById("cnIndexGrid").innerHTML = "";
       document.getElementById("boardList").innerHTML = "";
 
       try {
-        const list = await loadCnSectorBoards();
+        const [indicesResult, boardsResult] = await Promise.allSettled([
+          loadCnIndices(),
+          loadCnSectorBoards()
+        ]);
         if (requestId !== loadBoardList._req) return;
+
+        const indices =
+          indicesResult.status === "fulfilled" ? indicesResult.value : [];
+        const list =
+          boardsResult.status === "fulfilled" ? boardsResult.value : [];
+
+        openBoardModal._indices = indices;
         openBoardModal._list = list;
+        renderCnIndices(indices);
+
+        if (boardsResult.status === "rejected" && !indices.length) {
+          throw boardsResult.reason || new Error("板块数据加载失败");
+        }
+
         document.getElementById("boardModalSub").textContent =
-          `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`;
+          list.length
+            ? `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`
+            : indices.length
+              ? "行业板块加载失败"
+              : "暂无数据";
         renderBoardList(list);
-        setStatus("boardStatus", list.length ? "" : "暂无板块数据");
+        setStatus(
+          "boardStatus",
+          list.length || indices.length
+            ? ""
+            : "暂无板块数据"
+        );
+
+        if (indices.length) {
+          const sparkReq = requestId;
+          requestAnimationFrame(() => {
+            if (sparkReq !== loadBoardList._req) return;
+            paintCnIndexSparklines(indices).catch(() => {});
+          });
+        }
       } catch (err) {
         if (requestId !== loadBoardList._req) return;
         document.getElementById("boardModalSub").textContent = "加载失败";
@@ -1910,9 +2089,14 @@
     });
 
     window.addEventListener("resize", () => {
-      const modal = document.getElementById("chartModal");
-      if (!modal.classList.contains("show") || !openChartModal._lastSeries) return;
-      drawIntradayChart(document.getElementById("chartCanvas"), openChartModal._lastSeries);
+      const chartModal = document.getElementById("chartModal");
+      if (chartModal.classList.contains("show") && openChartModal._lastSeries) {
+        drawIntradayChart(document.getElementById("chartCanvas"), openChartModal._lastSeries);
+      }
+      const boardModal = document.getElementById("boardModal");
+      if (boardModal?.classList.contains("show")) {
+        redrawCnIndexSparklines();
+      }
     });
 
     document.addEventListener("input", (e) => {

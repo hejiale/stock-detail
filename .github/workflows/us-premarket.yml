@@ -1,0 +1,39 @@
+# 定时刷新美股盘前/盘后快照，供手机浏览器读取（无需 Node）
+# 推送到 orphan 分支 premarket-data，不污染 main 历史
+name: Refresh US premarket snapshot
+
+on:
+  schedule:
+    # 美东夏令：盘前约 08:00–13:30 UTC，盘后约 20:00–00:00 UTC
+    - cron: "*/5 8-13 * * 1-5"
+    - cron: "*/5 20-23 * * 1-5"
+    - cron: "0 0 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch premarket snapshot
+        run: node scripts/fetch-us-premarket.mjs
+
+      - name: Publish to premarket-data branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan premarket-data-tmp
+          git reset
+          git add us-premarket.json
+          git commit -m "chore: refresh us premarket snapshot"
+          git push -f origin HEAD:premarket-data

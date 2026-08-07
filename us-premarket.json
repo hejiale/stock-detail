@@ -1,0 +1,151 @@
+{
+  "updatedAt": "2026-08-07T00:39:42.267Z",
+  "count": 29,
+  "quotes": {
+    "ADI": {
+      "price": 380.41,
+      "preChange": 0.82,
+      "section": "POSTR"
+    },
+    "AAPL": {
+      "price": 312.561,
+      "preChange": 0.05,
+      "section": "POSTR"
+    },
+    "AMD": {
+      "price": 491.706,
+      "preChange": 0.5,
+      "section": "POSTR"
+    },
+    "AMAT": {
+      "price": 532,
+      "preChange": 0.86,
+      "section": "POSTR"
+    },
+    "AMZN": {
+      "price": 272.189,
+      "preChange": -0.03,
+      "section": "POSTR"
+    },
+    "ARM": {
+      "price": 288.99,
+      "preChange": 0.81,
+      "section": "POSTR"
+    },
+    "ASML": {
+      "price": 1711.46,
+      "preChange": 0.42,
+      "section": "POSTR"
+    },
+    "AVGO": {
+      "price": 422,
+      "preChange": 0.34,
+      "section": "POSTR"
+    },
+    "GOOG": {
+      "price": 358,
+      "preChange": 0.39,
+      "section": "POSTR"
+    },
+    "INTC": {
+      "price": 100.2,
+      "preChange": 0.39,
+      "section": "POSTR"
+    },
+    "GLW": {
+      "price": 161.02,
+      "preChange": 2.44,
+      "section": "POSTR"
+    },
+    "LITE": {
+      "price": 868.69,
+      "preChange": 3.65,
+      "section": "POSTR"
+    },
+    "KLAC": {
+      "price": 193.92,
+      "preChange": 0.36,
+      "section": "POSTR"
+    },
+    "LRCX": {
+      "price": 308.57,
+      "preChange": 0.92,
+      "section": "POSTR"
+    },
+    "MKSI": {
+      "price": 291.31,
+      "preChange": 0,
+      "section": "POSTR"
+    },
+    "MSFT": {
+      "price": 498.971,
+      "preChange": -0.18,
+      "section": "POSTR"
+    },
+    "MRVL": {
+      "price": 212.7,
+      "preChange": 1.03,
+      "section": "POSTR"
+    },
+    "MU": {
+      "price": 889.795,
+      "preChange": 0.94,
+      "section": "POSTR"
+    },
+    "NBIS": {
+      "price": 195,
+      "preChange": 2.7,
+      "section": "POSTR"
+    },
+    "QCOM": {
+      "price": 160.987,
+      "preChange": 0.37,
+      "section": "POSTR"
+    },
+    "NVDA": {
+      "price": 219.42,
+      "preChange": 0.2,
+      "section": "POSTR"
+    },
+    "SKHY": {
+      "price": 144,
+      "preChange": 0.33,
+      "section": "POSTR"
+    },
+    "SNDK": {
+      "price": 1274.875,
+      "preChange": 1.29,
+      "section": "POSTR"
+    },
+    "STX": {
+      "price": 864,
+      "preChange": 1.3,
+      "section": "POSTR"
+    },
+    "TSLA": {
+      "price": 320.47,
+      "preChange": 0.29,
+      "section": "POSTR"
+    },
+    "TSM": {
+      "price": 420.35,
+      "preChange": 0.51,
+      "section": "POSTR"
+    },
+    "TXN": {
+      "price": 279.51,
+      "preChange": 0.4,
+      "section": "POSTR"
+    },
+    "WDC": {
+      "price": 457.274,
+      "preChange": 1.27,
+      "section": "POSTR"
+    },
+    "UMC": {
+      "price": 19.378,
+      "preChange": 0.93,
+      "section": "POSTR"
+    }
+  }
+}

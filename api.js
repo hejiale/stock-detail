@@ -8,7 +8,7 @@
  * 数据源：
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
- *   3. 百度股市通（美股实时盘前/盘后；需经本地 serve.mjs 代理，避免 CORS）
+ *   3. 百度股市通（美股实时盘前/盘后；电脑可用 serve.mjs 代理，手机读 GitHub 快照）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -415,9 +415,35 @@
     return null;
   }
 
+  function isLocalDevHost() {
+    if (typeof location === "undefined") return false;
+    const h = location.hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+  }
+
+  function normalizePremarketMap(data) {
+    const src = data?.quotes && typeof data.quotes === "object" ? data.quotes : data;
+    if (!src || typeof src !== "object" || src.error) return {};
+    const map = {};
+    Object.keys(src).forEach((code) => {
+      if (code === "updatedAt" || code === "count" || code === "quotes") return;
+      const row = src[code];
+      if (!row || row.preChange == null || Number.isNaN(Number(row.preChange))) return;
+      map[quoteKey(code)] = {
+        name: row.name,
+        price: row.price,
+        preChange: Number(row.preChange)
+      };
+    });
+    return map;
+  }
+
   /**
    * 美股盘前/盘后涨跌幅（百度股市通实时盘前价）
-   * 浏览器直连百度会被 CORS 拦；经本地 serve.mjs 的 /api/us-premarket 代理。
+   * 浏览器直连百度会被 CORS 拦。数据来源优先级：
+   *   1) 同域 /api/us-premarket（电脑跑 serve.mjs，或手机打开电脑局域网地址）
+   *   2) 本地 127.0.0.1:8787（仅本机开发页）
+   *   3) GitHub 快照 us-premarket.json（手机/线上，由 Actions 定时刷新）
    * 东财/腾讯在盘前时段仍常返回昨收盘后价，不能当实时盘前用。
    * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
    */
@@ -427,34 +453,55 @@
 
     const codes = usHoldings.map((h) => quoteKey(h.code));
     const codesParam = encodeURIComponent(codes.join(","));
+    const wanted = new Set(codes);
 
-    // 同域优先；若页面用 Live Server / file 打开，再打本地代理（需 node serve.mjs）
+    async function fromProxy(base) {
+      const resp = await fetch(base + "/api/us-premarket?codes=" + codesParam);
+      if (!resp.ok) return {};
+      return normalizePremarketMap(await resp.json());
+    }
+
+    async function fromSnapshot(url) {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) return {};
+      const all = normalizePremarketMap(await resp.json());
+      const map = {};
+      wanted.forEach((code) => {
+        if (all[code]) map[code] = all[code];
+      });
+      return map;
+    }
+
     const proxyBases = [];
     if (typeof location !== "undefined" && location.protocol !== "file:") {
       proxyBases.push("");
     }
-    proxyBases.push("http://127.0.0.1:8787", "http://localhost:8787");
+    // 手机访问 GitHub Pages 时不要去连 127.0.0.1（会失败并误导）
+    if (isLocalDevHost()) {
+      proxyBases.push("http://127.0.0.1:8787", "http://localhost:8787");
+    }
 
     for (let i = 0; i < proxyBases.length; i++) {
-      const base = proxyBases[i];
       try {
-        const resp = await fetch(base + "/api/us-premarket?codes=" + codesParam);
-        if (!resp.ok) continue;
-        const data = await resp.json();
-        if (!data || typeof data !== "object" || data.error) continue;
-        const map = {};
-        Object.keys(data).forEach((code) => {
-          const row = data[code];
-          if (!row || row.preChange == null || Number.isNaN(Number(row.preChange))) return;
-          map[quoteKey(code)] = {
-            name: row.name,
-            price: row.price,
-            preChange: Number(row.preChange)
-          };
-        });
+        const map = await fromProxy(proxyBases[i]);
         if (Object.keys(map).length) return map;
       } catch (_) {
-        // 试下一个代理地址
+        // 试下一个
+      }
+    }
+
+    const stamp = Date.now();
+    const snapshots = [
+      "./us-premarket.json?_=" + stamp,
+      "https://raw.githubusercontent.com/hejiale/stock-detail/premarket-data/us-premarket.json?_=" +
+        stamp
+    ];
+    for (let i = 0; i < snapshots.length; i++) {
+      try {
+        const map = await fromSnapshot(snapshots[i]);
+        if (Object.keys(map).length) return map;
+      } catch (_) {
+        // 试下一个
       }
     }
 

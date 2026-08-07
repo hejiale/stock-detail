@@ -1624,9 +1624,7 @@
           : `已同步 ${ok} 只股票实时涨跌幅`;
         if (usOnPage.length) {
           if (preOk) msg += `，盘前 ${preOk} 只`;
-          else if (isUsExtendedSession()) {
-            msg += "，盘前暂不可用（需运行 node serve.mjs）";
-          }
+          else if (isUsExtendedSession()) msg += "，盘前暂不可用";
         }
         showToast(msg);
       } catch (err) {

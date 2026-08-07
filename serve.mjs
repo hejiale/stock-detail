@@ -151,7 +151,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Serving ${ROOT}`);
-  console.log(`Open http://127.0.0.1:${PORT}/`);
+  console.log(`Local  http://127.0.0.1:${PORT}/`);
+  console.log(`LAN    http://<本机局域网IP>:${PORT}/  （手机需连同一 WiFi）`);
 });

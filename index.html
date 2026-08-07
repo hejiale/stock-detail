@@ -264,7 +264,8 @@
       sliceKlinesForRange,
       resolveStock,
       isUsHolding,
-      isUsExtendedSession
+      isUsExtendedSession,
+      resolveUsExtHeadLabel
     } = window.MarketAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
@@ -1587,6 +1588,7 @@
         let ok = 0;
         let preOk = 0;
         const failed = [];
+        const sectionVotes = {};
 
         pageHoldings.forEach((h, offset) => {
           const i = start + offset;
@@ -1598,7 +1600,12 @@
             `[data-pre-change][data-fund="${fundId}"][data-index="${i}"]`
           );
           if (preEl) applyPreChangeDisplay(preEl, quote?.preChange);
-          if (quote?.preChange != null && !Number.isNaN(quote.preChange)) preOk += 1;
+          if (quote?.preChange != null && !Number.isNaN(quote.preChange)) {
+            preOk += 1;
+            if (quote.section) {
+              sectionVotes[quote.section] = (sectionVotes[quote.section] || 0) + 1;
+            }
+          }
 
           if (!quote || !input || Number.isNaN(quote.change)) {
             failed.push(h.name);
@@ -1610,6 +1617,15 @@
         });
 
         persistFromDom();
+
+        let extSection = "";
+        Object.keys(sectionVotes).forEach((k) => {
+          if (!extSection || sectionVotes[k] > sectionVotes[extSection]) extSection = k;
+        });
+        const extHead = resolveUsExtHeadLabel(extSection || null);
+        const extHeadEl = document.querySelector(`[data-ext-head="${fundId}"]`);
+        if (extHeadEl) extHeadEl.textContent = extHead;
+        const extShort = extHead.replace(/%$/, "");
 
         if (ok === 0) {
           showToast("未获取到行情，请稍后重试");
@@ -1623,8 +1639,8 @@
           ? `已同步 ${ok} 只${pageTip}，失败：${failed.join("、")}`
           : `已同步 ${ok} 只股票实时涨跌幅`;
         if (usOnPage.length) {
-          if (preOk) msg += `，盘前 ${preOk} 只`;
-          else if (isUsExtendedSession()) msg += "，盘前暂不可用";
+          if (preOk) msg += `，${extShort} ${preOk} 只`;
+          else if (isUsExtendedSession()) msg += `，${extShort}暂不可用`;
         }
         showToast(msg);
       } catch (err) {
@@ -1761,7 +1777,7 @@
             <div class="${headClass}">
               <div>股票名称</div>
               ${viewOnly ? "" : `<div>${ratioLabel}</div>`}
-              <div>盘前%</div>
+              <div data-ext-head="${fund.id}">${resolveUsExtHeadLabel()}</div>
               <div>日涨跌幅%</div>
             </div>
             <div class="list-body">

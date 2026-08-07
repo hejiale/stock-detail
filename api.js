@@ -231,8 +231,9 @@
   /**
    * 是否处于美股盘前/盘后（America/New_York）
    * 盘前 04:00–09:30，盘后 16:00–20:00；周末视为否
+   * @returns {false|'pre'|'post'}
    */
-  function isUsExtendedSession(date = new Date()) {
+  function getUsExtendedKind(date = new Date()) {
     try {
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "America/New_York",
@@ -249,10 +250,31 @@
       if (Number.isNaN(hour) || Number.isNaN(minute)) return false;
       if (hour === 24) hour = 0;
       const mins = hour * 60 + minute;
-      return (mins >= 4 * 60 && mins < 9 * 60 + 30) || (mins >= 16 * 60 && mins < 20 * 60);
+      if (mins >= 4 * 60 && mins < 9 * 60 + 30) return "pre";
+      if (mins >= 16 * 60 && mins < 20 * 60) return "post";
+      return false;
     } catch (_) {
       return false;
     }
+  }
+
+  function isUsExtendedSession(date = new Date()) {
+    return !!getUsExtendedKind(date);
+  }
+
+  /**
+   * 盘前/盘后列头文案（带 %）
+   * section 来自百度 tradeSection：PRETR / POSTR / NIGHT 等
+   */
+  function resolveUsExtHeadLabel(section) {
+    const s = String(section || "").toUpperCase();
+    if (s === "PRETR" || s.includes("PRE") || section === "盘前") return "盘前%";
+    if (s === "POSTR" || s.includes("POST") || section === "盘后") return "盘后%";
+    if (s === "NIGHT" || section === "夜盘") return "夜盘%";
+    const kind = getUsExtendedKind();
+    if (kind === "post") return "盘后%";
+    if (kind === "pre") return "盘前%";
+    return "盘前%";
   }
 
   /** 报价 map 的统一 key（美股代码大小写不一致时用） */
@@ -409,7 +431,8 @@
       return {
         name: result.basicinfos?.name,
         price,
-        preChange
+        preChange,
+        section: info.tradeSection || info.tradeSectionCN || key
       };
     }
     return null;
@@ -432,7 +455,8 @@
       map[quoteKey(code)] = {
         name: row.name,
         price: row.price,
-        preChange: Number(row.preChange)
+        preChange: Number(row.preChange),
+        section: row.section
       };
     });
     return map;
@@ -557,6 +581,7 @@
           return;
         }
         target.preChange = src.preChange;
+        if (src.section) target.section = src.section;
       });
     } catch (_) {
       // 盘前增强失败时保留已有实时涨跌幅
@@ -1611,6 +1636,8 @@
     toSinaSymbol,
     isUsHolding,
     isUsExtendedSession,
+    getUsExtendedKind,
+    resolveUsExtHeadLabel,
     // 请求
     loadQuotes,
     loadEastMoneyQuotes,

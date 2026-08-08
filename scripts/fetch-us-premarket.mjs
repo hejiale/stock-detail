@@ -26,21 +26,89 @@ function parseSignedPct(s) {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
+/** 美股盘前/盘后：盘前 04:00–09:30，盘后 16:00–20:00（America/New_York） */
+function getUsExtendedKind(date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(date);
+    const get = (type) => parts.find((p) => p.type === type)?.value;
+    const wd = get("weekday");
+    if (wd === "Sat" || wd === "Sun") return false;
+    let hour = Number(get("hour"));
+    const minute = Number(get("minute"));
+    if (Number.isNaN(hour) || Number.isNaN(minute)) return false;
+    if (hour === 24) hour = 0;
+    const mins = hour * 60 + minute;
+    if (mins >= 4 * 60 && mins < 9 * 60 + 30) return "pre";
+    if (mins >= 16 * 60 && mins < 20 * 60) return "post";
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+function classifyExtKind(info, key) {
+  const s = String(info.tradeSection || info.tradeSectionCN || "").toUpperCase();
+  if (s === "PRETR" || s.includes("PRE") || info.tradeSectionCN === "盘前" || key === "preMarketInfo") {
+    return "pre";
+  }
+  if (s === "POSTR" || s.includes("POST") || info.tradeSectionCN === "盘后" || key === "postMarketInfo") {
+    return "post";
+  }
+  if (s === "NIGHT" || s.includes("NIGHT") || info.tradeSectionCN === "夜盘" || key === "nightMarketInfo") {
+    return "night";
+  }
+  return "";
+}
+
+/**
+ * 按时段取盘前/盘后：盘前勿回退到昨盘后价。
+ * 百度常在盘前仍保留 outMarketInfo=昨 POSTR，实时盘前在 preMarketInfo。
+ */
 function pickExt(result) {
   if (!result) return null;
-  for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo"]) {
+  const session = getUsExtendedKind();
+  const rows = [];
+  for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo", "nightMarketInfo"]) {
     const info = result[key];
     if (!info || info.type === "" || info.price == null || info.price === "") continue;
     const price = Number(info.price);
     const preChange = parseSignedPct(info.ratio);
     if (!Number.isFinite(price) || preChange == null) continue;
-    return {
+    rows.push({
+      key,
+      extKind: classifyExtKind(info, key),
+      ts: Number(info.timestamp || info.update_time || 0) || 0,
       price,
       preChange,
       section: info.tradeSection || key
-    };
+    });
   }
-  return null;
+  if (!rows.length) return null;
+
+  const pick = (pred) => rows.find(pred) || null;
+  let chosen = null;
+  if (session === "pre") {
+    chosen = pick((r) => r.extKind === "pre") || pick((r) => r.key === "preMarketInfo");
+  } else if (session === "post") {
+    chosen =
+      pick((r) => r.extKind === "post") ||
+      pick((r) => r.key === "postMarketInfo" || r.key === "outMarketInfo");
+  } else {
+    chosen = pick((r) => r.key === "outMarketInfo");
+    if (!chosen) chosen = rows.slice().sort((a, b) => b.ts - a.ts)[0];
+  }
+  if (!chosen) return null;
+  return {
+    price: chosen.price,
+    preChange: chosen.preChange,
+    section: chosen.section
+  };
 }
 
 async function fetchOne(code) {
@@ -52,7 +120,8 @@ async function fetchOne(code) {
     headers: {
       Accept: "application/json",
       "User-Agent": "Mozilla/5.0",
-      Referer: "https://gushitong.baidu.com/"
+      Referer: "https://gushitong.baidu.com/",
+      Origin: "https://gushitong.baidu.com"
     }
   });
   if (!resp.ok) throw new Error("HTTP " + resp.status);

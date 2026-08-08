@@ -416,26 +416,66 @@
     return Number.isFinite(n) ? round2(n) : null;
   }
 
+  function classifyBaiduExtKind(info, key) {
+    const s = String(info.tradeSection || info.tradeSectionCN || "").toUpperCase();
+    if (s === "PRETR" || s.includes("PRE") || info.tradeSectionCN === "盘前" || key === "preMarketInfo") {
+      return "pre";
+    }
+    if (s === "POSTR" || s.includes("POST") || info.tradeSectionCN === "盘后" || key === "postMarketInfo") {
+      return "post";
+    }
+    if (s === "NIGHT" || s.includes("NIGHT") || info.tradeSectionCN === "夜盘" || key === "nightMarketInfo") {
+      return "night";
+    }
+    return "";
+  }
+
   /**
    * 从百度 getquotation Result 中取盘前/盘后信息
    * 盘前涨跌幅相对上一交易时段末价（常为昨盘后价），不是相对常规昨收
+   * 注意：盘前时段 outMarketInfo 常仍是昨 POSTR，实时盘前在 preMarketInfo，不可盲目优先 out
    */
   function pickBaiduExtInfo(result) {
     if (!result) return null;
-    for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo"]) {
+    const session = getUsExtendedKind();
+    const rows = [];
+    for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo", "nightMarketInfo"]) {
       const info = result[key];
       if (!info || info.type === "" || info.price == null || info.price === "") continue;
       const price = Number(info.price);
       const preChange = parseSignedPct(info.ratio);
       if (!Number.isFinite(price) || preChange == null) continue;
-      return {
+      rows.push({
+        key,
+        extKind: classifyBaiduExtKind(info, key),
+        ts: Number(info.timestamp || info.update_time || 0) || 0,
         name: result.basicinfos?.name,
         price,
         preChange,
         section: info.tradeSection || info.tradeSectionCN || key
-      };
+      });
     }
-    return null;
+    if (!rows.length) return null;
+
+    const pick = (pred) => rows.find(pred) || null;
+    let chosen = null;
+    if (session === "pre") {
+      chosen = pick((r) => r.extKind === "pre") || pick((r) => r.key === "preMarketInfo");
+    } else if (session === "post") {
+      chosen =
+        pick((r) => r.extKind === "post") ||
+        pick((r) => r.key === "postMarketInfo" || r.key === "outMarketInfo");
+    } else {
+      chosen = pick((r) => r.key === "outMarketInfo");
+      if (!chosen) chosen = rows.slice().sort((a, b) => b.ts - a.ts)[0];
+    }
+    if (!chosen) return null;
+    return {
+      name: chosen.name,
+      price: chosen.price,
+      preChange: chosen.preChange,
+      section: chosen.section
+    };
   }
 
   function isLocalDevHost() {
@@ -447,11 +487,19 @@
   function normalizePremarketMap(data) {
     const src = data?.quotes && typeof data.quotes === "object" ? data.quotes : data;
     if (!src || typeof src !== "object" || src.error) return {};
+    const session = getUsExtendedKind();
     const map = {};
     Object.keys(src).forEach((code) => {
       if (code === "updatedAt" || code === "count" || code === "quotes") return;
       const row = src[code];
       if (!row || row.preChange == null || Number.isNaN(Number(row.preChange))) return;
+      const section = row.section;
+      const s = String(section || "").toUpperCase();
+      const isPre = s === "PRETR" || s.includes("PRE") || section === "盘前";
+      const isPost = s === "POSTR" || s.includes("POST") || section === "盘后";
+      // 盘前不要展示快照/代理里残留的盘后价；盘后同理
+      if (session === "pre" && isPost) return;
+      if (session === "post" && isPre) return;
       map[quoteKey(code)] = {
         name: row.name,
         price: row.price,

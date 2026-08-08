@@ -8,7 +8,6 @@
  * 数据源：
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
- *   3. 百度股市通（美股实时盘前/盘后；电脑可用 serve.mjs 代理，手机读 GitHub 快照）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -228,55 +227,6 @@
     );
   }
 
-  /**
-   * 是否处于美股盘前/盘后（America/New_York）
-   * 盘前 04:00–09:30，盘后 16:00–20:00；周末视为否
-   * @returns {false|'pre'|'post'}
-   */
-  function getUsExtendedKind(date = new Date()) {
-    try {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23"
-      }).formatToParts(date);
-      const get = (type) => parts.find((p) => p.type === type)?.value;
-      const wd = get("weekday");
-      if (wd === "Sat" || wd === "Sun") return false;
-      let hour = Number(get("hour"));
-      const minute = Number(get("minute"));
-      if (Number.isNaN(hour) || Number.isNaN(minute)) return false;
-      if (hour === 24) hour = 0;
-      const mins = hour * 60 + minute;
-      if (mins >= 4 * 60 && mins < 9 * 60 + 30) return "pre";
-      if (mins >= 16 * 60 && mins < 20 * 60) return "post";
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function isUsExtendedSession(date = new Date()) {
-    return !!getUsExtendedKind(date);
-  }
-
-  /**
-   * 盘前/盘后列头文案（带 %）
-   * section 来自百度 tradeSection：PRETR / POSTR / NIGHT 等
-   */
-  function resolveUsExtHeadLabel(section) {
-    const s = String(section || "").toUpperCase();
-    if (s === "PRETR" || s.includes("PRE") || section === "盘前") return "盘前%";
-    if (s === "POSTR" || s.includes("POST") || section === "盘后") return "盘后%";
-    if (s === "NIGHT" || section === "夜盘") return "夜盘%";
-    const kind = getUsExtendedKind();
-    if (kind === "post") return "盘后%";
-    if (kind === "pre") return "盘前%";
-    return "盘前%";
-  }
-
   /** 报价 map 的统一 key（美股代码大小写不一致时用） */
   function quoteKey(code) {
     return String(code).toUpperCase();
@@ -292,7 +242,7 @@
    *
    * 请求字段：
    *   f12 代码, f14 名称, f2 最新价, f3 涨跌幅(%), f18 昨收
-   *   盘后/delay 常出现 f2=0，此时用 f18 作展示价
+   *   delay 常出现 f2=0，此时用 f18 作展示价
    *
    * @param {Array} holdings
    * @returns {Promise<Object>} code(大写) -> { name, price, change }
@@ -330,10 +280,10 @@
    * 会在全局写入 hq_str_{symbol}，加载完成后解析并清理 script。
    *
    * A 股字段：0名称, 1开盘, 2昨收, 3现价, ...
-   * 美股 gb_ 字段：1现价, 2涨跌幅%, 21盘前/盘后价, 22盘前/盘后涨跌幅%
+   * 美股 gb_ 字段：1现价, 2涨跌幅%
    *
    * @param {Array} holdings
-   * @returns {Promise<Object>} code -> { name, price, change, preChange? }
+   * @returns {Promise<Object>} code -> { name, price, change }
    */
   function loadSinaQuotes(holdings, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
@@ -370,14 +320,10 @@
             const pct = Number(parts[2]);
             if (Number.isNaN(pct)) return;
             change = pct;
-            // 盘前/盘后涨跌幅：相对常规时段收盘价
-            const preRaw = Number(parts[22]);
-            const preChange = Number.isNaN(preRaw) ? null : round2(preRaw);
             map[h.code.toUpperCase()] = {
               name: parts[0],
               price,
-              change: round2(change),
-              preChange
+              change: round2(change)
             };
             return;
           }
@@ -407,242 +353,10 @@
   }
 
   /**
-   * 解析百度盘前/盘后涨跌幅字符串（如 "+1.24%"）
-   * @returns {number|null}
-   */
-  function parseSignedPct(s) {
-    if (s == null || s === "") return null;
-    const n = Number(String(s).replace(/[+%\s]/g, ""));
-    return Number.isFinite(n) ? round2(n) : null;
-  }
-
-  function classifyBaiduExtKind(info, key) {
-    const s = String(info.tradeSection || info.tradeSectionCN || "").toUpperCase();
-    if (s === "PRETR" || s.includes("PRE") || info.tradeSectionCN === "盘前" || key === "preMarketInfo") {
-      return "pre";
-    }
-    if (s === "POSTR" || s.includes("POST") || info.tradeSectionCN === "盘后" || key === "postMarketInfo") {
-      return "post";
-    }
-    if (s === "NIGHT" || s.includes("NIGHT") || info.tradeSectionCN === "夜盘" || key === "nightMarketInfo") {
-      return "night";
-    }
-    return "";
-  }
-
-  /**
-   * 从百度 getquotation Result 中取盘前/盘后信息
-   * 盘前涨跌幅相对上一交易时段末价（常为昨盘后价），不是相对常规昨收
-   * 注意：盘前时段 outMarketInfo 常仍是昨 POSTR，实时盘前在 preMarketInfo，不可盲目优先 out
-   */
-  function pickBaiduExtInfo(result) {
-    if (!result) return null;
-    const session = getUsExtendedKind();
-    const rows = [];
-    for (const key of ["outMarketInfo", "preMarketInfo", "postMarketInfo", "nightMarketInfo"]) {
-      const info = result[key];
-      if (!info || info.type === "" || info.price == null || info.price === "") continue;
-      const price = Number(info.price);
-      const preChange = parseSignedPct(info.ratio);
-      if (!Number.isFinite(price) || preChange == null) continue;
-      rows.push({
-        key,
-        extKind: classifyBaiduExtKind(info, key),
-        ts: Number(info.timestamp || info.update_time || 0) || 0,
-        name: result.basicinfos?.name,
-        price,
-        preChange,
-        section: info.tradeSection || info.tradeSectionCN || key
-      });
-    }
-    if (!rows.length) return null;
-
-    const pick = (pred) => rows.find(pred) || null;
-    let chosen = null;
-    if (session === "pre") {
-      chosen = pick((r) => r.extKind === "pre") || pick((r) => r.key === "preMarketInfo");
-    } else if (session === "post") {
-      chosen =
-        pick((r) => r.extKind === "post") ||
-        pick((r) => r.key === "postMarketInfo" || r.key === "outMarketInfo");
-    } else {
-      chosen = pick((r) => r.key === "outMarketInfo");
-      if (!chosen) chosen = rows.slice().sort((a, b) => b.ts - a.ts)[0];
-    }
-    if (!chosen) return null;
-    return {
-      name: chosen.name,
-      price: chosen.price,
-      preChange: chosen.preChange,
-      section: chosen.section
-    };
-  }
-
-  function isLocalDevHost() {
-    if (typeof location === "undefined") return false;
-    const h = location.hostname;
-    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
-  }
-
-  function normalizePremarketMap(data) {
-    const src = data?.quotes && typeof data.quotes === "object" ? data.quotes : data;
-    if (!src || typeof src !== "object" || src.error) return {};
-    const session = getUsExtendedKind();
-    const map = {};
-    Object.keys(src).forEach((code) => {
-      if (code === "updatedAt" || code === "count" || code === "quotes") return;
-      const row = src[code];
-      if (!row || row.preChange == null || Number.isNaN(Number(row.preChange))) return;
-      const section = row.section;
-      const s = String(section || "").toUpperCase();
-      const isPre = s === "PRETR" || s.includes("PRE") || section === "盘前";
-      const isPost = s === "POSTR" || s.includes("POST") || section === "盘后";
-      // 盘前不要展示快照/代理里残留的盘后价；盘后同理
-      if (session === "pre" && isPost) return;
-      if (session === "post" && isPre) return;
-      map[quoteKey(code)] = {
-        name: row.name,
-        price: row.price,
-        preChange: Number(row.preChange),
-        section: row.section
-      };
-    });
-    return map;
-  }
-
-  /**
-   * 美股盘前/盘后涨跌幅（百度股市通实时盘前价）
-   * 浏览器直连百度会被 CORS 拦。数据来源优先级：
-   *   1) 同域 /api/us-premarket（电脑跑 serve.mjs，或手机打开电脑局域网地址）
-   *   2) 本地 127.0.0.1:8787（仅本机开发页）
-   *   3) GitHub 快照 us-premarket.json（手机/线上，由 Actions 定时刷新）
-   * 东财/腾讯在盘前时段仍常返回昨收盘后价，不能当实时盘前用。
-   * @returns {Promise<Object>} code(大写) -> { name, price?, preChange }
-   */
-  async function loadUsPreMarketQuotes(holdings) {
-    const usHoldings = holdings.filter(isUsHolding);
-    if (!usHoldings.length) return {};
-
-    const codes = usHoldings.map((h) => quoteKey(h.code));
-    const codesParam = encodeURIComponent(codes.join(","));
-    const wanted = new Set(codes);
-
-    async function fromProxy(base) {
-      const resp = await fetch(base + "/api/us-premarket?codes=" + codesParam);
-      if (!resp.ok) return {};
-      return normalizePremarketMap(await resp.json());
-    }
-
-    async function fromSnapshot(url) {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) return {};
-      const all = normalizePremarketMap(await resp.json());
-      const map = {};
-      wanted.forEach((code) => {
-        if (all[code]) map[code] = all[code];
-      });
-      return map;
-    }
-
-    const proxyBases = [];
-    if (typeof location !== "undefined" && location.protocol !== "file:") {
-      proxyBases.push("");
-    }
-    // 手机访问 GitHub Pages 时不要去连 127.0.0.1（会失败并误导）
-    if (isLocalDevHost()) {
-      proxyBases.push("http://127.0.0.1:8787", "http://localhost:8787");
-    }
-
-    for (let i = 0; i < proxyBases.length; i++) {
-      try {
-        const map = await fromProxy(proxyBases[i]);
-        if (Object.keys(map).length) return map;
-      } catch (_) {
-        // 试下一个
-      }
-    }
-
-    const stamp = Date.now();
-    const snapshots = [
-      "./us-premarket.json?_=" + stamp,
-      "https://raw.githubusercontent.com/hejiale/stock-detail/premarket-data/us-premarket.json?_=" +
-        stamp
-    ];
-    for (let i = 0; i < snapshots.length; i++) {
-      try {
-        const map = await fromSnapshot(snapshots[i]);
-        if (Object.keys(map).length) return map;
-      } catch (_) {
-        // 试下一个
-      }
-    }
-
-    // 直连百度（扩展/部分环境可能可用；普通网页通常 CORS 失败）
-    const map = {};
-    let cursor = 0;
-    const concurrency = Math.min(4, usHoldings.length);
-
-    async function worker() {
-      while (cursor < usHoldings.length) {
-        const h = usHoldings[cursor++];
-        const code = quoteKey(h.code);
-        try {
-          const url =
-            "https://finance.pae.baidu.com/vapi/v1/getquotation?srcid=5353&group=quotation_minute_us&code=" +
-            encodeURIComponent(code) +
-            "&market_type=us&newFormat=1";
-          const resp = await fetch(url);
-          if (!resp.ok) continue;
-          const json = await resp.json();
-          const row = pickBaiduExtInfo(json?.Result);
-          if (!row) continue;
-          map[code] = row;
-        } catch (_) {
-          // 单只失败不影响其余
-        }
-      }
-    }
-
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    return map;
-  }
-
-  /**
-   * 用美股盘前/盘后数据补齐东方财富报价中的 preChange
-   * 失败时不影响原有 change
-   * @param {Promise|Object} [preMapOrPromise] 可选：已发起的盘前请求，便于与日涨跌并行
-   */
-  async function enrichUsPreMarket(holdings, map, preMapOrPromise) {
-    const usHoldings = holdings.filter(isUsHolding);
-    if (!usHoldings.length) return map;
-
-    try {
-      const preMap =
-        preMapOrPromise != null
-          ? await preMapOrPromise
-          : await loadUsPreMarketQuotes(usHoldings);
-      usHoldings.forEach((h) => {
-        const key = quoteKey(h.code);
-        const target = map[key] || map[h.code];
-        const src = preMap[key] || preMap[h.code];
-        if (!target || !src || src.preChange == null || Number.isNaN(src.preChange)) {
-          return;
-        }
-        target.preChange = src.preChange;
-        if (src.section) target.section = src.section;
-      });
-    } catch (_) {
-      // 盘前增强失败时保留已有实时涨跌幅
-    }
-    return map;
-  }
-
-  /**
    * 统一实时报价入口（一次只查传入的持仓，由调用方按页传入，不做多页合并）
    * 优先东方财富；失败/空数据则回退新浪。
-   * 美股盘前请另调 loadUsPreMarketQuotes / enrichUsPreMarket，避免串行等待拖慢日涨跌同步。
    *
-   * @returns {Promise<Object>} code -> { name, price, change, preChange? }
+   * @returns {Promise<Object>} code -> { name, price, change }
    */
   async function loadQuotes(holdings) {
     if (!holdings.length) return {};
@@ -1683,14 +1397,10 @@
     toEastSecId,
     toSinaSymbol,
     isUsHolding,
-    isUsExtendedSession,
-    getUsExtendedKind,
-    resolveUsExtHeadLabel,
     // 请求
     loadQuotes,
     loadEastMoneyQuotes,
     loadSinaQuotes,
-    loadUsPreMarketQuotes,
     loadIntradayTrends,
     loadDailyKlines,
     loadStockMarketCap,
@@ -1703,7 +1413,6 @@
     loadUsSectorBoards,
     loadUsStockRank,
     resolveStock,
-    enrichUsPreMarket,
     // 区间计算
     calcPeriodReturns,
     sliceKlinesForRange

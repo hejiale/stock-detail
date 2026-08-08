@@ -1188,14 +1188,15 @@
   }
 
   /**
-   * A 股板块成分股（按涨跌幅降序）
+   * A 股板块成分股涨幅 / 跌幅榜
    * GET {push2}/api/qt/clist/get  fs=b:BK1625+f:!50  fid=f3
    *
-   * @param {string} boardCode 如 BK1625
+   * @param {string|string[]} boardCodeOrCodes 如 BK1625
    * @param {number} [limit=20]
+   * @param {"gainers"|"losers"} [kind="gainers"]
    * @returns {Promise<Array<{ code, name, price, change, market }>>}
    */
-  async function loadCnSectorStocks(boardCodeOrCodes, limit = 20) {
+  async function loadCnSectorStocks(boardCodeOrCodes, limit = 20, kind = "gainers") {
     const codes = (Array.isArray(boardCodeOrCodes)
       ? boardCodeOrCodes
       : String(boardCodeOrCodes || "").split(",")
@@ -1206,7 +1207,8 @@
     if (!codes.length) throw new Error("缺少板块代码");
 
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
-    // 多子板块时多取一些再合并去重，避免漏掉强势股
+    const isLosers = kind === "losers";
+    // 多子板块时多取一些再合并去重，避免漏掉强弱股
     const perBoard = codes.length === 1 ? take : Math.min(50, Math.max(take, 30));
 
     const pages = await Promise.all(
@@ -1215,7 +1217,8 @@
           const { list } = await fetchEastClist({
             fs: "b:" + code + "+f:!50",
             fields: "f12,f13,f14,f2,f3",
-            pz: perBoard
+            pz: perBoard,
+            po: isLosers ? 0 : 1
           });
           return list;
         } catch (_) {
@@ -1244,7 +1247,9 @@
       });
     });
 
-    return list.sort((a, b) => b.change - a.change).slice(0, take);
+    return list
+      .sort((a, b) => (isLosers ? a.change - b.change : b.change - a.change))
+      .slice(0, take);
   }
 
   /**

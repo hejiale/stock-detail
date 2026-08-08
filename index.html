@@ -131,13 +131,17 @@
       <div class="board-modal-head">
         <div class="board-modal-title">
           <div class="name" id="boardStocksModalName">板块成分</div>
-          <div class="sub" id="boardStocksModalSub">涨幅前 20</div>
+          <div class="sub" id="boardStocksModalSub">涨幅 / 跌幅前 20</div>
         </div>
         <button class="board-modal-close" type="button" data-board-stocks-close aria-label="关闭">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
           </svg>
         </button>
+      </div>
+      <div class="board-tabs board-stocks-tabs">
+        <button class="board-tab active" type="button" data-cn-stock-rank="gainers">涨幅前20</button>
+        <button class="board-tab" type="button" data-cn-stock-rank="losers">跌幅前20</button>
       </div>
       <div class="board-list-head board-stocks-head">
         <div>股票名称</div>
@@ -1250,7 +1254,7 @@
           ).join(",");
           const safeName = String(item.name).replace(/"/g, "&quot;");
           return `
-            <button class="board-row board-row-btn" type="button" data-board-code="${item.code}" data-board-codes="${codes}" data-board-name="${safeName}" title="查看 ${safeName} 涨幅前20">
+            <button class="board-row board-row-btn" type="button" data-board-code="${item.code}" data-board-codes="${codes}" data-board-name="${safeName}" title="查看 ${safeName} 成分股涨跌榜">
               <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name-row">
@@ -1293,6 +1297,58 @@
     }
 
     let boardStocksRequestId = 0;
+    const boardStocksState = {
+      codes: [],
+      allCodesCount: 0,
+      name: "",
+      rank: "gainers"
+    };
+
+    function setBoardStocksRankTabs(kind) {
+      document.querySelectorAll("[data-cn-stock-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.cnStockRank === kind);
+      });
+    }
+
+    function boardStocksSubTip(phase, listLen) {
+      const rankLabel = boardStocksState.rank === "losers" ? "跌幅" : "涨幅";
+      const prefix =
+        boardStocksState.allCodesCount > 1
+          ? `含${boardStocksState.allCodesCount}个细分`
+          : boardStocksState.codes[0] || "";
+      if (phase === "loading") return `${prefix} · 加载${rankLabel}榜…`;
+      if (phase === "done") return `${prefix} · ${rankLabel}前 ${listLen} 只`;
+      return phase;
+    }
+
+    async function loadBoardStocksRank(kind) {
+      if (!boardStocksState.codes.length) return;
+      const rank = kind === "losers" ? "losers" : "gainers";
+      boardStocksState.rank = rank;
+      setBoardStocksRankTabs(rank);
+
+      const reqId = ++boardStocksRequestId;
+      document.getElementById("boardStocksModalSub").textContent =
+        boardStocksSubTip("loading");
+      document.getElementById("boardStocksList").innerHTML = "";
+      setStatus(
+        "boardStocksStatus",
+        rank === "losers" ? "加载成分股跌幅…" : "加载成分股涨幅…"
+      );
+
+      try {
+        const list = await loadCnSectorStocks(boardStocksState.codes, 20, rank);
+        if (reqId !== boardStocksRequestId) return;
+        document.getElementById("boardStocksModalSub").textContent =
+          boardStocksSubTip("done", list.length);
+        renderBoardStocksList(list);
+        setStatus("boardStocksStatus", list.length ? "" : "暂无成分股数据");
+      } catch (err) {
+        if (reqId !== boardStocksRequestId) return;
+        document.getElementById("boardStocksModalSub").textContent = "加载失败";
+        setStatus("boardStocksStatus", err?.message || "成分股加载失败");
+      }
+    }
 
     async function openBoardStocksModal(boardCode, boardName, boardCodes) {
       const codes = (Array.isArray(boardCodes)
@@ -1305,33 +1361,15 @@
       const fetchCodes = codes.slice(0, 10);
       if (!fetchCodes.length) return;
 
-      const reqId = ++boardStocksRequestId;
-      const tip =
-        codes.length > 1
-          ? `含${codes.length}个细分 · 加载涨幅榜…`
-          : `${fetchCodes[0]} · 加载涨幅榜…`;
+      boardStocksState.codes = fetchCodes;
+      boardStocksState.allCodesCount = codes.length;
+      boardStocksState.name = boardName || fetchCodes[0];
+      boardStocksState.rank = "gainers";
 
       document.getElementById("boardStocksModalName").textContent =
-        boardName || fetchCodes[0];
-      document.getElementById("boardStocksModalSub").textContent = tip;
-      document.getElementById("boardStocksList").innerHTML = "";
-      setStatus("boardStocksStatus", "加载成分股涨幅…");
+        boardStocksState.name;
       showModal("boardStocksModal");
-
-      try {
-        const list = await loadCnSectorStocks(fetchCodes, 20);
-        if (reqId !== boardStocksRequestId) return;
-        document.getElementById("boardStocksModalSub").textContent =
-          codes.length > 1
-            ? `含${codes.length}个细分 · 涨幅前 ${list.length} 只`
-            : `${fetchCodes[0]} · 涨幅前 ${list.length} 只`;
-        renderBoardStocksList(list);
-        setStatus("boardStocksStatus", list.length ? "" : "暂无成分股数据");
-      } catch (err) {
-        if (reqId !== boardStocksRequestId) return;
-        document.getElementById("boardStocksModalSub").textContent = "加载失败";
-        setStatus("boardStocksStatus", err?.message || "成分股加载失败");
-      }
+      await loadBoardStocksRank("gainers");
     }
 
     function closeBoardStocksModal() {
@@ -2073,6 +2111,12 @@
 
       if (e.target.closest("[data-board-stocks-close]")) {
         closeBoardStocksModal();
+        return;
+      }
+
+      const cnStockRankBtn = e.target.closest("[data-cn-stock-rank]");
+      if (cnStockRankBtn) {
+        loadBoardStocksRank(cnStockRankBtn.dataset.cnStockRank);
         return;
       }
 

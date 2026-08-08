@@ -1349,6 +1349,10 @@ header p {
   z-index: 125;
 }
 
+.board-stocks-tabs {
+  padding-bottom: 2px;
+}
+
 .board-stocks-head {
   grid-template-columns: 1fr 1fr 1fr;
   padding-left: 16px;

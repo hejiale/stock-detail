@@ -1549,16 +1549,21 @@
 
     async function syncFundQuotes(fundId) {
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
-      if (!btn || btn.disabled) return;
+      if (!btn) return;
 
       const { fund, start, holdings: pageHoldings } = getPageSlice(fundId);
       if (!pageHoldings.length) return;
 
+      const requestId = (syncFundQuotes._req = (syncFundQuotes._req || 0) + 1);
       btn.disabled = true;
       btn.classList.add("loading");
 
       try {
+        const sparkPromise = Promise.allSettled(
+          pageHoldings.map((h) => loadIntradayTrends(h))
+        );
         const quotes = await loadQuotes(pageHoldings);
+        if (requestId !== syncFundQuotes._req) return;
 
         let ok = 0;
         const failed = [];
@@ -1581,6 +1586,14 @@
 
         persistFromDom();
 
+        const sparkResults = await sparkPromise;
+        if (requestId !== syncFundQuotes._req) return;
+        const trends = sparkResults.map((result) =>
+          result.status === "fulfilled" ? result.value : null
+        );
+        fundSparkTrends[fundId] = { start, trends };
+        paintFundSparklines(fundId);
+
         if (ok === 0) {
           showToast("未获取到行情，请稍后重试");
           return;
@@ -1596,9 +1609,40 @@
       } catch (err) {
         showToast(err.message || "同步失败");
       } finally {
-        btn.disabled = false;
-        btn.classList.remove("loading");
+        if (requestId === syncFundQuotes._req) {
+          btn.disabled = false;
+          btn.classList.remove("loading");
+        }
       }
+    }
+
+    const fundSparkTrends = {};
+
+    function paintFundSparklines(fundId) {
+      const cached = fundSparkTrends[fundId];
+      if (!cached?.trends?.length) return;
+      const { start, trends } = cached;
+      trends.forEach((trend, offset) => {
+        const i = start + offset;
+        const canvas = document.querySelector(
+          `canvas[data-row-spark][data-fund="${fundId}"][data-index="${i}"]`
+        );
+        if (!canvas) return;
+        if (!trend) {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const dpr = window.devicePixelRatio || 1;
+            const cssW = canvas.clientWidth || 72;
+            const cssH = canvas.clientHeight || 28;
+            canvas.width = Math.round(cssW * dpr);
+            canvas.height = Math.round(cssH * dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, cssW, cssH);
+          }
+          return;
+        }
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
     }
 
     function buildRowsHtml(fund, start, holdings, fundSaved) {
@@ -1629,6 +1673,22 @@
                   ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>` : ""}
               </div>
               ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
+              <div
+                class="row-spark-wrap"
+                role="button"
+                tabindex="0"
+                data-chart-fund="${fund.id}"
+                data-chart-index="${i}"
+                title="查看 ${h.name} 当日分时"
+              >
+                <canvas
+                  class="row-spark"
+                  data-row-spark
+                  data-fund="${fund.id}"
+                  data-index="${i}"
+                  aria-hidden="true"
+                ></canvas>
+              </div>
               <div class="change-field">
                 <input
                   type="number"
@@ -1726,6 +1786,7 @@
             <div class="${headClass}">
               <div>股票名称</div>
               ${viewOnly ? "" : `<div>${ratioLabel}</div>`}
+              <div>走势</div>
               <div>日涨跌幅%</div>
             </div>
             <div class="list-body">
@@ -2158,6 +2219,8 @@
       if (usBoardModal?.classList.contains("show")) {
         redrawUsIndexSparklines();
       }
+      const activeFundId = getActiveFundId();
+      if (activeFundId) paintFundSparklines(activeFundId);
     });
 
     document.addEventListener("input", (e) => {

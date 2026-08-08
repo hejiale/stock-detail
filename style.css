@@ -494,7 +494,33 @@ header p {
 
 .list-head.view-only,
 .row.view-only {
-  grid-template-columns: minmax(0, 1.2fr) 56px minmax(52px, 0.7fr) minmax(0, 25%);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.list-head.view-only > :nth-child(2),
+.list-head.view-only > :nth-child(3),
+.row.view-only > .row-spark-wrap,
+.row.view-only > .row-price {
+  justify-self: stretch;
+  text-align: center;
+}
+
+.row.view-only > .row-spark-wrap {
+  justify-content: center;
+}
+
+.row.view-only > .row-spark {
+  max-width: 72px;
+  margin: 0 auto;
+}
+
+.row.view-only > .row-price {
+  text-align: center;
+}
+
+.list-head.view-only > :nth-child(4),
+.row.view-only > .change-field {
+  justify-self: stretch;
 }
 
 .list-head {

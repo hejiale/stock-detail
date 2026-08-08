@@ -1574,6 +1574,21 @@
           const input = document.querySelector(
             `input[data-fund="${fundId}"][data-index="${i}"]`
           );
+          const priceEl = document.querySelector(
+            `[data-row-price][data-fund="${fundId}"][data-index="${i}"]`
+          );
+          if (priceEl) {
+            priceEl.classList.remove("up", "down");
+            if (quote?.price != null && !Number.isNaN(Number(quote.price))) {
+              const px = Number(quote.price);
+              priceEl.textContent =
+                fund.market === "US" ? "$" + formatPrice(px) : formatPrice(px);
+              if (quote.change > 0) priceEl.classList.add("up");
+              else if (quote.change < 0) priceEl.classList.add("down");
+            } else {
+              priceEl.textContent = "--";
+            }
+          }
 
           if (!quote || !input || Number.isNaN(quote.change)) {
             failed.push(h.name);
@@ -1647,6 +1662,7 @@
 
     function buildRowsHtml(fund, start, holdings, fundSaved) {
       const viewOnly = !!fund.viewOnly;
+      const showPrice = viewOnly;
       const gridClass = viewOnly ? "row view-only" : "row";
       return holdings
         .map((h, offset) => {
@@ -1654,14 +1670,17 @@
           return `
             <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
               <div class="stock-name-cell">
-                <div
-                  class="stock-name"
-                  role="button"
-                  tabindex="0"
-                  data-chart-fund="${fund.id}"
-                  data-chart-index="${i}"
-                  title="查看 ${h.name} 当日分时"
-                >${h.name}</div>
+                <div class="stock-name-main">
+                  <div
+                    class="stock-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="${fund.id}"
+                    data-chart-index="${i}"
+                    title="查看 ${h.name} 当日分时"
+                  >${h.name}</div>
+                  <div class="stock-code">${h.code}</div>
+                </div>
                 ${h.custom ? `
                   <button
                     class="btn-remove-stock"
@@ -1689,6 +1708,7 @@
                   aria-hidden="true"
                 ></canvas>
               </div>
+              ${showPrice ? `<div class="row-price" data-row-price data-fund="${fund.id}" data-index="${i}">--</div>` : ""}
               <div class="change-field">
                 <input
                   type="number"
@@ -1787,6 +1807,7 @@
               <div>股票名称</div>
               ${viewOnly ? "" : `<div>${ratioLabel}</div>`}
               <div>走势</div>
+              ${viewOnly ? "<div>最新价</div>" : ""}
               <div>日涨跌幅%</div>
             </div>
             <div class="list-body">

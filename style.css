@@ -411,10 +411,42 @@ header p {
   min-width: 0;
 }
 
+.stock-name-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .stock-name-cell .stock-name {
   min-width: 0;
   flex: 0 1 auto;
 }
+
+.stock-code {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-price {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.row-price.up { color: var(--up); }
+.row-price.down { color: var(--down); }
+
 
 .btn-remove-stock {
   flex-shrink: 0;
@@ -462,7 +494,7 @@ header p {
 
 .list-head.view-only,
 .row.view-only {
-  grid-template-columns: minmax(0, 1.2fr) 56px minmax(0, 25%);
+  grid-template-columns: minmax(0, 1.2fr) 56px minmax(52px, 0.7fr) minmax(0, 25%);
 }
 
 .list-head {

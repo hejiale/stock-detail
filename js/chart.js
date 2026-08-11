@@ -285,9 +285,15 @@
 
     let chartRequestId = 0;
 
+    function resolveChartHolding(fundId, index) {
+      if (fundId === "hkStocks" && typeof getHkRankHolding === "function") {
+        return getHkRankHolding(index);
+      }
+      return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
+    }
+
     async function openChartModal(fundId, index) {
-      const fund = window.FUND_HOLDINGS[fundId];
-      const holding = fund?.holdings?.[index];
+      const holding = resolveChartHolding(fundId, index);
       if (!holding) return;
 
       const canvas = document.getElementById("chartCanvas");

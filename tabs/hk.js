@@ -149,19 +149,44 @@
           const tone = toneClass(item.change);
           const priceTip =
             item.price == null ? "" : " · HK$" + formatPrice(item.price);
+          const safeName = String(item.name || "").replace(/"/g, "&quot;");
           return `
             <div class="board-row kr-stock-row">
               <div class="board-info">
-                <div class="board-name">${item.name}</div>
+                <div
+                  class="board-name"
+                  role="button"
+                  tabindex="0"
+                  data-chart-fund="hkStocks"
+                  data-chart-index="${i}"
+                  title="查看 ${safeName} 行情与个股资料"
+                >${item.name}</div>
                 <div class="board-meta">${item.code}${priceTip}</div>
               </div>
-              <div class="kr-spark-wrap">
+              <div
+                class="kr-spark-wrap"
+                role="button"
+                tabindex="0"
+                data-chart-fund="hkStocks"
+                data-chart-index="${i}"
+                title="查看 ${safeName} 行情与个股资料"
+              >
                 <canvas class="kr-spark" data-hk-spark="${i}" aria-hidden="true"></canvas>
               </div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
             </div>`;
         })
         .join("");
+    }
+
+    function getHkRankHolding(index) {
+      const item = hkRankState.list?.[index];
+      if (!item) return null;
+      return {
+        name: item.name,
+        code: item.code,
+        market: item.market != null ? item.market : 116
+      };
     }
 
     async function paintHkSparklines(list, requestId) {

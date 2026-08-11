@@ -1735,11 +1735,34 @@ header p {
   grid-template-columns: minmax(0, 1fr) 72px 88px;
 }
 
+.kr-stock-list .board-name[data-chart-fund] {
+  cursor: pointer;
+  color: var(--accent);
+  transition: opacity 0.15s ease;
+}
+
+.kr-stock-list .board-name[data-chart-fund]:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.8;
+}
+
+.kr-stock-list .board-name[data-chart-fund]:focus-visible,
+.kr-stock-list .kr-spark-wrap[data-chart-fund]:focus-visible {
+  outline: 2px solid rgba(22, 119, 255, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .kr-spark-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
+}
+
+.kr-spark-wrap[data-chart-fund] {
+  cursor: pointer;
 }
 
 .kr-spark {

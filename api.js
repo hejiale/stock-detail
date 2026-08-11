@@ -1367,13 +1367,14 @@
    * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=100]
    */
-  async function loadUsStockRank(kind = "gainers", limit = 20) {
+  async function loadUsStockRank(kind = "gainers", limit = 100) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 100));
     const { list } = await fetchEastClist({
       fs: "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
       fields: "f12,f14,f2,f3",
-      pz: Math.max(limit, 20),
+      pz: take,
       po: kind === "losers" ? 0 : 1
     });
 
@@ -1393,7 +1394,7 @@
         };
       })
       .filter(Boolean)
-      .slice(0, limit);
+      .slice(0, take);
   }
 
   /**
@@ -1401,10 +1402,10 @@
    * GET {push2}/api/qt/clist/get  fs=m:177  fid=f3
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=100]
    */
-  async function loadKrStockRank(kind = "gainers", limit = 20) {
-    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+  async function loadKrStockRank(kind = "gainers", limit = 100) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 100));
     const { list } = await fetchEastClist({
       fs: "m:177",
       fields: "f12,f13,f14,f2,f3",

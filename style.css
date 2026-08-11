@@ -1580,6 +1580,7 @@ header p {
 .kr-stock-head {
   padding-left: 16px;
   padding-right: 16px;
+  grid-template-columns: 36px minmax(0, 1fr) 72px 88px;
 }
 
 .kr-rank-body {
@@ -1588,9 +1589,25 @@ header p {
   padding: 0 8px 12px;
 }
 
-.kr-stock-list .board-row {
+.kr-stock-list .board-row,
+.kr-stock-list .kr-stock-row {
   padding-left: 8px;
   padding-right: 8px;
+  grid-template-columns: 36px minmax(0, 1fr) 72px 88px;
+}
+
+.kr-spark-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.kr-spark {
+  display: block;
+  width: 100%;
+  max-width: 72px;
+  height: 28px;
 }
 
 /* 个股资料弹层 */

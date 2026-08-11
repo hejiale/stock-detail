@@ -176,8 +176,8 @@
         <div class="us-section">
           <div class="us-section-title">个股排行</div>
           <div class="board-tabs us-rank-tabs">
-            <button class="board-tab active" type="button" data-us-rank="gainers">涨幅榜</button>
-            <button class="board-tab" type="button" data-us-rank="losers">跌幅榜</button>
+            <button class="board-tab active" type="button" data-us-rank="gainers">涨幅前100</button>
+            <button class="board-tab" type="button" data-us-rank="losers">跌幅前100</button>
           </div>
           <div class="board-list-head us-stock-head">
             <div>#</div>
@@ -1548,7 +1548,7 @@
       openUsBoardModal._rank = kind;
 
       try {
-        const list = await loadUsStockRank(kind, 20);
+        const list = await loadUsStockRank(kind, 100);
         if (requestId !== loadUsRankKind._req) return;
         openUsBoardModal._stocks = list;
         renderUsStockRank(list);
@@ -1605,19 +1605,20 @@
             <div class="fund-meta">
               <div class="fund-meta-text">
                 <div class="name">韩股涨跌榜</div>
-                <div class="sub" id="krRankSub">KOSPI / KOSDAQ · 涨跌幅前 20</div>
+                <div class="sub" id="krRankSub">KOSPI / KOSDAQ · 涨跌幅前 100</div>
               </div>
               <button class="btn-sync" type="button" data-kr-refresh title="刷新涨跌榜" aria-label="刷新涨跌榜">
                 <img src="assets/pull.png" alt="刷新" />
               </button>
             </div>
             <div class="board-tabs kr-rank-tabs">
-              <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-kr-rank="gainers">涨幅前20</button>
-              <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-kr-rank="losers">跌幅前20</button>
+              <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-kr-rank="gainers">涨幅前100</button>
+              <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-kr-rank="losers">跌幅前100</button>
             </div>
             <div class="board-list-head us-stock-head kr-stock-head">
               <div>#</div>
               <div>股票</div>
+              <div style="text-align:center">走势</div>
               <div style="text-align:right">涨跌幅%</div>
             </div>
             <div class="kr-rank-body">
@@ -1641,16 +1642,60 @@
           const priceTip =
             item.price == null ? "" : " · ₩" + formatPrice(item.price);
           return `
-            <div class="board-row">
+            <div class="board-row kr-stock-row">
               <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name">${item.name}</div>
                 <div class="board-meta">${item.code}${priceTip}</div>
               </div>
+              <div class="kr-spark-wrap">
+                <canvas class="kr-spark" data-kr-spark="${i}" aria-hidden="true"></canvas>
+              </div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
             </div>`;
         })
         .join("");
+    }
+
+    async function paintKrSparklines(list, requestId) {
+      const results = await Promise.allSettled(
+        list.map((item) =>
+          loadIntradayTrends({
+            code: item.code,
+            market: item.market != null ? item.market : 177,
+            name: item.name
+          })
+        )
+      );
+      if (requestId != null && requestId !== loadKrRankKind._req) return;
+
+      const trends = results.map((result) =>
+        result.status === "fulfilled" ? result.value : null
+      );
+      krRankState.trends = trends;
+      redrawKrSparklines();
+    }
+
+    function redrawKrSparklines() {
+      const trends = krRankState.trends;
+      if (!trends?.length) return;
+      trends.forEach((trend, i) => {
+        const canvas = document.querySelector(`[data-kr-spark="${i}"]`);
+        if (!canvas) return;
+        if (!trend?.points?.length) {
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const dpr = window.devicePixelRatio || 1;
+          const cssW = canvas.clientWidth || 72;
+          const cssH = canvas.clientHeight || 28;
+          canvas.width = Math.round(cssW * dpr);
+          canvas.height = Math.round(cssH * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, cssW, cssH);
+          return;
+        }
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
     }
 
     async function loadKrRankKind(kind, { force = false } = {}) {
@@ -1661,10 +1706,12 @@
         });
         renderKrStockRank(krRankState.list);
         setStatus("krBoardStatus", "");
+        requestAnimationFrame(() => redrawKrSparklines());
         return;
       }
 
       krRankState.kind = next;
+      krRankState.trends = null;
       document.querySelectorAll("[data-kr-rank]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.krRank === next);
       });
@@ -1675,24 +1722,31 @@
       if (listEl) listEl.innerHTML = "";
       setStatus(
         "krBoardStatus",
-        next === "losers" ? "加载跌幅前20…" : "加载涨幅前20…"
+        next === "losers" ? "加载跌幅前100…" : "加载涨幅前100…"
       );
       if (subEl) {
         subEl.textContent =
           next === "losers"
-            ? "KOSPI / KOSDAQ · 跌幅前 20"
-            : "KOSPI / KOSDAQ · 涨幅前 20";
+            ? "KOSPI / KOSDAQ · 跌幅前 100"
+            : "KOSPI / KOSDAQ · 涨幅前 100";
       }
 
       try {
-        const list = await loadKrStockRank(next, 20);
+        const list = await loadKrStockRank(next, 100);
         if (requestId !== loadKrRankKind._req) return;
         krRankState.list = list;
         renderKrStockRank(list);
         setStatus("krBoardStatus", list.length ? "" : "暂无韩股数据");
+        if (list.length) {
+          requestAnimationFrame(() => {
+            if (requestId !== loadKrRankKind._req) return;
+            paintKrSparklines(list, requestId).catch(() => {});
+          });
+        }
       } catch (err) {
         if (requestId !== loadKrRankKind._req) return;
         krRankState.list = [];
+        krRankState.trends = null;
         if (listEl) listEl.innerHTML = "";
         setStatus("krBoardStatus", err?.message || "韩股涨跌榜加载失败，请稍后重试");
       }
@@ -2416,7 +2470,8 @@
         redrawUsIndexSparklines();
       }
       const activeFundId = getActiveFundId();
-      if (activeFundId) paintFundSparklines(activeFundId);
+      if (activeFundId === "krStocks") redrawKrSparklines();
+      else if (activeFundId) paintFundSparklines(activeFundId);
     });
 
     document.addEventListener("input", (e) => {

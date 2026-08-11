@@ -1572,6 +1572,27 @@ header p {
   flex-direction: column;
 }
 
+/* 韩股涨跌榜页签 */
+.kr-rank-tabs {
+  padding: 12px 16px 6px;
+}
+
+.kr-stock-head {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.kr-rank-body {
+  position: relative;
+  min-height: 220px;
+  padding: 0 8px 12px;
+}
+
+.kr-stock-list .board-row {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 /* 个股资料弹层 */
 .profile-modal {
   z-index: 120;

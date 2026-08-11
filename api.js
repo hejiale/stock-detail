@@ -1396,6 +1396,43 @@
       .slice(0, limit);
   }
 
+  /**
+   * 韩股涨幅榜 / 跌幅榜（东财 market=177，取前 limit 只）
+   * GET {push2}/api/qt/clist/get  fs=m:177  fid=f3
+   *
+   * @param {"gainers"|"losers"} kind
+   * @param {number} [limit=20]
+   */
+  async function loadKrStockRank(kind = "gainers", limit = 20) {
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const { list } = await fetchEastClist({
+      fs: "m:177",
+      fields: "f12,f13,f14,f2,f3",
+      pz: take,
+      po: kind === "losers" ? 0 : 1
+    });
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        const price = Number(item.f2);
+        if (Number.isNaN(change)) return null;
+        const market = item.f13 != null ? Number(item.f13) : 177;
+        return {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: round2(change),
+          market: Number.isNaN(market) ? 177 : market
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+  }
+
   global.MarketAPI = {
     // 工具
     quoteKey,
@@ -1417,6 +1454,7 @@
     loadUsIndices,
     loadUsSectorBoards,
     loadUsStockRank,
+    loadKrStockRank,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

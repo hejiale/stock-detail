@@ -262,6 +262,7 @@
       loadCnIndices,
       loadUsIndices,
       loadUsStockRank,
+      loadKrStockRank,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock
@@ -273,6 +274,7 @@
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
       { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
+      { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin", "huabao", "fuguo"];
@@ -330,7 +332,13 @@
 
     function getActiveFundId() {
       if (activeMainTab === "funds") return activeWatchFundId;
-      return activeMainTab === "usSemi" ? "usSemi" : "cnSemi";
+      if (activeMainTab === "usSemi") return "usSemi";
+      if (activeMainTab === "krStocks") return "krStocks";
+      return "cnSemi";
+    }
+
+    function isKrTab(id) {
+      return id === "krStocks";
     }
 
     function rerender(activeFundId) {
@@ -1585,7 +1593,116 @@
       setStatus("usBoardStatus", "");
     }
 
+    const krRankState = { kind: "gainers" };
+
+    function buildKrPanelElement(isActive) {
+      const panel = document.createElement("section");
+      panel.className = "panel" + (isActive ? " active" : "");
+      panel.dataset.panel = "krStocks";
+      const kind = krRankState.kind || "gainers";
+      panel.innerHTML = `
+          <div class="fund-card kr-rank-card">
+            <div class="fund-meta">
+              <div class="fund-meta-text">
+                <div class="name">韩股涨跌榜</div>
+                <div class="sub" id="krRankSub">KOSPI / KOSDAQ · 涨跌幅前 20</div>
+              </div>
+              <button class="btn-sync" type="button" data-kr-refresh title="刷新涨跌榜" aria-label="刷新涨跌榜">
+                <img src="assets/pull.png" alt="刷新" />
+              </button>
+            </div>
+            <div class="board-tabs kr-rank-tabs">
+              <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-kr-rank="gainers">涨幅前20</button>
+              <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-kr-rank="losers">跌幅前20</button>
+            </div>
+            <div class="board-list-head us-stock-head kr-stock-head">
+              <div>#</div>
+              <div>股票</div>
+              <div style="text-align:right">涨跌幅%</div>
+            </div>
+            <div class="kr-rank-body">
+              <div class="us-stock-list kr-stock-list" id="krStockList"></div>
+              <div class="board-status show" id="krBoardStatus">加载中…</div>
+            </div>
+          </div>`;
+      return panel;
+    }
+
+    function renderKrStockRank(list) {
+      const wrap = document.getElementById("krStockList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const tone = toneClass(item.change);
+          const priceTip =
+            item.price == null ? "" : " · ₩" + formatPrice(item.price);
+          return `
+            <div class="board-row">
+              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
+              <div class="board-info">
+                <div class="board-name">${item.name}</div>
+                <div class="board-meta">${item.code}${priceTip}</div>
+              </div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadKrRankKind(kind, { force = false } = {}) {
+      const next = kind === "losers" ? "losers" : "gainers";
+      if (!force && krRankState.kind === next && krRankState.list?.length) {
+        document.querySelectorAll("[data-kr-rank]").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.krRank === next);
+        });
+        renderKrStockRank(krRankState.list);
+        setStatus("krBoardStatus", "");
+        return;
+      }
+
+      krRankState.kind = next;
+      document.querySelectorAll("[data-kr-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.krRank === next);
+      });
+
+      const requestId = (loadKrRankKind._req = (loadKrRankKind._req || 0) + 1);
+      const listEl = document.getElementById("krStockList");
+      const subEl = document.getElementById("krRankSub");
+      if (listEl) listEl.innerHTML = "";
+      setStatus(
+        "krBoardStatus",
+        next === "losers" ? "加载跌幅前20…" : "加载涨幅前20…"
+      );
+      if (subEl) {
+        subEl.textContent =
+          next === "losers"
+            ? "KOSPI / KOSDAQ · 跌幅前 20"
+            : "KOSPI / KOSDAQ · 涨幅前 20";
+      }
+
+      try {
+        const list = await loadKrStockRank(next, 20);
+        if (requestId !== loadKrRankKind._req) return;
+        krRankState.list = list;
+        renderKrStockRank(list);
+        setStatus("krBoardStatus", list.length ? "" : "暂无韩股数据");
+      } catch (err) {
+        if (requestId !== loadKrRankKind._req) return;
+        krRankState.list = [];
+        if (listEl) listEl.innerHTML = "";
+        setStatus("krBoardStatus", err?.message || "韩股涨跌榜加载失败，请稍后重试");
+      }
+    }
+
     async function syncFundQuotes(fundId) {
+      if (isKrTab(fundId)) {
+        await loadKrRankKind(krRankState.kind || "gainers", { force: true });
+        return;
+      }
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
       if (!btn) return;
 
@@ -1915,6 +2032,7 @@
         panels.appendChild(buildPanelElement(fund, fund.id === activeFundId));
         updatePagerUI(fund.id);
       });
+      panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       applyAllChangeColors();
     }
 
@@ -2070,6 +2188,8 @@
         }
       } else if (tabOrFundId === "usSemi") {
         activeMainTab = "usSemi";
+      } else if (tabOrFundId === "krStocks") {
+        activeMainTab = "krStocks";
       } else {
         activeMainTab = "cnSemi";
       }
@@ -2106,6 +2226,17 @@
       const usRankBtn = e.target.closest("[data-us-rank]");
       if (usRankBtn) {
         loadUsRankKind(usRankBtn.dataset.usRank);
+        return;
+      }
+
+      const krRankBtn = e.target.closest("[data-kr-rank]");
+      if (krRankBtn) {
+        loadKrRankKind(krRankBtn.dataset.krRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-kr-refresh]")) {
+        loadKrRankKind(krRankState.kind || "gainers", { force: true });
         return;
       }
 

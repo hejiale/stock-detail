@@ -21,38 +21,6 @@
   /** 东方财富接口常用 ut 参数（公开行情页同款） */
   const EAST_UT = "fa5fd1943c7b386f172d6893dbfba10b";
 
-  /** 后端服务基址 */
-  const API_BASE = "https://stock-backdev-production.up.railway.app";
-
-  /**
-   * 探测后端连通性：GET /api/users
-   */
-  async function fetchUsers() {
-    const url = `${API_BASE}/api/users`;
-    console.log("[API] fetchUsers 请求:", url);
-    try {
-      const resp = await fetch(url, {
-        headers: { Accept: "application/json" }
-      });
-      console.log("[API] fetchUsers 状态:", resp.status, resp.statusText);
-      const text = await resp.text();
-      let data = text;
-      try {
-        data = JSON.parse(text);
-      } catch (_) {
-        /* 非 JSON 时保留原文 */
-      }
-      console.log("[API] fetchUsers 响应:", data);
-      return data;
-    } catch (err) {
-      console.error("[API] fetchUsers 失败（可能跨域或服务不可达）:", err);
-      throw err;
-    }
-  }
-
-  // 页面加载时探测一次后端连通性，便于在控制台查看
-  fetchUsers().catch(() => {});
-
   /**
    * 实时/分时主机：push2 部分网络会 TLS 中断，delay 作兜底
    * 日 K 主机：push2his 为主，delay 仅作连通性兜底（可能无 klines）
@@ -1434,9 +1402,7 @@
     toEastSecId,
     toSinaSymbol,
     isUsHolding,
-    API_BASE,
     // 请求
-    fetchUsers,
     loadQuotes,
     loadEastMoneyQuotes,
     loadSinaQuotes,

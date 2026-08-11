@@ -1,0 +1,33 @@
+<div class="board-modal" id="boardModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-board-close></div>
+    <div class="board-modal-panel" role="dialog" aria-modal="true" aria-labelledby="boardModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="boardModalName">A股板块涨幅</div>
+          <div class="sub" id="boardModalSub">按涨跌幅排序</div>
+        </div>
+        <button class="board-modal-close" type="button" data-board-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-modal-body cn-board-body">
+        <div class="market-breadth" id="cnMarketBreadth" hidden></div>
+        <div class="cn-section">
+          <div class="cn-section-title">市场指数</div>
+          <div class="cn-index-grid" id="cnIndexGrid"></div>
+        </div>
+        <div class="cn-section">
+          <div class="cn-section-title">行业板块</div>
+          <div class="board-list-head">
+            <div>#</div>
+            <div>板块名称</div>
+            <div style="text-align:right">涨跌幅%</div>
+          </div>
+          <div id="boardList"></div>
+        </div>
+        <div class="board-status show" id="boardStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

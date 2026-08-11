@@ -1,0 +1,56 @@
+<div class="board-modal profile-modal" id="profileModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-profile-close></div>
+    <div class="board-modal-panel profile-panel" role="dialog" aria-modal="true" aria-labelledby="profileModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="profileModalName">--</div>
+          <div class="sub" id="profileModalSub">个股资料</div>
+        </div>
+        <button class="board-modal-close" type="button" data-profile-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="profile-mcap" id="profileMcap">
+        <div class="profile-mcap-item">
+          <div class="label">总市值</div>
+          <div class="value" id="profileTotalMcap">--</div>
+        </div>
+        <div class="profile-mcap-item">
+          <div class="label">流通市值</div>
+          <div class="value" id="profileFloatMcap">--</div>
+        </div>
+      </div>
+      <div class="board-tabs" id="profileTabs">
+        <button class="board-tab active" type="button" data-profile-kind="all">全部</button>
+        <button class="board-tab" type="button" data-profile-kind="annual">年度</button>
+        <button class="board-tab" type="button" data-profile-kind="quarter">季度</button>
+      </div>
+      <div class="profile-list-head">
+        <div>报告期</div>
+        <div style="text-align:right">营收</div>
+        <div style="text-align:right">净利润</div>
+        <div style="text-align:right">负债率</div>
+      </div>
+      <div class="board-modal-body profile-body">
+        <div id="profileList"></div>
+        <div class="profile-section" id="profileHoldersSection">
+          <div class="profile-section-head">
+            <div class="profile-section-title">前十大股东</div>
+            <div class="profile-section-sub" id="profileHoldersDate"></div>
+          </div>
+          <div class="profile-change-summary" id="profileChangeSummary" hidden></div>
+          <div class="profile-holders-head">
+            <div>#</div>
+            <div>股东名称</div>
+            <div style="text-align:right">持股%</div>
+            <div style="text-align:right">加减仓</div>
+          </div>
+          <div id="profileHolders"></div>
+          <div class="profile-holders-empty" id="profileHoldersEmpty"></div>
+        </div>
+        <div class="board-status show" id="profileStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

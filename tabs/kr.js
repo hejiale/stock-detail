@@ -125,7 +125,6 @@
               <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-kr-rank="losers">跌幅前100</button>
             </div>
             <div class="board-list-head us-stock-head kr-stock-head">
-              <div>#</div>
               <div>股票</div>
               <div style="text-align:center">走势</div>
               <div style="text-align:right">涨跌幅%</div>
@@ -152,7 +151,6 @@
             item.price == null ? "" : " · ₩" + formatPrice(item.price);
           return `
             <div class="board-row kr-stock-row">
-              <div class="board-rank${i < 3 ? " top" : ""}">${i + 1}</div>
               <div class="board-info">
                 <div class="board-name">${item.name}</div>
                 <div class="board-meta">${item.code}${priceTip}</div>

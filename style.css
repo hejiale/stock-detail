@@ -1692,7 +1692,7 @@ header p {
 .kr-stock-head {
   padding-left: 16px;
   padding-right: 16px;
-  grid-template-columns: 36px minmax(0, 1fr) 72px 88px;
+  grid-template-columns: minmax(0, 1fr) 72px 88px;
 }
 
 .kr-rank-body {
@@ -1705,7 +1705,7 @@ header p {
 .kr-stock-list .kr-stock-row {
   padding-left: 8px;
   padding-right: 8px;
-  grid-template-columns: 36px minmax(0, 1fr) 72px 88px;
+  grid-template-columns: minmax(0, 1fr) 72px 88px;
 }
 
 .kr-spark-wrap {

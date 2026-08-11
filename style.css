@@ -415,13 +415,15 @@ header p {
 .stock-name-cell {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: flex-start;
+  gap: 4px;
   min-width: 0;
 }
 
 .stock-name-main {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-width: calc(100% - 26px);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -430,6 +432,12 @@ header p {
 .stock-name-cell .stock-name {
   min-width: 0;
   flex: 0 1 auto;
+}
+
+.stock-name-cell .btn-add-watch,
+.stock-name-cell .btn-remove-stock {
+  flex: 0 0 auto;
+  align-self: center;
 }
 
 .stock-code {
@@ -517,7 +525,7 @@ header p {
 }
 
 .stock-name-cell .btn-add-watch {
-  margin-left: 2px;
+  margin-left: 0;
 }
 
 .row.is-custom {
@@ -1471,16 +1479,19 @@ header p {
 .rank-board-info {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: 4px;
   min-width: 0;
 }
 
 .rank-board-text {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-width: calc(100% - 26px);
 }
 
 .rank-board-info .btn-add-watch {
+  flex: 0 0 auto;
   width: 20px;
   height: 20px;
 }

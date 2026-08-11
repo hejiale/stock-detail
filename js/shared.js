@@ -6,6 +6,7 @@
       loadStockProfile,
       loadCnSectorBoards,
       loadCnSectorStocks,
+      loadCnStockRank,
       loadCnIndices,
       loadUsIndices,
       loadUsStockRank,
@@ -21,6 +22,11 @@
     const STORAGE_KEY = "fund_daily_returns_v1";
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
     const CUSTOMIZABLE_FUNDS = new Set(["cnSemi", "usSemi"]);
+    const RANK_FUNDS = new Set(["cnSemi", "usSemi"]);
+    const semiRankState = {
+      cnSemi: { kind: "gainers", list: null },
+      usSemi: { kind: "gainers", list: null }
+    };
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
       { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
@@ -61,18 +67,47 @@
       saveJson(CUSTOM_STOCKS_KEY, all);
     }
 
-    /** 把本地自选插到默认列表前面 */
+    function isRankFund(fundId) {
+      return RANK_FUNDS.has(fundId);
+    }
+
+    function getSemiRankKind(fundId) {
+      return semiRankState[fundId]?.kind === "losers" ? "losers" : "gainers";
+    }
+
+    function rankLabel(kind) {
+      return kind === "losers" ? "跌幅前100" : "涨幅前100";
+    }
+
+    /** 自选置顶，下方接涨跌榜（排除已在自选中的代码） */
     function applyCustomHoldings() {
       CUSTOMIZABLE_FUNDS.forEach((fundId) => {
         const fund = window.FUND_HOLDINGS[fundId];
         if (!fund) return;
-        if (!fund._defaultHoldings) {
-          fund._defaultHoldings = fund.holdings.slice();
-        }
+
         const custom = (loadCustomStocks()[fundId] || []).map((h) => ({
           ...h,
           custom: true
         }));
+        const customKeys = new Set(custom.map((h) => quoteKey(h.code)));
+
+        if (isRankFund(fundId)) {
+          const rankList = fund._rankHoldings || [];
+          const ranked = rankList
+            .filter((h) => !customKeys.has(quoteKey(h.code)))
+            .map((h) => ({
+              name: h.name,
+              code: h.code,
+              market: h.market,
+              ratio: fund.market === "US" ? 5 : 1
+            }));
+          fund.holdings = [...custom, ...ranked];
+          return;
+        }
+
+        if (!fund._defaultHoldings) {
+          fund._defaultHoldings = fund.holdings.slice();
+        }
         fund.holdings = [...custom, ...fund._defaultHoldings];
       });
     }
@@ -100,6 +135,7 @@
     }
 
     function getTotalPages(fund) {
+      if (isRankFund(fund.id)) return 1;
       return Math.max(1, Math.ceil(fund.holdings.length / PAGE_SIZE));
     }
 
@@ -113,9 +149,12 @@
       pageState[fundId] = Math.min(Math.max(1, page), total);
     }
 
-    /** 当前页持仓切片（最多 PAGE_SIZE 条） */
+    /** 当前页持仓切片；涨跌榜页签一次展示全部 */
     function getPageSlice(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
+      if (isRankFund(fundId)) {
+        return { fund, page: 1, start: 0, holdings: fund.holdings };
+      }
       const page = getCurrentPage(fundId);
       const start = (page - 1) * PAGE_SIZE;
       const holdings = fund.holdings.slice(start, start + PAGE_SIZE);
@@ -143,7 +182,7 @@
     }
 
     function buildPagerHtml(fund) {
-      if (fund.holdings.length <= PAGE_SIZE) return "";
+      if (isRankFund(fund.id) || fund.holdings.length <= PAGE_SIZE) return "";
 
       const total = getTotalPages(fund);
       const pageBtns = Array.from({ length: total }, (_, i) => {
@@ -269,4 +308,3 @@
       modal.setAttribute("aria-hidden", "true");
       syncBodyScroll();
     }
-

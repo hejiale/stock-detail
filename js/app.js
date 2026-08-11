@@ -70,11 +70,8 @@
         const existsCustom = list.some(
           (h) => quoteKey(h.code) === quoteKey(stock.code)
         );
-        const existsDefault = (fund._defaultHoldings || fund.holdings).some(
-          (h) => quoteKey(h.code) === quoteKey(stock.code)
-        );
-        if (existsCustom || existsDefault) {
-          showToast(`${stock.name}（${stock.code}）已在列表中`);
+        if (existsCustom) {
+          showToast(`${stock.name}（${stock.code}）已在自选中`);
           return;
         }
 
@@ -190,9 +187,17 @@
         return;
       }
 
-      const usRankBtn = e.target.closest("[data-us-rank]");
-      if (usRankBtn) {
-        loadUsRankKind(usRankBtn.dataset.usRank);
+      const semiRankBtn = e.target.closest("[data-semi-rank]");
+      if (semiRankBtn) {
+        const fundId = semiRankBtn.dataset.semiFund;
+        if (isRankFund(fundId)) {
+          if (!semiRankState[fundId]) {
+            semiRankState[fundId] = { kind: "gainers" };
+          }
+          semiRankState[fundId].kind =
+            semiRankBtn.dataset.semiRank === "losers" ? "losers" : "gainers";
+          syncFundQuotes(fundId);
+        }
         return;
       }
 

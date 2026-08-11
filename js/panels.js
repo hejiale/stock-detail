@@ -1,23 +1,106 @@
+    async function loadSemiRankKind(fundId, kind, { force = false } = {}) {
+      if (!isRankFund(fundId)) return;
+      const fund = window.FUND_HOLDINGS[fundId];
+      if (!fund) return;
+
+      const next = kind === "losers" ? "losers" : "gainers";
+      const state = semiRankState[fundId] || (semiRankState[fundId] = { kind: "gainers" });
+
+      if (!force && state.kind === next && fund._rankHoldings?.length) {
+        state.kind = next;
+        document.querySelectorAll(`[data-semi-rank][data-semi-fund="${fundId}"]`).forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.semiRank === next);
+        });
+        applyCustomHoldings();
+        renderFundPanel(fundId);
+        return;
+      }
+
+      state.kind = next;
+      document.querySelectorAll(`[data-semi-rank][data-semi-fund="${fundId}"]`).forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.semiRank === next);
+      });
+
+      const requestId = (loadSemiRankKind._req = (loadSemiRankKind._req || 0) + 1);
+      const subEl = document.querySelector(`[data-panel="${fundId}"] .fund-meta .sub`);
+      if (subEl) {
+        subEl.textContent =
+          next === "losers" ? "加载跌幅前100…" : "加载涨幅前100…";
+      }
+
+      try {
+        const list =
+          fundId === "usSemi"
+            ? await loadUsStockRank(next, 100)
+            : await loadCnStockRank(next, 100);
+        if (requestId !== loadSemiRankKind._req) return;
+        fund._rankHoldings = list;
+        state.list = list;
+        applyCustomHoldings();
+        renderFundPanel(fundId);
+      } catch (err) {
+        if (requestId !== loadSemiRankKind._req) return;
+        fund._rankHoldings = fund._rankHoldings || [];
+        applyCustomHoldings();
+        renderFundPanel(fundId);
+        throw err;
+      }
+    }
+
     async function syncFundQuotes(fundId) {
       if (isKrTab(fundId)) {
         await loadKrRankKind(krRankState.kind || "gainers", { force: true });
         return;
       }
-      const btn = document.querySelector(`[data-sync="${fundId}"]`);
-      if (!btn) return;
 
-      const { fund, start, holdings: pageHoldings } = getPageSlice(fundId);
-      if (!pageHoldings.length) return;
+      const btn = document.querySelector(`[data-sync="${fundId}"]`);
+      if (!btn && !isRankFund(fundId)) return;
 
       const requestId = (syncFundQuotes._req = (syncFundQuotes._req || 0) + 1);
-      btn.disabled = true;
-      btn.classList.add("loading");
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add("loading");
+      }
 
       try {
+        if (isRankFund(fundId)) {
+          await loadSemiRankKind(fundId, getSemiRankKind(fundId), { force: true });
+          if (requestId !== syncFundQuotes._req) return;
+        }
+
+        const syncBtn = document.querySelector(`[data-sync="${fundId}"]`);
+        if (syncBtn) {
+          syncBtn.disabled = true;
+          syncBtn.classList.add("loading");
+        }
+
+        const { fund, start, holdings: pageHoldings } = getPageSlice(fundId);
+        if (!pageHoldings.length) {
+          if (isRankFund(fundId)) {
+            showToast("暂无涨跌榜数据");
+          }
+          return;
+        }
+
         const sparkPromise = Promise.allSettled(
           pageHoldings.map((h) => loadIntradayTrends(h))
         );
-        const quotes = await loadQuotes(pageHoldings);
+
+        // 涨跌榜行已有涨跌幅；自选股再拉实时行情
+        const rankQuoteMap = {};
+        if (isRankFund(fundId) && fund._rankHoldings?.length) {
+          fund._rankHoldings.forEach((item) => {
+            rankQuoteMap[quoteKey(item.code)] = {
+              name: item.name,
+              price: item.price,
+              change: item.change
+            };
+          });
+        }
+        const needQuotes = isRankFund(fundId)
+          ? pageHoldings.filter((h) => h.custom)
+          : pageHoldings;
+        const liveQuotes = needQuotes.length ? await loadQuotes(needQuotes) : {};
         if (requestId !== syncFundQuotes._req) return;
 
         let ok = 0;
@@ -25,7 +108,10 @@
 
         pageHoldings.forEach((h, offset) => {
           const i = start + offset;
-          const quote = quotes[h.code] || quotes[quoteKey(h.code)];
+          const quote =
+            liveQuotes[h.code] ||
+            liveQuotes[quoteKey(h.code)] ||
+            rankQuoteMap[quoteKey(h.code)];
           const input = document.querySelector(
             `input[data-fund="${fundId}"][data-index="${i}"]`
           );
@@ -45,11 +131,11 @@
             }
           }
 
-          if (!quote || !input || Number.isNaN(quote.change)) {
+          if (!quote || !input || Number.isNaN(Number(quote.change))) {
             failed.push(h.name);
             return;
           }
-          input.value = quote.change.toFixed(2);
+          input.value = Number(quote.change).toFixed(2);
           applyChangeColor(input);
           ok += 1;
         });
@@ -80,8 +166,11 @@
         showToast(err.message || "同步失败");
       } finally {
         if (requestId === syncFundQuotes._req) {
-          btn.disabled = false;
-          btn.classList.remove("loading");
+          const syncBtn = document.querySelector(`[data-sync="${fundId}"]`);
+          if (syncBtn) {
+            syncBtn.disabled = false;
+            syncBtn.classList.remove("loading");
+          }
         }
       }
     }
@@ -119,10 +208,33 @@
       const viewOnly = !!fund.viewOnly;
       const showPrice = viewOnly;
       const gridClass = viewOnly ? "row view-only" : "row";
+      const kind = isRankFund(fund.id) ? getSemiRankKind(fund.id) : null;
+      const rankSectionLabel = kind ? rankLabel(kind) : "";
+
       return holdings
         .map((h, offset) => {
           const i = start + offset;
+          const prev =
+            offset > 0
+              ? holdings[offset - 1]
+              : start > 0
+                ? fund.holdings[start - 1]
+                : null;
+          const showCustomLabel =
+            isRankFund(fund.id) && h.custom && (!prev || !prev.custom);
+          const showRankLabel =
+            isRankFund(fund.id) && !h.custom && (!prev || prev.custom);
+          const sectionHtml = [
+            showCustomLabel
+              ? `<div class="list-section-label custom-section">我的自选</div>`
+              : "",
+            showRankLabel
+              ? `<div class="list-section-label rank-section">${rankSectionLabel}</div>`
+              : ""
+          ].join("");
+
           return `
+            ${sectionHtml}
             <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
               <div class="stock-name-cell">
                 <div class="stock-name-main">
@@ -204,9 +316,22 @@
       const fundSaved = loadInputs()[fund.id] || {};
       const viewOnly = !!fund.viewOnly;
       const ratioLabel = viewOnly ? "参考权重" : "持仓比例";
-      const metaSub = viewOnly
-        ? `共 ${fund.holdings.length} 只${fund.market === "US" ? "美股" : "A股"}半导体 · 仅查看涨跌`
-        : `代码 ${fund.fundCode} · 前十大合计 ${fund.top10Total.toFixed(2)}%`;
+      const isRank = isRankFund(fund.id);
+      const kind = isRank ? getSemiRankKind(fund.id) : null;
+      const customCount = fund.holdings.filter((h) => h.custom).length;
+      const rankCount = fund._rankHoldings?.length || 0;
+      let metaSub;
+      if (isRank) {
+        const marketTip = fund.market === "US" ? "美股" : "沪深京 A 股";
+        const customTip = customCount ? `自选 ${customCount} · ` : "";
+        metaSub = rankCount
+          ? `${customTip}${marketTip} · ${rankLabel(kind)}`
+          : `${customTip}${marketTip} · 加载中…`;
+      } else if (viewOnly) {
+        metaSub = `共 ${fund.holdings.length} 只股票 · 仅查看涨跌`;
+      } else {
+        metaSub = `代码 ${fund.fundCode} · 前十大合计 ${fund.top10Total.toFixed(2)}%`;
+      }
       const headClass = viewOnly ? "list-head view-only" : "list-head";
       const { start, holdings: pageHoldings } = getPageSlice(fund.id);
 
@@ -246,8 +371,16 @@
             </div>`
         : "";
 
+      const rankTabsHtml = isRank
+        ? `
+            <div class="board-tabs semi-rank-tabs">
+              <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-semi-rank="gainers" data-semi-fund="${fund.id}">涨幅前100</button>
+              <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-semi-rank="losers" data-semi-fund="${fund.id}">跌幅前100</button>
+            </div>`
+        : "";
+
       panel.innerHTML = `
-          <div class="fund-card">
+          <div class="fund-card${isRank ? " semi-rank-card" : ""}">
             <div class="fund-meta">
               <div class="fund-meta-text">
                 <div class="name">${fund.fundName}</div>
@@ -258,6 +391,7 @@
               </button>
             </div>
             ${addStockHtml}
+            ${rankTabsHtml}
             <div class="${headClass}">
               <div>股票名称</div>
               ${viewOnly ? "" : `<div>${ratioLabel}</div>`}
@@ -320,4 +454,3 @@
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       applyAllChangeColors();
     }
-

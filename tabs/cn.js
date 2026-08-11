@@ -116,10 +116,26 @@
         .map((item, i) => {
           const tone = toneClass(item.change);
           const arrow = chgArrowHtml(item.change);
+          const safeName = String(item.name || item.code || "").replace(
+            /"/g,
+            "&quot;"
+          );
           return `
             <div class="board-row board-stock-row">
               <div class="board-info">
-                <div class="board-name">${item.name}</div>
+                <div class="board-name-row">
+                  <div class="board-name">${item.name}</div>
+                  <button
+                    class="btn-add-watch"
+                    type="button"
+                    data-add-watch="cnSemi"
+                    data-watch-code="${item.code}"
+                    data-watch-name="${safeName}"
+                    data-watch-type="1"
+                    title="加入自选"
+                    aria-label="加入自选 ${safeName}"
+                  ><img src="assets/add_zixuan.png" alt="自选" /></button>
+                </div>
                 <div class="board-meta">${i + 1} · ${item.code}</div>
               </div>
               <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>

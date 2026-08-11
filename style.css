@@ -1453,6 +1453,17 @@ header p {
   padding-right: 16px;
 }
 
+.board-stock-row .board-name-row {
+  gap: 4px;
+}
+
+.board-stock-row .board-name-row .btn-add-watch {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  font-size: 14px;
+}
+
 .board-stock-row .board-price {
   text-align: center;
   justify-self: center;

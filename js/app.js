@@ -147,6 +147,8 @@
         }
       } else if (tabOrFundId === "usSemi") {
         activeMainTab = "usSemi";
+      } else if (tabOrFundId === "hkStocks") {
+        activeMainTab = "hkStocks";
       } else if (tabOrFundId === "krStocks") {
         activeMainTab = "krStocks";
       } else {
@@ -182,6 +184,11 @@
         return;
       }
 
+      if (e.target.closest("[data-hk-board-close]")) {
+        closeHkBoardModal();
+        return;
+      }
+
       if (e.target.closest("[data-kr-board-close]")) {
         closeKrBoardModal();
         return;
@@ -198,6 +205,17 @@
             semiRankBtn.dataset.semiRank === "losers" ? "losers" : "gainers";
           syncFundQuotes(fundId);
         }
+        return;
+      }
+
+      const hkRankBtn = e.target.closest("[data-hk-rank]");
+      if (hkRankBtn) {
+        loadHkRankKind(hkRankBtn.dataset.hkRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-hk-refresh]")) {
+        loadHkRankKind(hkRankState.kind || "gainers", { force: true });
         return;
       }
 
@@ -241,6 +259,7 @@
       const openBoardBtn = e.target.closest("[data-open-board]");
       if (openBoardBtn) {
         if (openBoardBtn.dataset.openBoard === "us") openUsBoardModal();
+        else if (openBoardBtn.dataset.openBoard === "hk") openHkBoardModal();
         else if (openBoardBtn.dataset.openBoard === "kr") openKrBoardModal();
         else openBoardModal();
         return;
@@ -352,6 +371,11 @@
           closeUsBoardModal();
           return;
         }
+        const hkBoardModal = document.getElementById("hkBoardModal");
+        if (hkBoardModal?.classList.contains("show")) {
+          closeHkBoardModal();
+          return;
+        }
         const krBoardModal = document.getElementById("krBoardModal");
         if (krBoardModal?.classList.contains("show")) {
           closeKrBoardModal();
@@ -393,12 +417,17 @@
       if (usBoardModal?.classList.contains("show")) {
         redrawUsIndexSparklines();
       }
+      const hkBoardModal = document.getElementById("hkBoardModal");
+      if (hkBoardModal?.classList.contains("show")) {
+        redrawHkIndexSparklines();
+      }
       const krBoardModal = document.getElementById("krBoardModal");
       if (krBoardModal?.classList.contains("show")) {
         redrawKrIndexSparklines();
       }
       const activeFundId = getActiveFundId();
-      if (activeFundId === "krStocks") redrawKrSparklines();
+      if (activeFundId === "hkStocks") redrawHkSparklines();
+      else if (activeFundId === "krStocks") redrawKrSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);
     });
 

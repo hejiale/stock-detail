@@ -1,0 +1,23 @@
+<div class="board-modal" id="hkBoardModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-hk-board-close></div>
+    <div class="board-modal-panel us-board-panel" role="dialog" aria-modal="true" aria-labelledby="hkBoardModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="hkBoardModalName">港股市场概况</div>
+        </div>
+        <button class="board-modal-close" type="button" data-hk-board-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-modal-body us-board-body">
+        <div class="market-breadth" id="hkMarketBreadth" hidden></div>
+        <div class="us-section">
+          <div class="us-section-title">市场指数</div>
+          <div class="us-index-grid" id="hkIndexGrid"></div>
+        </div>
+        <div class="board-status show" id="hkBoardModalStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

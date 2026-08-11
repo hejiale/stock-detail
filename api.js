@@ -1484,6 +1484,54 @@
   }
 
   /**
+   * 港股主要指数：恒生 / 国企 / 恒生科技
+   * GET {push2}/api/qt/ulist.np/get
+   * secids=100.HSI,100.HSCEI,124.HSTECH
+   */
+  async function loadHkIndices() {
+    const defs = [
+      { code: "HSI", market: 100, name: "恒生指数" },
+      { code: "HSCEI", market: 100, name: "恒生国企" },
+      { code: "HSTECH", market: 124, name: "恒生科技" }
+    ];
+    const json = await fetchEastUlist(
+      defs.map((d) => d.market + "." + d.code).join(","),
+      "f2,f3,f12,f14"
+    );
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const change = Number(item.f3);
+      const price = Number(item.f2);
+      if (Number.isNaN(change)) return;
+      byCode.set(String(item.f12).toUpperCase(), {
+        code: String(item.f12).toUpperCase(),
+        price: Number.isNaN(price) ? null : price,
+        change: round2(change)
+      });
+    });
+
+    return defs
+      .map((d) => {
+        const q = byCode.get(d.code.toUpperCase());
+        if (!q) return null;
+        return {
+          ...q,
+          market: d.market,
+          name: d.name
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * 港股主板 + 创业板涨跌家数（排除涡轮等）
+   */
+  async function loadHkMarketBreadth() {
+    return loadMarketBreadth("m:116+t:3,m:116+t:4");
+  }
+
+  /**
    * 美股主要行业板块（11 个大类）
    * GET {push2}/api/qt/clist/get  fs=m:202+t:2
    */
@@ -1623,6 +1671,43 @@
       .slice(0, take);
   }
 
+  /**
+   * 港股涨幅榜 / 跌幅榜（主板 + 创业板，取前 limit 只）
+   * GET {push2}/api/qt/clist/get  fs=m:116+t:3,m:116+t:4  fid=f3
+   *
+   * @param {"gainers"|"losers"} kind
+   * @param {number} [limit=100]
+   */
+  async function loadHkStockRank(kind = "gainers", limit = 100) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 100));
+    const { list } = await fetchEastClist({
+      fs: "m:116+t:3,m:116+t:4",
+      fields: "f12,f13,f14,f2,f3",
+      pz: take,
+      po: kind === "losers" ? 0 : 1
+    });
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        const price = Number(item.f2);
+        if (Number.isNaN(change)) return null;
+        const market = item.f13 != null ? Number(item.f13) : 116;
+        return {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: round2(change),
+          market: Number.isNaN(market) ? 116 : market
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+  }
+
   global.MarketAPI = {
     // 工具
     quoteKey,
@@ -1649,6 +1734,9 @@
     loadKrIndices,
     loadKrStockRank,
     loadKrMarketBreadth,
+    loadHkIndices,
+    loadHkStockRank,
+    loadHkMarketBreadth,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

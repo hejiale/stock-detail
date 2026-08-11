@@ -7,6 +7,7 @@
     "tabs/modals/cn-board.html",
     "tabs/modals/cn-board-stocks.html",
     "tabs/modals/us-board.html",
+    "tabs/modals/hk-board.html",
     "tabs/modals/kr-board.html",
     "tabs/modals/profile.html"
   ];

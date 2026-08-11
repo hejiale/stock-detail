@@ -14,6 +14,9 @@
       loadKrStockRank,
       loadKrIndices,
       loadKrMarketBreadth,
+      loadHkStockRank,
+      loadHkIndices,
+      loadHkMarketBreadth,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock
@@ -30,6 +33,7 @@
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
       { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
+      { id: "hkStocks", name: "港股", icon: "assets/gupiao.png" },
       { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
@@ -44,6 +48,7 @@
       "boardModal",
       "boardStocksModal",
       "usBoardModal",
+      "hkBoardModal",
       "krBoardModal"
     ];
 
@@ -119,12 +124,17 @@
     function getActiveFundId() {
       if (activeMainTab === "funds") return activeWatchFundId;
       if (activeMainTab === "usSemi") return "usSemi";
+      if (activeMainTab === "hkStocks") return "hkStocks";
       if (activeMainTab === "krStocks") return "krStocks";
       return "cnSemi";
     }
 
     function isKrTab(id) {
       return id === "krStocks";
+    }
+
+    function isHkTab(id) {
+      return id === "hkStocks";
     }
 
     function rerender(activeFundId) {

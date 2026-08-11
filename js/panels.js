@@ -52,6 +52,10 @@
         await loadKrRankKind(krRankState.kind || "gainers", { force: true });
         return;
       }
+      if (isHkTab(fundId)) {
+        await loadHkRankKind(hkRankState.kind || "gainers", { force: true });
+        return;
+      }
 
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
       if (!btn && !isRankFund(fundId)) return;
@@ -451,6 +455,7 @@
         panels.appendChild(buildPanelElement(fund, fund.id === activeFundId));
         updatePagerUI(fund.id);
       });
+      panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       applyAllChangeColors();
     }

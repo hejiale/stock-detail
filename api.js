@@ -1001,7 +1001,7 @@
     }
 
     const code = String(rawCode || "").trim().toUpperCase();
-    if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(code)) {
+    if (!/^[A-Z][A-Z0-9._\-]{0,9}$/.test(code)) {
       throw new Error("美股代码格式不正确");
     }
 

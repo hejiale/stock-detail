@@ -269,17 +269,19 @@
             <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
               <div class="stock-name-cell">
                 <div class="stock-name-main">
-                  <div
-                    class="stock-name"
-                    role="button"
-                    tabindex="0"
-                    data-chart-fund="${fund.id}"
-                    data-chart-index="${i}"
-                    title="查看 ${safeName} 当日分时"
-                  >${h.name}</div>
+                  <div class="stock-name-row">
+                    <div
+                      class="stock-name"
+                      role="button"
+                      tabindex="0"
+                      data-chart-fund="${fund.id}"
+                      data-chart-index="${i}"
+                      title="查看 ${safeName} 当日分时"
+                    >${h.name}</div>
+                    ${watchBtnHtml}
+                  </div>
                   <div class="stock-code">${h.code}</div>
                 </div>
-                ${watchBtnHtml}
               </div>
               ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
               <div

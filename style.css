@@ -416,28 +416,36 @@ header p {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
   min-width: 0;
 }
 
 .stock-name-main {
   min-width: 0;
-  flex: 0 1 auto;
-  max-width: calc(100% - 26px);
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.stock-name-cell .stock-name {
+.stock-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.stock-name-row .stock-name {
   min-width: 0;
   flex: 0 1 auto;
 }
 
-.stock-name-cell .btn-add-watch,
-.stock-name-cell .btn-remove-stock {
+.stock-name-row .btn-add-watch,
+.stock-name-row .btn-remove-stock {
   flex: 0 0 auto;
-  align-self: center;
+  width: 1em;
+  height: 1em;
+  font-size: 14px;
 }
 
 .stock-code {
@@ -502,8 +510,9 @@ header p {
   position: relative;
   z-index: 2;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 1em;
+  height: 1em;
+  font-size: 14px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -522,10 +531,6 @@ header p {
   cursor: default;
   transform: none;
   pointer-events: none;
-}
-
-.stock-name-cell .btn-add-watch {
-  margin-left: 0;
 }
 
 .row.is-custom {
@@ -1480,20 +1485,23 @@ header p {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
   min-width: 0;
 }
 
 .rank-board-text {
   min-width: 0;
-  flex: 0 1 auto;
-  max-width: calc(100% - 26px);
+  flex: 1 1 auto;
 }
 
-.rank-board-info .btn-add-watch {
+.rank-board-text .board-name-row {
+  gap: 4px;
+}
+
+.rank-board-text .board-name-row .btn-add-watch {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 1em;
+  height: 1em;
+  font-size: 14px;
 }
 
 .board-name {

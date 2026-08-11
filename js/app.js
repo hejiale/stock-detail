@@ -76,37 +76,10 @@
         const stock = await resolveStock(raw, marketType);
         await addWatchStock(stock.code, type);
 
-        // A股 / 美股页仍同步本地置顶自选（涨跌榜「我的自选」）
-        if (CUSTOMIZABLE_FUNDS.has(fundId)) {
-          const all = loadCustomStocks();
-          const list = all[fundId] || [];
-          const existsCustom = list.some(
-            (h) => quoteKey(h.code) === quoteKey(stock.code)
-          );
-          if (!existsCustom) {
-            all[fundId] = [
-              {
-                name: stock.name,
-                code: stock.code,
-                market: stock.market,
-                ratio: stock.ratio
-              },
-              ...list
-            ];
-            saveCustomStocks(all);
-            pageState[fundId] = 1;
-            const saved = loadInputs();
-            delete saved[fundId];
-            saveInputs(saved);
-          }
-        }
-
         if (input) input.value = "";
-        showToast(`已添加 ${stock.name}（${stock.code}）`);
+        showToast(`已加入自选 ${stock.name}（${stock.code}）`);
 
-        if (CUSTOMIZABLE_FUNDS.has(fundId)) {
-          rerender(fundId);
-        }
+        // 仅在自选页刷新列表；四大市场页只提示成功
         if (activeMainTab === "watchStocks" || isWatchPanel) {
           await loadWatchlist(type, { force: true });
         }
@@ -171,12 +144,33 @@
         purgeLocalCustomStock(raw);
         showToast("已移除自选股票");
         await loadWatchlist(watchlistState.type || 1, { force: true });
-        // 若当前在 A/美股页，同步刷新置顶区
-        if (CUSTOMIZABLE_FUNDS.has(getActiveFundId())) {
-          rerender(getActiveFundId());
-        }
       } catch (err) {
         showToast(err.message || "删除失败");
+      }
+    }
+
+    async function addWatchFromChart() {
+      const state = openChartModal._state;
+      const holding = state?.holding;
+      const fundId = state?.fundId;
+      if (!holding?.code || !ADDABLE_FUNDS.has(fundId)) return;
+
+      const type = watchTypeOfFund(fundId);
+      if (!type) return;
+
+      const btn = document.getElementById("chartWatchBtn");
+      if (btn) btn.disabled = true;
+      try {
+        await addWatchStock(holding.code, type);
+        showToast(`已加入自选 ${holding.name || holding.code}`);
+        if (btn) {
+          btn.classList.add("is-added");
+          const label = btn.querySelector("span");
+          if (label) label.textContent = "已加入";
+        }
+      } catch (err) {
+        showToast(err.message || "加入自选失败");
+        if (btn) btn.disabled = false;
       }
     }
 
@@ -367,6 +361,11 @@
 
       if (e.target.closest("[data-chart-close]")) {
         closeChartModal();
+        return;
+      }
+
+      if (e.target.closest("[data-chart-add-watch]")) {
+        addWatchFromChart();
         return;
       }
 

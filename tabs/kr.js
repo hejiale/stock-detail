@@ -164,19 +164,44 @@
           const tone = toneClass(item.change);
           const priceTip =
             item.price == null ? "" : " · ₩" + formatPrice(item.price);
+          const safeName = String(item.name || "").replace(/"/g, "&quot;");
           return `
             <div class="board-row kr-stock-row">
               <div class="board-info">
-                <div class="board-name">${item.name}</div>
+                <div
+                  class="board-name"
+                  role="button"
+                  tabindex="0"
+                  data-chart-fund="krStocks"
+                  data-chart-index="${i}"
+                  title="查看 ${safeName} 行情"
+                >${item.name}</div>
                 <div class="board-meta">${item.code}${priceTip}</div>
               </div>
-              <div class="kr-spark-wrap">
+              <div
+                class="kr-spark-wrap"
+                role="button"
+                tabindex="0"
+                data-chart-fund="krStocks"
+                data-chart-index="${i}"
+                title="查看 ${safeName} 行情"
+              >
                 <canvas class="kr-spark" data-kr-spark="${i}" aria-hidden="true"></canvas>
               </div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
             </div>`;
         })
         .join("");
+    }
+
+    function getKrRankHolding(index) {
+      const item = krRankState.list?.[index];
+      if (!item) return null;
+      return {
+        name: item.name,
+        code: item.code,
+        market: item.market != null ? item.market : 177
+      };
     }
 
     async function paintKrSparklines(list, requestId) {

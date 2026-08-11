@@ -106,36 +106,27 @@
       return kind === "losers" ? "跌幅前100" : "涨幅前100";
     }
 
-    /** 自选置顶，下方接涨跌榜（排除已在自选中的代码） */
+    /** 涨跌榜仅展示榜单；自选统一在「自选个股」查看 */
     function applyCustomHoldings() {
       CUSTOMIZABLE_FUNDS.forEach((fundId) => {
         const fund = window.FUND_HOLDINGS[fundId];
         if (!fund) return;
 
-        const custom = (loadCustomStocks()[fundId] || []).map((h) => ({
-          ...h,
-          custom: true
-        }));
-        const customKeys = new Set(custom.map((h) => quoteKey(h.code)));
-
         if (isRankFund(fundId)) {
           const rankList = fund._rankHoldings || [];
-          const ranked = rankList
-            .filter((h) => !customKeys.has(quoteKey(h.code)))
-            .map((h) => ({
-              name: h.name,
-              code: h.code,
-              market: h.market,
-              ratio: fund.market === "US" ? 5 : 1
-            }));
-          fund.holdings = [...custom, ...ranked];
+          fund.holdings = rankList.map((h) => ({
+            name: h.name,
+            code: h.code,
+            market: h.market,
+            ratio: fund.market === "US" ? 5 : 1
+          }));
           return;
         }
 
         if (!fund._defaultHoldings) {
           fund._defaultHoldings = fund.holdings.slice();
         }
-        fund.holdings = [...custom, ...fund._defaultHoldings];
+        fund.holdings = fund._defaultHoldings.slice();
       });
     }
 

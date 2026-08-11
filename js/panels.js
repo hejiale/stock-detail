@@ -94,7 +94,7 @@
           pageHoldings.map((h) => loadIntradayTrends(h))
         );
 
-        // 涨跌榜行已有涨跌幅；自选股再拉实时行情
+        // 涨跌榜行已有涨跌幅，直接用榜单数据填入
         const rankQuoteMap = {};
         if (isRankFund(fundId) && fund._rankHoldings?.length) {
           fund._rankHoldings.forEach((item) => {
@@ -105,9 +105,7 @@
             };
           });
         }
-        const needQuotes = isRankFund(fundId)
-          ? pageHoldings.filter((h) => h.custom)
-          : pageHoldings;
+        const needQuotes = isRankFund(fundId) ? [] : pageHoldings;
         const liveQuotes = needQuotes.length ? await loadQuotes(needQuotes) : {};
         if (requestId !== syncFundQuotes._req) return;
 
@@ -326,15 +324,13 @@
       const ratioLabel = viewOnly ? "参考权重" : "持仓比例";
       const isRank = isRankFund(fund.id);
       const kind = isRank ? getSemiRankKind(fund.id) : null;
-      const customCount = fund.holdings.filter((h) => h.custom).length;
       const rankCount = fund._rankHoldings?.length || 0;
       let metaSub;
       if (isRank) {
         const marketTip = fund.market === "US" ? "美股" : "沪深京 A 股";
-        const customTip = customCount ? `自选 ${customCount} · ` : "";
         metaSub = rankCount
-          ? `${customTip}${marketTip} · ${rankLabel(kind)}`
-          : `${customTip}${marketTip} · 加载中…`;
+          ? `${marketTip} · ${rankLabel(kind)}`
+          : `${marketTip} · 加载中…`;
       } else if (viewOnly) {
         metaSub = `共 ${fund.holdings.length} 只股票 · 仅查看涨跌`;
       } else {

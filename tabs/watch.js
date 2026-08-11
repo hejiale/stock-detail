@@ -57,7 +57,6 @@
               <div>股票</div>
               <div style="text-align:center">走势</div>
               <div style="text-align:right">涨跌幅%</div>
-              <div></div>
             </div>
             <div class="kr-rank-body">
               <div class="us-stock-list kr-stock-list watch-stock-list" id="watchStockList"></div>
@@ -92,16 +91,25 @@
           );
           return `
             <div class="board-row kr-stock-row watch-stock-row">
-              <div class="board-info">
-                <div
-                  class="board-name"
-                  role="button"
-                  tabindex="0"
-                  data-chart-fund="watchStocks"
-                  data-chart-index="${i}"
-                  title="查看 ${safeName} 行情"
-                >${item.name || item.code}</div>
-                <div class="board-meta">${item.code}${priceTip}</div>
+              <div class="board-info watch-board-info">
+                <button
+                  class="btn-remove-stock"
+                  type="button"
+                  data-remove-watch="${item.code}"
+                  title="移除自选"
+                  aria-label="移除 ${safeName}"
+                ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>
+                <div class="watch-board-text">
+                  <div
+                    class="board-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="watchStocks"
+                    data-chart-index="${i}"
+                    title="查看 ${safeName} 行情"
+                  >${item.name || item.code}</div>
+                  <div class="board-meta">${item.code}${priceTip}</div>
+                </div>
               </div>
               <div
                 class="kr-spark-wrap"
@@ -114,13 +122,6 @@
                 <canvas class="kr-spark" data-watch-spark="${i}" aria-hidden="true"></canvas>
               </div>
               <div class="board-chg ${tone}">${chgText}</div>
-              <button
-                class="btn-remove-stock"
-                type="button"
-                data-remove-watch="${item.code}"
-                title="移除自选"
-                aria-label="移除 ${safeName}"
-              ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>
             </div>`;
         })
         .join("");

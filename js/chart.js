@@ -289,10 +289,24 @@
       if (fundId === "hkStocks" && typeof getHkRankHolding === "function") {
         return getHkRankHolding(index);
       }
+      if (fundId === "krStocks" && typeof getKrRankHolding === "function") {
+        return getKrRankHolding(index);
+      }
       if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
         return getWatchHolding(index);
       }
       return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
+    }
+
+    function updateChartWatchBtn(fundId) {
+      const btn = document.getElementById("chartWatchBtn");
+      if (!btn) return;
+      const canAdd = ADDABLE_FUNDS.has(fundId);
+      btn.hidden = !canAdd;
+      btn.disabled = false;
+      btn.classList.remove("is-added");
+      const label = btn.querySelector("span");
+      if (label) label.textContent = "加入自选";
     }
 
     async function openChartModal(fundId, index) {
@@ -317,9 +331,11 @@
         trend: null,
         history: null,
         returns: null,
-        holding
+        holding,
+        fundId
       };
       openChartModal._lastSeries = null;
+      updateChartWatchBtn(fundId);
 
       showModal("chartModal");
       setStatus("chartStatus", "加载分时与区间涨跌幅…");
@@ -336,7 +352,8 @@
         trend: trendResult.status === "fulfilled" ? trendResult.value : null,
         history: historyResult.status === "fulfilled" ? historyResult.value : null,
         returns: null,
-        holding
+        holding,
+        fundId
       };
 
       if (state.history) {

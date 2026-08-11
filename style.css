@@ -957,6 +957,52 @@ header p {
 .chart-modal-meta .price.flat,
 .chart-modal-meta .chg.flat { color: #64748b; }
 
+.chart-modal-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #dbe7ff;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.chart-watch-btn img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+}
+
+.chart-watch-btn:hover {
+  background: #ebf3ff;
+  border-color: #b7ceff;
+}
+
+.chart-watch-btn:disabled,
+.chart-watch-btn.is-added {
+  opacity: 0.72;
+  cursor: default;
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
 .chart-modal-close {
   flex-shrink: 0;
   width: 36px;
@@ -1602,21 +1648,33 @@ header p {
 }
 
 .watch-stock-head {
-  grid-template-columns: minmax(0, 1.4fr) 72px 88px 36px;
+  grid-template-columns: minmax(0, 1fr) 72px 88px;
 }
 
-.watch-stock-list .board-row,
-.watch-stock-list .kr-stock-row,
-.watch-stock-list .watch-stock-row {
-  grid-template-columns: minmax(0, 1.4fr) 72px 88px 36px;
+.kr-stock-list.watch-stock-list .board-row,
+.kr-stock-list.watch-stock-list .kr-stock-row,
+.kr-stock-list.watch-stock-list .watch-stock-row {
+  grid-template-columns: minmax(0, 1fr) 72px 88px;
   align-items: center;
 }
 
+.watch-board-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.watch-board-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .watch-stock-row .btn-remove-stock {
-  justify-self: end;
+  flex-shrink: 0;
   margin: 0;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
 }
 
 .watch-type-tabs {

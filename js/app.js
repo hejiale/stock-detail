@@ -164,6 +164,7 @@
       const btn = triggerBtn;
       const fundId = btn?.getAttribute("data-add-watch") || "";
       const code = String(btn?.getAttribute("data-watch-code") || "").trim();
+      const name = String(btn?.getAttribute("data-watch-name") || code).trim();
       const type =
         Number(btn?.getAttribute("data-watch-type")) ||
         watchTypeOfFund(fundId);
@@ -181,12 +182,13 @@
 
       if (btn) btn.disabled = true;
       try {
-        const stock = await addStockToWatchlist(code, type);
+        // 列表已有代码，直接走添加接口，不再调查询/解析行情
+        const added = await addWatchStock(code, type);
+        showToast(`加入成功：${name}（${added.code || code}）`);
         if (btn) {
           btn.classList.add("is-added");
-          const labelName = stock?.name || code;
           btn.title = "已加入自选";
-          btn.setAttribute("aria-label", `已加入自选 ${labelName}`);
+          btn.setAttribute("aria-label", `已加入自选 ${name}`);
         }
       } catch (err) {
         showToast(err.message || "添加失败");

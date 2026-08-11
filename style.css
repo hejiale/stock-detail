@@ -370,6 +370,14 @@ header p {
   opacity: 0.85;
 }
 
+.add-stock .btn-add:disabled,
+.add-stock .btn-add.is-loading {
+  transform: translateY(-50%);
+  opacity: 0.65;
+  cursor: wait;
+  pointer-events: none;
+}
+
 .add-stock .btn-add img {
   width: 18px;
   height: 18px;
@@ -980,6 +988,10 @@ header p {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.chart-watch-btn[hidden] {
+  display: none !important;
 }
 
 .chart-watch-btn img {

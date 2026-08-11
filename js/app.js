@@ -70,7 +70,10 @@
         return;
       }
 
-      if (btn) btn.disabled = true;
+      if (btn) {
+        btn.classList.add("is-loading");
+        btn.disabled = true;
+      }
       try {
         const marketType = watchMarketOfType(type);
         const stock = await resolveStock(raw, marketType);
@@ -86,7 +89,10 @@
       } catch (err) {
         showToast(err.message || "添加失败");
       } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.classList.remove("is-loading");
+          btn.disabled = false;
+        }
       }
     }
 
@@ -149,20 +155,28 @@
       }
     }
 
-    async function addWatchFromChart() {
+    async function addWatchFromChart(triggerBtn) {
+      const btn = triggerBtn || document.getElementById("chartWatchBtn");
       const state = openChartModal._state;
       const holding = state?.holding;
-      const fundId = state?.fundId;
-      if (!holding?.code || !ADDABLE_FUNDS.has(fundId)) return;
+      const fundId = state?.fundId || btn?.dataset?.watchFund || "";
+      const code = String(
+        btn?.dataset?.watchCode || holding?.code || ""
+      ).trim();
+      const name = btn?.dataset?.watchName || holding?.name || code;
+      const type = Number(btn?.dataset?.watchType) || watchTypeFromHolding(holding, fundId);
 
-      const type = watchTypeOfFund(fundId);
-      if (!type) return;
+      if (!code || !type) {
+        showToast("无法加入自选，请稍后重试");
+        return;
+      }
 
-      const btn = document.getElementById("chartWatchBtn");
+      if (btn?.classList.contains("is-added") || btn?.disabled) return;
+
       if (btn) btn.disabled = true;
       try {
-        await addWatchStock(holding.code, type);
-        showToast(`已加入自选 ${holding.name || holding.code}`);
+        await addWatchStock(code, type);
+        showToast(`已加入自选 ${name}`);
         if (btn) {
           btn.classList.add("is-added");
           const label = btn.querySelector("span");
@@ -359,13 +373,13 @@
         return;
       }
 
-      if (e.target.closest("[data-chart-close]")) {
-        closeChartModal();
+      if (e.target.closest("[data-chart-add-watch]")) {
+        addWatchFromChart(e.target.closest("[data-chart-add-watch]"));
         return;
       }
 
-      if (e.target.closest("[data-chart-add-watch]")) {
-        addWatchFromChart();
+      if (e.target.closest("[data-chart-close]")) {
+        closeChartModal();
         return;
       }
 

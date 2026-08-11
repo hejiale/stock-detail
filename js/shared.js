@@ -159,6 +159,17 @@
       return FUND_WATCH_TYPE[fundId] || null;
     }
 
+    function watchTypeFromHolding(holding, fundId) {
+      const fromFund = watchTypeOfFund(fundId);
+      if (fromFund) return fromFund;
+      const m = Number(holding?.market);
+      if (m === 105) return 2;
+      if (m === 116) return 3;
+      if (m === 177) return 4;
+      if (holding?.code) return 1;
+      return null;
+    }
+
     function watchMarketOfType(type) {
       const meta = WATCH_TYPE_META.find((m) => m.type === normalizeWatchType(type));
       return meta?.market || "CN";

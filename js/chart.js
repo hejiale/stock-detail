@@ -298,15 +298,27 @@
       return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
     }
 
-    function updateChartWatchBtn(fundId) {
+    function updateChartWatchBtn(fundId, holding) {
       const btn = document.getElementById("chartWatchBtn");
       if (!btn) return;
-      const canAdd = ADDABLE_FUNDS.has(fundId);
+      const type = watchTypeOfFund(fundId) || watchTypeFromHolding(holding, fundId);
+      const canAdd = !!(holding?.code && type && ADDABLE_FUNDS.has(fundId));
       btn.hidden = !canAdd;
       btn.disabled = false;
       btn.classList.remove("is-added");
       const label = btn.querySelector("span");
       if (label) label.textContent = "加入自选";
+      if (canAdd) {
+        btn.dataset.watchFund = fundId;
+        btn.dataset.watchCode = String(holding.code);
+        btn.dataset.watchName = String(holding.name || holding.code);
+        btn.dataset.watchType = String(type);
+      } else {
+        delete btn.dataset.watchFund;
+        delete btn.dataset.watchCode;
+        delete btn.dataset.watchName;
+        delete btn.dataset.watchType;
+      }
     }
 
     async function openChartModal(fundId, index) {
@@ -335,7 +347,7 @@
         fundId
       };
       openChartModal._lastSeries = null;
-      updateChartWatchBtn(fundId);
+      updateChartWatchBtn(fundId, holding);
 
       showModal("chartModal");
       setStatus("chartStatus", "加载分时与区间涨跌幅…");

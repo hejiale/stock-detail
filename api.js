@@ -1869,153 +1869,177 @@
   }
 
   /**
-   * A 股涨幅榜 / 跌幅榜（沪深京 A 股，取前 limit 只）
+   * A 股涨幅榜 / 跌幅榜（沪深京 A 股，分页）
    * GET {push2}/api/qt/clist/get
    * fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=100]
-   * @returns {Promise<Array<{ code, name, price, change, market }>>}
+   * @param {number} [limit=20]
+   * @param {number} [page=1]
+   * @returns {Promise<{ list: Array<{ code, name, price, change, market }>, total: number }>}
    */
-  async function loadCnStockRank(kind = "gainers", limit = 100) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 100));
-    const { list } = await fetchEastClist({
+  async function loadCnStockRank(kind = "gainers", limit = 20, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+    const pn = Math.max(1, Number(page) || 1);
+    const { list, total } = await fetchEastClist({
       fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
       fields: "f12,f13,f14,f2,f3",
+      pn,
       pz: take,
       po: kind === "losers" ? 0 : 1
     });
 
-    return list
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
-        const market = item.f13 != null ? Number(item.f13) : null;
-        return {
-          code: String(item.f12),
-          name: String(item.f14 || item.f12),
-          price: Number.isNaN(price) || price === 0 ? null : price,
-          change: round2(change),
-          market: Number.isNaN(market) ? null : market
-        };
-      })
-      .filter(Boolean)
-      .slice(0, take);
+    return {
+      list: list
+        .map((item) => {
+          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+            return null;
+          }
+          const change = Number(item.f3);
+          const price = Number(item.f2);
+          if (Number.isNaN(change)) return null;
+          const market = item.f13 != null ? Number(item.f13) : null;
+          return {
+            code: String(item.f12),
+            name: String(item.f14 || item.f12),
+            price: Number.isNaN(price) || price === 0 ? null : price,
+            change: round2(change),
+            market: Number.isNaN(market) ? null : market
+          };
+        })
+        .filter(Boolean)
+        .slice(0, take),
+      total: Number(total) || 0
+    };
   }
 
   /**
-   * 美股涨幅榜 / 跌幅榜（知名分类股，取前 limit 只）
+   * 美股涨幅榜 / 跌幅榜（知名分类股，分页）
    * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=100]
+   * @param {number} [limit=20]
+   * @param {number} [page=1]
    */
-  async function loadUsStockRank(kind = "gainers", limit = 100) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 100));
-    const { list } = await fetchEastClist({
+  async function loadUsStockRank(kind = "gainers", limit = 20, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+    const pn = Math.max(1, Number(page) || 1);
+    const { list, total } = await fetchEastClist({
       fs: "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
       fields: "f12,f13,f14,f2,f3",
+      pn,
       pz: take,
       po: kind === "losers" ? 0 : 1
     });
 
-    return list
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
-        const market = item.f13 != null ? Number(item.f13) : null;
-        return {
-          code: String(item.f12).toUpperCase(),
-          name: String(item.f14 || item.f12),
-          price: Number.isNaN(price) ? null : price,
-          change: round2(change),
-          market: Number.isNaN(market) ? 105 : market
-        };
-      })
-      .filter(Boolean)
-      .slice(0, take);
+    return {
+      list: list
+        .map((item) => {
+          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+            return null;
+          }
+          const change = Number(item.f3);
+          const price = Number(item.f2);
+          if (Number.isNaN(change)) return null;
+          const market = item.f13 != null ? Number(item.f13) : null;
+          return {
+            code: String(item.f12).toUpperCase(),
+            name: String(item.f14 || item.f12),
+            price: Number.isNaN(price) ? null : price,
+            change: round2(change),
+            market: Number.isNaN(market) ? 105 : market
+          };
+        })
+        .filter(Boolean)
+        .slice(0, take),
+      total: Number(total) || 0
+    };
   }
 
   /**
-   * 韩股涨幅榜 / 跌幅榜（东财 market=177，取前 limit 只）
+   * 韩股涨幅榜 / 跌幅榜（东财 market=177，分页）
    * GET {push2}/api/qt/clist/get  fs=m:177  fid=f3
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=100]
+   * @param {number} [limit=20]
+   * @param {number} [page=1]
    */
-  async function loadKrStockRank(kind = "gainers", limit = 100) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 100));
-    const { list } = await fetchEastClist({
+  async function loadKrStockRank(kind = "gainers", limit = 20, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+    const pn = Math.max(1, Number(page) || 1);
+    const { list, total } = await fetchEastClist({
       fs: "m:177",
       fields: "f12,f13,f14,f2,f3",
+      pn,
       pz: take,
       po: kind === "losers" ? 0 : 1
     });
 
-    return list
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
-        const market = item.f13 != null ? Number(item.f13) : 177;
-        return {
-          code: String(item.f12),
-          name: String(item.f14 || item.f12),
-          price: Number.isNaN(price) || price === 0 ? null : price,
-          change: round2(change),
-          market: Number.isNaN(market) ? 177 : market
-        };
-      })
-      .filter(Boolean)
-      .slice(0, take);
+    return {
+      list: list
+        .map((item) => {
+          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+            return null;
+          }
+          const change = Number(item.f3);
+          const price = Number(item.f2);
+          if (Number.isNaN(change)) return null;
+          const market = item.f13 != null ? Number(item.f13) : 177;
+          return {
+            code: String(item.f12),
+            name: String(item.f14 || item.f12),
+            price: Number.isNaN(price) || price === 0 ? null : price,
+            change: round2(change),
+            market: Number.isNaN(market) ? 177 : market
+          };
+        })
+        .filter(Boolean)
+        .slice(0, take),
+      total: Number(total) || 0
+    };
   }
 
   /**
-   * 港股涨幅榜 / 跌幅榜（主板 + 创业板，取前 limit 只）
+   * 港股涨幅榜 / 跌幅榜（主板 + 创业板，分页）
    * GET {push2}/api/qt/clist/get  fs=m:116+t:3,m:116+t:4  fid=f3
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=100]
+   * @param {number} [limit=20]
+   * @param {number} [page=1]
    */
-  async function loadHkStockRank(kind = "gainers", limit = 100) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 100));
-    const { list } = await fetchEastClist({
+  async function loadHkStockRank(kind = "gainers", limit = 20, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+    const pn = Math.max(1, Number(page) || 1);
+    const { list, total } = await fetchEastClist({
       fs: "m:116+t:3,m:116+t:4",
       fields: "f12,f13,f14,f2,f3",
+      pn,
       pz: take,
       po: kind === "losers" ? 0 : 1
     });
 
-    return list
-      .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
-        const market = item.f13 != null ? Number(item.f13) : 116;
-        return {
-          code: String(item.f12),
-          name: String(item.f14 || item.f12),
-          price: Number.isNaN(price) || price === 0 ? null : price,
-          change: round2(change),
-          market: Number.isNaN(market) ? 116 : market
-        };
-      })
-      .filter(Boolean)
-      .slice(0, take);
+    return {
+      list: list
+        .map((item) => {
+          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+            return null;
+          }
+          const change = Number(item.f3);
+          const price = Number(item.f2);
+          if (Number.isNaN(change)) return null;
+          const market = item.f13 != null ? Number(item.f13) : 116;
+          return {
+            code: String(item.f12),
+            name: String(item.f14 || item.f12),
+            price: Number.isNaN(price) || price === 0 ? null : price,
+            change: round2(change),
+            market: Number.isNaN(market) ? 116 : market
+          };
+        })
+        .filter(Boolean)
+        .slice(0, take),
+      total: Number(total) || 0
+    };
   }
 
   global.MarketAPI = {

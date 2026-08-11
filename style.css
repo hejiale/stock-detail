@@ -1976,6 +1976,28 @@ header p {
   padding: 0 8px 12px;
 }
 
+.rank-load-more {
+  text-align: center;
+  padding: 14px 8px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #8b95a8;
+  user-select: none;
+}
+
+.semi-rank-card > .rank-load-more {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.rank-load-more.loading {
+  color: #1677ff;
+}
+
+.rank-load-more.done {
+  opacity: 0.75;
+}
+
 .kr-stock-list .board-row,
 .kr-stock-list .kr-stock-row {
   padding-left: 8px;

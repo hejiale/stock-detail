@@ -97,19 +97,28 @@
       renderMarketBreadth("krMarketBreadth", null);
     }
 
-    const krRankState = { kind: "gainers" };
+    const krRankState = {
+      kind: "gainers",
+      list: [],
+      page: 0,
+      total: 0,
+      hasMore: true,
+      loadingMore: false,
+      trends: null
+    };
 
     function buildKrPanelElement(isActive) {
       const panel = document.createElement("section");
       panel.className = "panel" + (isActive ? " active" : "");
       panel.dataset.panel = "krStocks";
       const kind = krRankState.kind || "gainers";
+      const loaded = krRankState.list?.length || 0;
       panel.innerHTML = `
           <div class="fund-card kr-rank-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
                 <div class="name">韩股涨跌榜</div>
-                <div class="sub" id="krRankSub">KOSPI / KOSDAQ · 涨跌幅前 100</div>
+                <div class="sub" id="krRankSub">${krRankSubText(kind, loaded)}</div>
               </div>
               <div class="fund-meta-actions">
                 <button class="btn-board" type="button" data-open-board="kr" title="查看韩股市场概况" aria-label="板块">
@@ -146,21 +155,50 @@
             </div>
             <div class="kr-rank-body">
               <div class="us-stock-list kr-stock-list" id="krStockList"></div>
+              <div class="rank-load-more" data-rank-more="krStocks" hidden></div>
               <div class="board-status show" id="krBoardStatus">加载中…</div>
             </div>
           </div>`;
       return panel;
     }
 
-    function renderKrStockRank(list) {
-      const wrap = document.getElementById("krStockList");
-      if (!wrap) return;
-      if (!list.length) {
-        wrap.innerHTML = "";
+    function krRankSubText(kind, loaded) {
+      const tip = kind === "losers" ? "跌幅" : "涨幅";
+      return loaded
+        ? `KOSPI / KOSDAQ · ${tip}榜已加载 ${loaded} 只`
+        : "KOSPI / KOSDAQ · 加载中…";
+    }
+
+    function updateKrRankSub() {
+      const subEl = document.getElementById("krRankSub");
+      if (!subEl) return;
+      subEl.textContent = krRankSubText(
+        krRankState.kind || "gainers",
+        krRankState.list?.length || 0
+      );
+    }
+
+    function updateKrRankLoadMoreUI() {
+      const host = document.querySelector(`[data-rank-more="krStocks"]`);
+      const html = buildRankLoadMoreHtml("krStocks", {
+        hasMore: krRankState.hasMore !== false,
+        loading: !!krRankState.loadingMore,
+        loaded: krRankState.list?.length || 0
+      });
+      if (!host) return;
+      if (!html) {
+        host.hidden = true;
+        host.innerHTML = "";
+        host.removeAttribute("data-rank-sentinel");
         return;
       }
-      wrap.innerHTML = list
-        .map((item, i) => {
+      host.outerHTML = html;
+    }
+
+    function renderKrStockRankRows(list, start = 0) {
+      return list
+        .map((item, offset) => {
+          const i = start + offset;
           const tone = toneClass(item.change);
           const priceTip =
             item.price == null ? "" : " · ₩" + formatPrice(item.price);
@@ -208,6 +246,17 @@
         .join("");
     }
 
+    function renderKrStockRank(list, { append = false, start = 0 } = {}) {
+      const wrap = document.getElementById("krStockList");
+      if (!wrap) return;
+      if (!append) {
+        wrap.innerHTML = list.length ? renderKrStockRankRows(list, 0) : "";
+        return;
+      }
+      if (!list.length) return;
+      wrap.insertAdjacentHTML("beforeend", renderKrStockRankRows(list, start));
+    }
+
     function getKrRankHolding(index) {
       const item = krRankState.list?.[index];
       if (!item) return null;
@@ -218,7 +267,7 @@
       };
     }
 
-    async function paintKrSparklines(list, requestId) {
+    async function paintKrSparklines(list, requestId, { start = 0 } = {}) {
       const results = await Promise.allSettled(
         list.map((item) =>
           loadIntradayTrends({
@@ -233,7 +282,13 @@
       const trends = results.map((result) =>
         result.status === "fulfilled" ? result.value : null
       );
-      krRankState.trends = trends;
+      if (!Array.isArray(krRankState.trends) || start === 0) {
+        krRankState.trends = [];
+      }
+      while (krRankState.trends.length < start) krRankState.trends.push(null);
+      trends.forEach((trend, i) => {
+        krRankState.trends[start + i] = trend;
+      });
       redrawKrSparklines();
     }
 
@@ -259,57 +314,126 @@
       });
     }
 
-    async function loadKrRankKind(kind, { force = false } = {}) {
+    function bindKrRankLoadMore() {
+      bindRankLoadMore("krStocks", () => {
+        loadKrRankKind(krRankState.kind || "gainers", { append: true }).catch(
+          () => {}
+        );
+      });
+    }
+
+    async function loadKrRankKind(kind, { force = false, append = false } = {}) {
       const next = kind === "losers" ? "losers" : "gainers";
-      if (!force && krRankState.kind === next && krRankState.list?.length) {
+      if (!force && !append && krRankState.kind === next && krRankState.list?.length) {
         document.querySelectorAll("[data-kr-rank]").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.krRank === next);
         });
         renderKrStockRank(krRankState.list);
+        updateKrRankSub();
+        updateKrRankLoadMoreUI();
         setStatus("krBoardStatus", "");
-        requestAnimationFrame(() => redrawKrSparklines());
+        requestAnimationFrame(() => {
+          redrawKrSparklines();
+          bindKrRankLoadMore();
+        });
+        return;
+      }
+
+      if (append) {
+        if (krRankState.loadingMore || krRankState.hasMore === false) return;
+        if (krRankState.kind !== next) return;
+        krRankState.loadingMore = true;
+        updateKrRankLoadMoreUI();
+        const requestId = loadKrRankKind._req;
+        const nextPage = (krRankState.page || 1) + 1;
+        try {
+          const result = await loadKrStockRank(next, RANK_PAGE_SIZE, nextPage);
+          if (requestId !== loadKrRankKind._req) return;
+          const list = result.list || [];
+          const start = krRankState.list?.length || 0;
+          krRankState.list = mergeRankList(krRankState.list, list);
+          const added = (krRankState.list?.length || 0) - start;
+          krRankState.page = nextPage;
+          krRankState.total = result.total || krRankState.total || 0;
+          krRankState.hasMore =
+            added > 0 &&
+            computeRankHasMore(
+              krRankState.list.length,
+              list.length,
+              krRankState.total
+            );
+          renderKrStockRank(krRankState.list.slice(start), { append: true, start });
+          updateKrRankSub();
+          setStatus("krBoardStatus", "");
+          if (list.length) {
+            await paintKrSparklines(krRankState.list.slice(start), requestId, {
+              start
+            });
+          }
+        } catch (err) {
+          if (requestId === loadKrRankKind._req) {
+            showToast(err?.message || "加载更多失败");
+          }
+        } finally {
+          if (requestId === loadKrRankKind._req) {
+            krRankState.loadingMore = false;
+            updateKrRankLoadMoreUI();
+            bindKrRankLoadMore();
+          }
+        }
         return;
       }
 
       krRankState.kind = next;
+      krRankState.list = [];
       krRankState.trends = null;
+      krRankState.page = 0;
+      krRankState.hasMore = true;
+      krRankState.loadingMore = false;
       document.querySelectorAll("[data-kr-rank]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.krRank === next);
       });
 
       const requestId = (loadKrRankKind._req = (loadKrRankKind._req || 0) + 1);
       const listEl = document.getElementById("krStockList");
-      const subEl = document.getElementById("krRankSub");
       if (listEl) listEl.innerHTML = "";
       setStatus(
         "krBoardStatus",
-        next === "losers" ? "加载跌幅前100…" : "加载涨幅前100…"
+        next === "losers" ? "加载跌幅榜…" : "加载涨幅榜…"
       );
-      if (subEl) {
-        subEl.textContent =
-          next === "losers"
-            ? "KOSPI / KOSDAQ · 跌幅前 100"
-            : "KOSPI / KOSDAQ · 涨幅前 100";
-      }
+      updateKrRankSub();
+      updateKrRankLoadMoreUI();
 
       try {
-        const list = await loadKrStockRank(next, 100);
+        const result = await loadKrStockRank(next, RANK_PAGE_SIZE, 1);
         if (requestId !== loadKrRankKind._req) return;
+        const list = result.list || [];
         krRankState.list = list;
+        krRankState.page = 1;
+        krRankState.total = result.total || 0;
+        krRankState.hasMore = computeRankHasMore(
+          list.length,
+          list.length,
+          krRankState.total
+        );
         renderKrStockRank(list);
+        updateKrRankSub();
+        updateKrRankLoadMoreUI();
         setStatus("krBoardStatus", list.length ? "" : "暂无韩股数据");
         if (list.length) {
           requestAnimationFrame(() => {
             if (requestId !== loadKrRankKind._req) return;
-            paintKrSparklines(list, requestId).catch(() => {});
+            paintKrSparklines(list, requestId, { start: 0 }).catch(() => {});
+            bindKrRankLoadMore();
           });
         }
       } catch (err) {
         if (requestId !== loadKrRankKind._req) return;
         krRankState.list = [];
         krRankState.trends = null;
+        krRankState.hasMore = false;
         if (listEl) listEl.innerHTML = "";
+        updateKrRankLoadMoreUI();
         setStatus("krBoardStatus", err?.message || "韩股涨跌榜加载失败，请稍后重试");
       }
     }
-

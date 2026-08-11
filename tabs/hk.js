@@ -97,19 +97,28 @@
       renderMarketBreadth("hkMarketBreadth", null);
     }
 
-    const hkRankState = { kind: "gainers" };
+    const hkRankState = {
+      kind: "gainers",
+      list: [],
+      page: 0,
+      total: 0,
+      hasMore: true,
+      loadingMore: false,
+      trends: null
+    };
 
     function buildHkPanelElement(isActive) {
       const panel = document.createElement("section");
       panel.className = "panel" + (isActive ? " active" : "");
       panel.dataset.panel = "hkStocks";
       const kind = hkRankState.kind || "gainers";
+      const loaded = hkRankState.list?.length || 0;
       panel.innerHTML = `
           <div class="fund-card kr-rank-card hk-rank-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
                 <div class="name">港股涨跌榜</div>
-                <div class="sub" id="hkRankSub">主板 / 创业板 · 涨跌幅前 100</div>
+                <div class="sub" id="hkRankSub">${hkRankSubText(kind, loaded)}</div>
               </div>
               <div class="fund-meta-actions">
                 <button class="btn-board" type="button" data-open-board="hk" title="查看港股市场概况" aria-label="板块">
@@ -146,21 +155,50 @@
             </div>
             <div class="kr-rank-body">
               <div class="us-stock-list kr-stock-list" id="hkStockList"></div>
+              <div class="rank-load-more" data-rank-more="hkStocks" hidden></div>
               <div class="board-status show" id="hkBoardStatus">加载中…</div>
             </div>
           </div>`;
       return panel;
     }
 
-    function renderHkStockRank(list) {
-      const wrap = document.getElementById("hkStockList");
-      if (!wrap) return;
-      if (!list.length) {
-        wrap.innerHTML = "";
+    function hkRankSubText(kind, loaded) {
+      const tip = kind === "losers" ? "跌幅" : "涨幅";
+      return loaded
+        ? `主板 / 创业板 · ${tip}榜已加载 ${loaded} 只`
+        : "主板 / 创业板 · 加载中…";
+    }
+
+    function updateHkRankSub() {
+      const subEl = document.getElementById("hkRankSub");
+      if (!subEl) return;
+      subEl.textContent = hkRankSubText(
+        hkRankState.kind || "gainers",
+        hkRankState.list?.length || 0
+      );
+    }
+
+    function updateHkRankLoadMoreUI() {
+      const host = document.querySelector(`[data-rank-more="hkStocks"]`);
+      const html = buildRankLoadMoreHtml("hkStocks", {
+        hasMore: hkRankState.hasMore !== false,
+        loading: !!hkRankState.loadingMore,
+        loaded: hkRankState.list?.length || 0
+      });
+      if (!host) return;
+      if (!html) {
+        host.hidden = true;
+        host.innerHTML = "";
+        host.removeAttribute("data-rank-sentinel");
         return;
       }
-      wrap.innerHTML = list
-        .map((item, i) => {
+      host.outerHTML = html;
+    }
+
+    function renderHkStockRankRows(list, start = 0) {
+      return list
+        .map((item, offset) => {
+          const i = start + offset;
           const tone = toneClass(item.change);
           const priceTip =
             item.price == null ? "" : " · HK$" + formatPrice(item.price);
@@ -208,6 +246,17 @@
         .join("");
     }
 
+    function renderHkStockRank(list, { append = false, start = 0 } = {}) {
+      const wrap = document.getElementById("hkStockList");
+      if (!wrap) return;
+      if (!append) {
+        wrap.innerHTML = list.length ? renderHkStockRankRows(list, 0) : "";
+        return;
+      }
+      if (!list.length) return;
+      wrap.insertAdjacentHTML("beforeend", renderHkStockRankRows(list, start));
+    }
+
     function getHkRankHolding(index) {
       const item = hkRankState.list?.[index];
       if (!item) return null;
@@ -218,7 +267,7 @@
       };
     }
 
-    async function paintHkSparklines(list, requestId) {
+    async function paintHkSparklines(list, requestId, { start = 0 } = {}) {
       const results = await Promise.allSettled(
         list.map((item) =>
           loadIntradayTrends({
@@ -233,7 +282,13 @@
       const trends = results.map((result) =>
         result.status === "fulfilled" ? result.value : null
       );
-      hkRankState.trends = trends;
+      if (!Array.isArray(hkRankState.trends) || start === 0) {
+        hkRankState.trends = [];
+      }
+      while (hkRankState.trends.length < start) hkRankState.trends.push(null);
+      trends.forEach((trend, i) => {
+        hkRankState.trends[start + i] = trend;
+      });
       redrawHkSparklines();
     }
 
@@ -259,56 +314,126 @@
       });
     }
 
-    async function loadHkRankKind(kind, { force = false } = {}) {
+    function bindHkRankLoadMore() {
+      bindRankLoadMore("hkStocks", () => {
+        loadHkRankKind(hkRankState.kind || "gainers", { append: true }).catch(
+          () => {}
+        );
+      });
+    }
+
+    async function loadHkRankKind(kind, { force = false, append = false } = {}) {
       const next = kind === "losers" ? "losers" : "gainers";
-      if (!force && hkRankState.kind === next && hkRankState.list?.length) {
+      if (!force && !append && hkRankState.kind === next && hkRankState.list?.length) {
         document.querySelectorAll("[data-hk-rank]").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.hkRank === next);
         });
         renderHkStockRank(hkRankState.list);
+        updateHkRankSub();
+        updateHkRankLoadMoreUI();
         setStatus("hkBoardStatus", "");
-        requestAnimationFrame(() => redrawHkSparklines());
+        requestAnimationFrame(() => {
+          redrawHkSparklines();
+          bindHkRankLoadMore();
+        });
+        return;
+      }
+
+      if (append) {
+        if (hkRankState.loadingMore || hkRankState.hasMore === false) return;
+        if (hkRankState.kind !== next) return;
+        hkRankState.loadingMore = true;
+        updateHkRankLoadMoreUI();
+        const requestId = loadHkRankKind._req;
+        const nextPage = (hkRankState.page || 1) + 1;
+        try {
+          const result = await loadHkStockRank(next, RANK_PAGE_SIZE, nextPage);
+          if (requestId !== loadHkRankKind._req) return;
+          const list = result.list || [];
+          const start = hkRankState.list?.length || 0;
+          hkRankState.list = mergeRankList(hkRankState.list, list);
+          const added = (hkRankState.list?.length || 0) - start;
+          hkRankState.page = nextPage;
+          hkRankState.total = result.total || hkRankState.total || 0;
+          hkRankState.hasMore =
+            added > 0 &&
+            computeRankHasMore(
+              hkRankState.list.length,
+              list.length,
+              hkRankState.total
+            );
+          renderHkStockRank(hkRankState.list.slice(start), { append: true, start });
+          updateHkRankSub();
+          setStatus("hkBoardStatus", "");
+          if (list.length) {
+            await paintHkSparklines(hkRankState.list.slice(start), requestId, {
+              start
+            });
+          }
+        } catch (err) {
+          if (requestId === loadHkRankKind._req) {
+            showToast(err?.message || "加载更多失败");
+          }
+        } finally {
+          if (requestId === loadHkRankKind._req) {
+            hkRankState.loadingMore = false;
+            updateHkRankLoadMoreUI();
+            bindHkRankLoadMore();
+          }
+        }
         return;
       }
 
       hkRankState.kind = next;
+      hkRankState.list = [];
       hkRankState.trends = null;
+      hkRankState.page = 0;
+      hkRankState.hasMore = true;
+      hkRankState.loadingMore = false;
       document.querySelectorAll("[data-hk-rank]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.hkRank === next);
       });
 
       const requestId = (loadHkRankKind._req = (loadHkRankKind._req || 0) + 1);
       const listEl = document.getElementById("hkStockList");
-      const subEl = document.getElementById("hkRankSub");
       if (listEl) listEl.innerHTML = "";
       setStatus(
         "hkBoardStatus",
-        next === "losers" ? "加载跌幅前100…" : "加载涨幅前100…"
+        next === "losers" ? "加载跌幅榜…" : "加载涨幅榜…"
       );
-      if (subEl) {
-        subEl.textContent =
-          next === "losers"
-            ? "主板 / 创业板 · 跌幅前 100"
-            : "主板 / 创业板 · 涨幅前 100";
-      }
+      updateHkRankSub();
+      updateHkRankLoadMoreUI();
 
       try {
-        const list = await loadHkStockRank(next, 100);
+        const result = await loadHkStockRank(next, RANK_PAGE_SIZE, 1);
         if (requestId !== loadHkRankKind._req) return;
+        const list = result.list || [];
         hkRankState.list = list;
+        hkRankState.page = 1;
+        hkRankState.total = result.total || 0;
+        hkRankState.hasMore = computeRankHasMore(
+          list.length,
+          list.length,
+          hkRankState.total
+        );
         renderHkStockRank(list);
+        updateHkRankSub();
+        updateHkRankLoadMoreUI();
         setStatus("hkBoardStatus", list.length ? "" : "暂无港股数据");
         if (list.length) {
           requestAnimationFrame(() => {
             if (requestId !== loadHkRankKind._req) return;
-            paintHkSparklines(list, requestId).catch(() => {});
+            paintHkSparklines(list, requestId, { start: 0 }).catch(() => {});
+            bindHkRankLoadMore();
           });
         }
       } catch (err) {
         if (requestId !== loadHkRankKind._req) return;
         hkRankState.list = [];
         hkRankState.trends = null;
+        hkRankState.hasMore = false;
         if (listEl) listEl.innerHTML = "";
+        updateHkRankLoadMoreUI();
         setStatus("hkBoardStatus", err?.message || "港股涨跌榜加载失败，请稍后重试");
       }
     }

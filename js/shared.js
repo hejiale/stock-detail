@@ -53,8 +53,8 @@
       { type: 4, label: "韩股", market: "KR", pricePrefix: "₩" }
     ];
     const semiRankState = {
-      cnSemi: { kind: "gainers", list: null },
-      usSemi: { kind: "gainers", list: null }
+      cnSemi: { kind: "gainers", list: null, page: 0, total: 0, hasMore: true, loadingMore: false },
+      usSemi: { kind: "gainers", list: null, page: 0, total: 0, hasMore: true, loadingMore: false }
     };
     const watchlistState = { type: 1, list: [], trends: null };
     const MAIN_TABS = [
@@ -67,6 +67,10 @@
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin", "huabao", "fuguo"];
     const PAGE_SIZE = 10;
+    /** 涨跌榜：默认 20 条，上拉再加载 20，最多 100 */
+    const RANK_PAGE_SIZE = 20;
+    const RANK_MAX = 100;
+    const rankLoadMoreObservers = new Map();
     const pageState = {};
     let activeMainTab = "cnSemi";
     let activeWatchFundId = "dongfang";
@@ -116,6 +120,72 @@
 
     function rankLabel(kind) {
       return kind === "losers" ? "跌幅前100" : "涨幅前100";
+    }
+
+    function computeRankHasMore(loadedCount, fetchedCount, total) {
+      if (loadedCount >= RANK_MAX) return false;
+      if (fetchedCount < RANK_PAGE_SIZE) return false;
+      const cap = total > 0 ? Math.min(total, RANK_MAX) : RANK_MAX;
+      return loadedCount < cap;
+    }
+
+    function mergeRankList(prev, next) {
+      const base = Array.isArray(prev) ? prev.slice() : [];
+      if (!next?.length) return base;
+      const seen = new Set(base.map((item) => quoteKey(item.code)));
+      next.forEach((item) => {
+        const key = quoteKey(item.code);
+        if (seen.has(key)) return;
+        seen.add(key);
+        base.push(item);
+      });
+      return base.slice(0, RANK_MAX);
+    }
+
+    function buildRankLoadMoreHtml(id, { hasMore = true, loading = false, loaded = 0 } = {}) {
+      if (!loaded && !loading) return "";
+      if (loading) {
+        return `<div class="rank-load-more loading" data-rank-more="${id}">加载中…</div>`;
+      }
+      if (!hasMore) {
+        return `<div class="rank-load-more done" data-rank-more="${id}">已加载全部（${loaded}）</div>`;
+      }
+      return `<div class="rank-load-more" data-rank-more="${id}" data-rank-sentinel="${id}">上拉加载更多</div>`;
+    }
+
+    function updateRankLoadMoreEl(id, state) {
+      const el = document.querySelector(`[data-rank-more="${id}"]`);
+      if (!el) return;
+      const html = buildRankLoadMoreHtml(id, state);
+      if (!html) {
+        el.remove();
+        return;
+      }
+      el.outerHTML = html;
+    }
+
+    function unbindRankLoadMore(id) {
+      const prev = rankLoadMoreObservers.get(id);
+      if (!prev) return;
+      prev.disconnect();
+      rankLoadMoreObservers.delete(id);
+    }
+
+    /** 列表底部进入视口时触发加载更多（页面上拉） */
+    function bindRankLoadMore(id, onLoadMore) {
+      unbindRankLoadMore(id);
+      const sentinel = document.querySelector(`[data-rank-sentinel="${id}"]`);
+      if (!sentinel || typeof onLoadMore !== "function") return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          if (!entry?.isIntersecting) return;
+          onLoadMore();
+        },
+        { root: null, rootMargin: "160px 0px", threshold: 0 }
+      );
+      observer.observe(sentinel);
+      rankLoadMoreObservers.set(id, observer);
     }
 
     /** 涨跌榜仅展示榜单；自选统一在「自选个股」查看 */
@@ -228,7 +298,7 @@
       pageState[fundId] = Math.min(Math.max(1, page), total);
     }
 
-    /** 当前页持仓切片；涨跌榜页签一次展示全部 */
+    /** 当前页持仓切片；涨跌榜展示已加载条目（上拉分页追加） */
     function getPageSlice(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
       if (isRankFund(fundId)) {

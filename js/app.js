@@ -164,7 +164,6 @@
       const btn = triggerBtn;
       const fundId = btn?.getAttribute("data-add-watch") || "";
       const code = String(btn?.getAttribute("data-watch-code") || "").trim();
-      const name = String(btn?.getAttribute("data-watch-name") || code).trim();
       const type =
         Number(btn?.getAttribute("data-watch-type")) ||
         watchTypeOfFund(fundId);
@@ -173,7 +172,7 @@
         showToast("缺少股票代码，无法加入自选");
         return;
       }
-      if (!type) {
+      if (!type || !ADDABLE_FUNDS.has(fundId)) {
         showToast("无法识别市场类型");
         return;
       }
@@ -182,15 +181,15 @@
 
       if (btn) btn.disabled = true;
       try {
-        await addWatchStock(code, type);
-        showToast(`加入成功：${name}（${code}）`);
+        const stock = await addStockToWatchlist(code, type);
         if (btn) {
           btn.classList.add("is-added");
+          const labelName = stock?.name || code;
           btn.title = "已加入自选";
-          btn.setAttribute("aria-label", `已加入自选 ${name}`);
+          btn.setAttribute("aria-label", `已加入自选 ${labelName}`);
         }
       } catch (err) {
-        showToast(err.message || "加入自选失败");
+        showToast(err.message || "添加失败");
         if (btn) btn.disabled = false;
       }
     }

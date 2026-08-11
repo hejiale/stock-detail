@@ -1874,12 +1874,12 @@
    * fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=10]
    * @param {number} [page=1]
    * @returns {Promise<{ list: Array<{ code, name, price, change, market }>, total: number }>}
    */
-  async function loadCnStockRank(kind = "gainers", limit = 20, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+  async function loadCnStockRank(kind = "gainers", limit = 10, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
     const { list, total } = await fetchEastClist({
       fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
@@ -1918,11 +1918,11 @@
    * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=10]
    * @param {number} [page=1]
    */
-  async function loadUsStockRank(kind = "gainers", limit = 20, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+  async function loadUsStockRank(kind = "gainers", limit = 10, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
     const { list, total } = await fetchEastClist({
       fs: "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
@@ -1961,11 +1961,11 @@
    * GET {push2}/api/qt/clist/get  fs=m:177  fid=f3
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=10]
    * @param {number} [page=1]
    */
-  async function loadKrStockRank(kind = "gainers", limit = 20, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+  async function loadKrStockRank(kind = "gainers", limit = 10, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
     const { list, total } = await fetchEastClist({
       fs: "m:177",
@@ -2004,11 +2004,11 @@
    * GET {push2}/api/qt/clist/get  fs=m:116+t:3,m:116+t:4  fid=f3
    *
    * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=20]
+   * @param {number} [limit=10]
    * @param {number} [page=1]
    */
-  async function loadHkStockRank(kind = "gainers", limit = 20, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 20));
+  async function loadHkStockRank(kind = "gainers", limit = 10, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
     const { list, total } = await fetchEastClist({
       fs: "m:116+t:3,m:116+t:4",

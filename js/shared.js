@@ -67,8 +67,8 @@
     ];
     const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin", "huabao", "fuguo"];
     const PAGE_SIZE = 10;
-    /** 涨跌榜：默认 20 条，上拉再加载 20，最多 100 */
-    const RANK_PAGE_SIZE = 20;
+    /** 涨跌榜：默认 10 条，上拉再加载 10，最多 100 */
+    const RANK_PAGE_SIZE = 10;
     const RANK_MAX = 100;
     const rankLoadMoreObservers = new Map();
     const pageState = {};

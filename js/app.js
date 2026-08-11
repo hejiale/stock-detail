@@ -160,28 +160,14 @@
       }
     }
 
-    async function addWatchFromChart(triggerBtn) {
-      const btn = triggerBtn || document.getElementById("chartWatchBtn");
-      const state = openChartModal._state;
-      const watchAdd = state?.watchAdd;
-      const holding = state?.holding;
-      const fundId = watchAdd?.fundId || state?.fundId || btn?.getAttribute("data-watch-fund") || "";
-      const code = String(
-        watchAdd?.code ||
-          holding?.code ||
-          btn?.getAttribute("data-watch-code") ||
-          ""
-      ).trim();
-      const name = String(
-        watchAdd?.name ||
-          holding?.name ||
-          btn?.getAttribute("data-watch-name") ||
-          code
-      ).trim();
+    async function addWatchFromRow(triggerBtn) {
+      const btn = triggerBtn;
+      const fundId = btn?.getAttribute("data-add-watch") || "";
+      const code = String(btn?.getAttribute("data-watch-code") || "").trim();
+      const name = String(btn?.getAttribute("data-watch-name") || code).trim();
       const type =
-        Number(watchAdd?.type) ||
         Number(btn?.getAttribute("data-watch-type")) ||
-        watchTypeFromHolding(holding, fundId);
+        watchTypeOfFund(fundId);
 
       if (!code) {
         showToast("缺少股票代码，无法加入自选");
@@ -200,8 +186,8 @@
         showToast(`加入成功：${name}（${code}）`);
         if (btn) {
           btn.classList.add("is-added");
-          const label = btn.querySelector("span");
-          if (label) label.textContent = "已加入";
+          btn.title = "已加入自选";
+          btn.setAttribute("aria-label", `已加入自选 ${name}`);
         }
       } catch (err) {
         showToast(err.message || "加入自选失败");
@@ -394,8 +380,9 @@
         return;
       }
 
-      if (e.target.closest("[data-chart-add-watch]")) {
-        addWatchFromChart(e.target.closest("[data-chart-add-watch]"));
+      const addWatchBtn = e.target.closest("[data-add-watch]");
+      if (addWatchBtn) {
+        addWatchFromRow(addWatchBtn);
         return;
       }
 

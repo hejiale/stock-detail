@@ -239,6 +239,31 @@
               : ""
           ].join("");
 
+          const canAddWatch = ADDABLE_FUNDS.has(fund.id) && !h.custom;
+          const watchType = watchTypeOfFund(fund.id);
+          const safeName = String(h.name || "").replace(/"/g, "&quot;");
+          const watchBtnHtml = h.custom
+            ? `<button
+                    class="btn-remove-stock"
+                    type="button"
+                    data-remove-stock="${fund.id}"
+                    data-remove-code="${h.code}"
+                    title="移除自选"
+                    aria-label="移除 ${safeName}"
+                  ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>`
+            : canAddWatch && watchType
+              ? `<button
+                    class="btn-add-watch"
+                    type="button"
+                    data-add-watch="${fund.id}"
+                    data-watch-code="${h.code}"
+                    data-watch-name="${safeName}"
+                    data-watch-type="${watchType}"
+                    title="加入自选"
+                    aria-label="加入自选 ${safeName}"
+                  ><img src="assets/add_zixuan.png" alt="自选" /></button>`
+              : "";
+
           return `
             ${sectionHtml}
             <div class="${gridClass}${h.custom ? " is-custom" : ""}" data-index="${i}">
@@ -250,19 +275,11 @@
                     tabindex="0"
                     data-chart-fund="${fund.id}"
                     data-chart-index="${i}"
-                    title="查看 ${h.name} 当日分时"
+                    title="查看 ${safeName} 当日分时"
                   >${h.name}</div>
                   <div class="stock-code">${h.code}</div>
                 </div>
-                ${h.custom ? `
-                  <button
-                    class="btn-remove-stock"
-                    type="button"
-                    data-remove-stock="${fund.id}"
-                    data-remove-code="${h.code}"
-                    title="移除自选"
-                    aria-label="移除 ${h.name}"
-                  ><img src="assets/quxiao_zixuan.png" alt="移除" /></button>` : ""}
+                ${watchBtnHtml}
               </div>
               ${viewOnly ? "" : `<div class="ratio">${h.ratio.toFixed(2)}%</div>`}
               <div

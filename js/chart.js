@@ -298,48 +298,12 @@
       return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
     }
 
-    function updateChartWatchBtn(fundId, holding) {
-      const btn = document.getElementById("chartWatchBtn");
-      if (!btn) return;
-      const type = watchTypeOfFund(fundId) || watchTypeFromHolding(holding, fundId);
-      const code = String(holding?.code || "").trim();
-      const name = String(holding?.name || code).trim();
-      const canAdd = !!(code && type && ADDABLE_FUNDS.has(fundId));
-      btn.hidden = !canAdd;
-      btn.disabled = false;
-      btn.classList.remove("is-added");
-      const label = btn.querySelector("span");
-      if (label) label.textContent = "加入自选";
-      if (canAdd) {
-        btn.setAttribute("data-watch-fund", fundId);
-        btn.setAttribute("data-watch-code", code);
-        btn.setAttribute("data-watch-name", name);
-        btn.setAttribute("data-watch-type", String(type));
-        if (openChartModal._state) {
-          openChartModal._state.watchAdd = { code, type, name, fundId };
-        }
-      } else {
-        btn.removeAttribute("data-watch-fund");
-        btn.removeAttribute("data-watch-code");
-        btn.removeAttribute("data-watch-name");
-        btn.removeAttribute("data-watch-type");
-        if (openChartModal._state) openChartModal._state.watchAdd = null;
-      }
-    }
-
     async function openChartModal(fundId, index) {
       const holding = resolveChartHolding(fundId, index);
       if (!holding) return;
 
       const canvas = document.getElementById("chartCanvas");
       const reqId = ++chartRequestId;
-      const code = String(holding.code || "").trim();
-      const type = watchTypeOfFund(fundId) || watchTypeFromHolding(holding, fundId);
-      const name = String(holding.name || code).trim();
-      const watchAdd =
-        code && type && ADDABLE_FUNDS.has(fundId)
-          ? { code, type, name, fundId }
-          : null;
 
       document.getElementById("chartModalName").textContent =
         holding.name;
@@ -357,11 +321,9 @@
         history: null,
         returns: null,
         holding,
-        fundId,
-        watchAdd
+        fundId
       };
       openChartModal._lastSeries = null;
-      updateChartWatchBtn(fundId, holding);
 
       showModal("chartModal");
       setStatus("chartStatus", "加载分时与区间涨跌幅…");
@@ -379,8 +341,7 @@
         history: historyResult.status === "fulfilled" ? historyResult.value : null,
         returns: null,
         holding,
-        fundId,
-        watchAdd: openChartModal._state?.watchAdd || null
+        fundId
       };
 
       if (state.history) {

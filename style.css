@@ -471,20 +471,45 @@ header p {
   transition: opacity 0.15s, transform 0.15s;
 }
 
-.btn-remove-stock img {
+.btn-remove-stock img,
+.btn-add-watch img {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: contain;
 }
 
-.btn-remove-stock:hover {
+.btn-remove-stock:hover,
+.btn-add-watch:hover {
   opacity: 0.85;
 }
 
-.btn-remove-stock:active {
+.btn-remove-stock:active,
+.btn-add-watch:active {
   transform: scale(0.94);
   opacity: 0.8;
+}
+
+.btn-add-watch {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.btn-add-watch:disabled,
+.btn-add-watch.is-added {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
 }
 
 .row.is-custom {
@@ -972,49 +997,6 @@ header p {
   gap: 8px;
 }
 
-.chart-watch-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #dbe7ff;
-  border-radius: 10px;
-  background: #f5f9ff;
-  color: var(--accent);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-}
-
-.chart-watch-btn[hidden] {
-  display: none !important;
-}
-
-.chart-watch-btn img {
-  width: 16px;
-  height: 16px;
-  display: block;
-  object-fit: contain;
-}
-
-.chart-watch-btn:hover {
-  background: #ebf3ff;
-  border-color: #b7ceff;
-}
-
-.chart-watch-btn:disabled,
-.chart-watch-btn.is-added {
-  opacity: 0.72;
-  cursor: default;
-  color: #64748b;
-  background: #f8fafc;
-  border-color: #e2e8f0;
-}
-
 .chart-modal-close {
   flex-shrink: 0;
   width: 36px;
@@ -1476,6 +1458,23 @@ header p {
 
 .board-info {
   min-width: 0;
+}
+
+.rank-board-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rank-board-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rank-board-info .btn-add-watch {
+  width: 20px;
+  height: 20px;
 }
 
 .board-name {

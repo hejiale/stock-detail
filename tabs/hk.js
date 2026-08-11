@@ -167,16 +167,28 @@
           const safeName = String(item.name || "").replace(/"/g, "&quot;");
           return `
             <div class="board-row kr-stock-row">
-              <div class="board-info">
-                <div
-                  class="board-name"
-                  role="button"
-                  tabindex="0"
-                  data-chart-fund="hkStocks"
-                  data-chart-index="${i}"
-                  title="查看 ${safeName} 行情与个股资料"
-                >${item.name}</div>
-                <div class="board-meta">${item.code}${priceTip}</div>
+              <div class="board-info rank-board-info">
+                <div class="rank-board-text">
+                  <div
+                    class="board-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="hkStocks"
+                    data-chart-index="${i}"
+                    title="查看 ${safeName} 行情与个股资料"
+                  >${item.name}</div>
+                  <div class="board-meta">${item.code}${priceTip}</div>
+                </div>
+                <button
+                  class="btn-add-watch"
+                  type="button"
+                  data-add-watch="hkStocks"
+                  data-watch-code="${item.code}"
+                  data-watch-name="${safeName}"
+                  data-watch-type="3"
+                  title="加入自选"
+                  aria-label="加入自选 ${safeName}"
+                ><img src="assets/add_zixuan.png" alt="自选" /></button>
               </div>
               <div
                 class="kr-spark-wrap"

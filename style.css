@@ -1562,6 +1562,18 @@ header p {
   object-fit: contain;
 }
 
+.kr-rank-card .fund-meta-actions .btn-board,
+.kr-rank-card .fund-meta-actions .btn-sync {
+  width: 36px;
+  height: 36px;
+}
+
+.kr-rank-card .fund-meta-actions .btn-board img,
+.kr-rank-card .fund-meta-actions .btn-sync img {
+  width: 24px;
+  height: 24px;
+}
+
 /* 美股市场概况弹框 */
 .us-board-panel {
   max-height: min(92vh, 760px);

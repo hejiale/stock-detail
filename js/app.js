@@ -163,10 +163,11 @@
     async function addWatchFromRow(triggerBtn) {
       const btn = triggerBtn;
       const fundId = btn?.getAttribute("data-add-watch") || "";
-      const code = String(btn?.getAttribute("data-watch-code") || "").trim();
-      const name = String(btn?.getAttribute("data-watch-name") || code).trim();
+      const code = String(
+        btn?.getAttribute("data-watch-code") || btn?.dataset?.watchCode || ""
+      ).trim();
       const type =
-        Number(btn?.getAttribute("data-watch-type")) ||
+        Number(btn?.getAttribute("data-watch-type") || btn?.dataset?.watchType) ||
         watchTypeOfFund(fundId);
 
       if (!code) {
@@ -182,13 +183,13 @@
 
       if (btn) btn.disabled = true;
       try {
-        // 列表已有代码，直接走添加接口，不再调查询/解析行情
-        const added = await addWatchStock(code, type);
-        showToast(`加入成功：${name}（${added.code || code}）`);
+        // 与搜索框添加走同一条链路：addStockToWatchlist
+        const stock = await addStockToWatchlist(code, type);
         if (btn) {
           btn.classList.add("is-added");
+          const labelName = stock?.name || code;
           btn.title = "已加入自选";
-          btn.setAttribute("aria-label", `已加入自选 ${name}`);
+          btn.setAttribute("aria-label", `已加入自选 ${labelName}`);
         }
       } catch (err) {
         showToast(err.message || "添加失败");
@@ -260,6 +261,19 @@
       const next = tabs[index + step];
       if (next) switchTab(next.dataset.tab);
     }
+
+    // 捕获阶段优先处理列表自选，避免冒泡到名称/走势去打开行情弹框
+    document.addEventListener(
+      "click",
+      (e) => {
+        const addWatchBtn = e.target.closest("[data-add-watch], .btn-add-watch");
+        if (!addWatchBtn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        addWatchFromRow(addWatchBtn);
+      },
+      true
+    );
 
     document.addEventListener("click", (e) => {
       if (e.target.closest("[data-us-board-close]")) {
@@ -381,12 +395,6 @@
         return;
       }
 
-      const addWatchBtn = e.target.closest("[data-add-watch]");
-      if (addWatchBtn) {
-        addWatchFromRow(addWatchBtn);
-        return;
-      }
-
       if (e.target.closest("[data-chart-close]")) {
         closeChartModal();
         return;
@@ -405,7 +413,7 @@
       }
 
       const chartName = e.target.closest("[data-chart-fund]");
-      if (chartName) {
+      if (chartName && !e.target.closest("[data-add-watch], .btn-add-watch")) {
         openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
         return;
       }

@@ -491,9 +491,11 @@ header p {
 }
 
 .btn-add-watch {
+  position: relative;
+  z-index: 2;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -503,6 +505,7 @@ header p {
   justify-content: center;
   padding: 0;
   transition: opacity 0.15s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn-add-watch:disabled,
@@ -510,6 +513,11 @@ header p {
   opacity: 0.45;
   cursor: default;
   transform: none;
+  pointer-events: none;
+}
+
+.stock-name-cell .btn-add-watch {
+  margin-left: 2px;
 }
 
 .row.is-custom {

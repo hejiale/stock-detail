@@ -8,6 +8,24 @@
       };
     }
 
+    function renderWatchLoginGate() {
+      const wrap = document.getElementById("watchStockList");
+      const subEl = document.getElementById("watchRankSub");
+      if (wrap) {
+        wrap.innerHTML = `
+          <div class="watch-login-gate">
+            <div class="watch-login-title">登录后查看自选</div>
+            <div class="watch-login-desc">自选个股需登录后同步到云端，登录后可新增、删除和查询自选。</div>
+            <div class="watch-login-actions">
+              <button class="btn btn-primary" type="button" data-open-login>登录</button>
+              <button class="btn btn-ghost" type="button" data-open-register>注册账号</button>
+            </div>
+          </div>`;
+      }
+      if (subEl) subEl.textContent = "未登录";
+      setStatus("watchBoardStatus", "");
+    }
+
     function buildWatchPanelElement(isActive) {
       const panel = document.createElement("section");
       panel.className = "panel" + (isActive ? " active" : "");
@@ -155,10 +173,19 @@
 
     async function loadWatchlist(type, { force = false } = {}) {
       const next = normalizeWatchType(type != null ? type : watchlistState.type || 1);
+      document.querySelectorAll("[data-watch-type]").forEach((btn) => {
+        btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
+      });
+
+      if (!isLoggedIn()) {
+        watchlistState.type = next;
+        watchlistState.list = [];
+        watchlistState.trends = null;
+        renderWatchLoginGate();
+        return;
+      }
+
       if (!force && watchlistState.type === next && watchlistState.list?.length) {
-        document.querySelectorAll("[data-watch-type]").forEach((btn) => {
-          btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
-        });
         renderWatchStockList(watchlistState.list);
         const subEl = document.getElementById("watchRankSub");
         if (subEl) {
@@ -171,9 +198,6 @@
 
       watchlistState.type = next;
       watchlistState.trends = null;
-      document.querySelectorAll("[data-watch-type]").forEach((btn) => {
-        btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
-      });
 
       const requestId = (loadWatchlist._req = (loadWatchlist._req || 0) + 1);
       const listEl = document.getElementById("watchStockList");

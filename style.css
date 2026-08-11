@@ -1730,6 +1730,125 @@ header p {
   padding-top: 0;
 }
 
+.watch-login-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 20px 56px;
+  text-align: center;
+}
+
+.watch-login-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.watch-login-desc {
+  max-width: 280px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.watch-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.watch-login-actions .btn {
+  min-width: 112px;
+  height: 40px;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.auth-modal .auth-panel {
+  width: min(420px, 100%);
+  max-height: min(90vh, 640px);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 20px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.auth-input {
+  height: 42px;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  color: #1e293b;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.auth-input:focus {
+  border-color: #91b9ff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+}
+
+.auth-error {
+  margin-top: -4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.auth-submit.is-loading {
+  opacity: 0.75;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-link {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-left: 4px;
+  color: #1677ff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
 /* 美股市场概况弹框 */
 .us-board-panel {
   max-height: min(92vh, 760px);

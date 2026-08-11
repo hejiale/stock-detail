@@ -1017,16 +1017,59 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 自选个股（远端）
+  // 自选个股（远端）+ 用户登录
   // ---------------------------------------------------------------------------
 
   const WATCHLIST_BASE =
     "https://stock-backdev-production.up.railway.app";
+  const AUTH_USER_KEY = "watch_user_v1";
   const VALID_WATCH_TYPES = [1, 2, 3, 4]; // 1 A股 2 美股 3 港股 4 韩股
 
   function normalizeWatchType(type) {
     const n = Number(type);
     return VALID_WATCH_TYPES.includes(n) ? n : 1;
+  }
+
+  /** @returns {{ userId: number, name: string } | null} */
+  function getAuthUser() {
+    try {
+      const raw = localStorage.getItem(AUTH_USER_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      const userId = Number(data?.userId ?? data?.id);
+      const name = String(data?.name || "").trim();
+      if (!Number.isInteger(userId) || userId <= 0) return null;
+      return { userId, name };
+    } catch {
+      return null;
+    }
+  }
+
+  function getUserId() {
+    return getAuthUser()?.userId || null;
+  }
+
+  function saveAuthUser(user) {
+    const userId = Number(user?.userId ?? user?.id);
+    const name = String(user?.name || "").trim();
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new Error("无效的用户信息");
+    }
+    localStorage.setItem(
+      AUTH_USER_KEY,
+      JSON.stringify({ userId, name: name || String(userId) })
+    );
+    return { userId, name: name || String(userId) };
+  }
+
+  function clearAuthUser() {
+    localStorage.removeItem(AUTH_USER_KEY);
+  }
+
+  function requireUserId() {
+    const userId = getUserId();
+    if (!userId) throw new Error("请先登录");
+    return userId;
   }
 
   /**
@@ -1079,23 +1122,57 @@
     return json || {};
   }
 
-  /** POST /api/stock/addStock  { code, type } */
+  /** POST /api/users/login  { name, password } */
+  async function loginUser(name, password) {
+    const username = String(name || "").trim();
+    if (!username) throw new Error("请输入用户名");
+    if (!password) throw new Error("请输入密码");
+    const json = await watchlistFetch("/api/users/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: username, password: String(password) })
+    });
+    const user = json.data || {};
+    return saveAuthUser(user);
+  }
+
+  /** POST /api/users/register  { name, password } */
+  async function registerUser(name, password) {
+    const username = String(name || "").trim();
+    if (!username) throw new Error("请输入用户名");
+    if (!password) throw new Error("请输入密码");
+    const json = await watchlistFetch("/api/users/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: username, password: String(password) })
+    });
+    return json.data || { name: username };
+  }
+
+  /** POST /api/stock/addStock  { code, type, userId } */
   async function addWatchStock(code, type) {
     const t = normalizeWatchType(type);
+    const userId = requireUserId();
     const holding = holdingFromWatchType(code, t);
     if (!holding.code) throw new Error("股票代码无效");
     const json = await watchlistFetch("/api/stock/addStock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: holding.code, type: t })
+      body: JSON.stringify({ code: holding.code, type: t, userId })
     });
-    return { ...(json.data || {}), code: holding.code, type: t };
+    return { ...(json.data || {}), code: holding.code, type: t, userId };
   }
 
-  /** GET /api/stock?type= */
+  /** GET /api/stock?type=&userId= */
   async function listWatchStocks(type) {
     const t = normalizeWatchType(type);
-    const json = await watchlistFetch("/api/stock?type=" + encodeURIComponent(t));
+    const userId = requireUserId();
+    const json = await watchlistFetch(
+      "/api/stock?type=" +
+        encodeURIComponent(t) +
+        "&userId=" +
+        encodeURIComponent(userId)
+    );
     const rows = Array.isArray(json.data) ? json.data : [];
     const seen = new Set();
     return rows
@@ -1115,13 +1192,18 @@
       .filter(Boolean);
   }
 
-  /** DELETE /api/stock/deleteStock/:code */
+  /** DELETE /api/stock/deleteStock/:code?userId= */
   async function removeWatchStock(code) {
     const raw = String(code || "").trim();
     if (!raw) throw new Error("缺少股票代码");
-    await watchlistFetch("/api/stock/deleteStock/" + encodeURIComponent(raw), {
-      method: "DELETE"
-    });
+    const userId = requireUserId();
+    await watchlistFetch(
+      "/api/stock/deleteStock/" +
+        encodeURIComponent(raw) +
+        "?userId=" +
+        encodeURIComponent(userId),
+      { method: "DELETE" }
+    );
     return true;
   }
 
@@ -1968,6 +2050,14 @@
     resolveStock,
     normalizeHkCode,
     normalizeKrCode,
+    // 用户登录
+    AUTH_USER_KEY,
+    getAuthUser,
+    getUserId,
+    saveAuthUser,
+    clearAuthUser,
+    loginUser,
+    registerUser,
     // 自选个股
     VALID_WATCH_TYPES,
     normalizeWatchType,

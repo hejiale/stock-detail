@@ -26,7 +26,13 @@
       loadWatchQuotes,
       normalizeWatchType,
       holdingFromWatchType,
-      VALID_WATCH_TYPES
+      VALID_WATCH_TYPES,
+      getAuthUser,
+      getUserId,
+      saveAuthUser,
+      clearAuthUser,
+      loginUser,
+      registerUser
     } = window.MarketAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
@@ -71,8 +77,14 @@
       "boardStocksModal",
       "usBoardModal",
       "hkBoardModal",
-      "krBoardModal"
+      "krBoardModal",
+      "loginModal",
+      "registerModal"
     ];
+
+    function isLoggedIn() {
+      return !!getUserId();
+    }
 
     function loadJson(key, fallback) {
       try {

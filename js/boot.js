@@ -9,7 +9,9 @@
     "tabs/modals/us-board.html",
     "tabs/modals/hk-board.html",
     "tabs/modals/kr-board.html",
-    "tabs/modals/profile.html"
+    "tabs/modals/profile.html",
+    "tabs/modals/login.html",
+    "tabs/modals/register.html"
   ];
   const htmls = await Promise.all(
     partials.map(async (url) => {

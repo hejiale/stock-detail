@@ -51,6 +51,7 @@
     }
 
     async function addStockToWatchlist(rawCode, type, { refreshWatch = false } = {}) {
+      if (!ensureLoggedIn()) return null;
       const t = normalizeWatchType(type);
       const marketType = watchMarketOfType(t);
       const stock = await resolveStock(rawCode, marketType);
@@ -81,9 +82,10 @@
         btn.disabled = true;
       }
       try {
-        await addStockToWatchlist(raw, type, {
+        const stock = await addStockToWatchlist(raw, type, {
           refreshWatch: activeMainTab === "watchStocks"
         });
+        if (!stock) return;
         if (input) input.value = "";
       } catch (err) {
         showToast(err.message || "添加失败");
@@ -129,7 +131,11 @@
       saveInputs(saved);
 
       try {
-        await removeWatchStock(code);
+        if (!isLoggedIn()) {
+          /* 未登录只清本地 */
+        } else {
+          await removeWatchStock(code);
+        }
       } catch {
         /* 远端可能本无此代码，本地仍移除 */
       }
@@ -144,6 +150,7 @@
     async function removeWatchlistStock(code) {
       const raw = String(code || "").trim();
       if (!raw) return;
+      if (!ensureLoggedIn()) return;
       try {
         await removeWatchStock(raw);
         purgeLocalCustomStock(raw);
@@ -179,6 +186,10 @@
       try {
         // 与搜索框添加走同一条链路：addStockToWatchlist
         const stock = await addStockToWatchlist(code, type);
+        if (!stock) {
+          if (btn) btn.disabled = false;
+          return;
+        }
         if (btn) {
           btn.classList.add("is-added");
           const labelName = stock?.name || code;
@@ -270,6 +281,26 @@
     );
 
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-login-close]")) {
+        closeLoginModal();
+        return;
+      }
+
+      if (e.target.closest("[data-register-close]")) {
+        closeRegisterModal();
+        return;
+      }
+
+      if (e.target.closest("[data-open-login]")) {
+        openLoginModal();
+        return;
+      }
+
+      if (e.target.closest("[data-open-register]")) {
+        openRegisterModal();
+        return;
+      }
+
       if (e.target.closest("[data-us-board-close]")) {
         closeUsBoardModal();
         return;
@@ -462,8 +493,28 @@
       }
     });
 
+    document.addEventListener("submit", (e) => {
+      if (e.target?.id === "loginForm") {
+        handleLoginSubmit(e);
+        return;
+      }
+      if (e.target?.id === "registerForm") {
+        handleRegisterSubmit(e);
+      }
+    });
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        const loginModal = document.getElementById("loginModal");
+        if (loginModal?.classList.contains("show")) {
+          closeLoginModal();
+          return;
+        }
+        const registerModal = document.getElementById("registerModal");
+        if (registerModal?.classList.contains("show")) {
+          closeRegisterModal();
+          return;
+        }
         const profileModal = document.getElementById("profileModal");
         if (profileModal?.classList.contains("show")) {
           closeProfileModal();

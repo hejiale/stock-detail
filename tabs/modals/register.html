@@ -1,0 +1,36 @@
+<div class="board-modal auth-modal" id="registerModal" aria-hidden="true">
+  <div class="board-modal-backdrop" data-register-close></div>
+  <div class="board-modal-panel auth-panel" role="dialog" aria-modal="true" aria-labelledby="registerModalTitle">
+    <div class="board-modal-head">
+      <div class="board-modal-title">
+        <div class="name" id="registerModalTitle">注册</div>
+        <div class="sub">创建账号后返回登录，即可使用自选</div>
+      </div>
+      <button class="board-modal-close" type="button" data-register-close aria-label="关闭">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+        </svg>
+      </button>
+    </div>
+    <form class="auth-form" id="registerForm" autocomplete="on">
+      <label class="auth-field">
+        <span class="auth-label">用户名</span>
+        <input class="auth-input" id="registerName" name="name" type="text" maxlength="32" placeholder="请输入用户名" required autocomplete="username" />
+      </label>
+      <label class="auth-field">
+        <span class="auth-label">密码</span>
+        <input class="auth-input" id="registerPassword" name="password" type="password" maxlength="64" placeholder="请输入密码" required autocomplete="new-password" />
+      </label>
+      <label class="auth-field">
+        <span class="auth-label">确认密码</span>
+        <input class="auth-input" id="registerPassword2" name="password2" type="password" maxlength="64" placeholder="请再次输入密码" required autocomplete="new-password" />
+      </label>
+      <div class="auth-error" id="registerError" hidden></div>
+      <button class="btn btn-primary auth-submit" type="submit" id="registerSubmit">注册</button>
+      <div class="auth-switch">
+        已有账号？
+        <button class="auth-link" type="button" data-open-login>去登录</button>
+      </div>
+    </form>
+  </div>
+</div>

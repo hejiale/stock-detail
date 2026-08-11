@@ -1,0 +1,32 @@
+<div class="board-modal auth-modal" id="loginModal" aria-hidden="true">
+  <div class="board-modal-backdrop" data-login-close></div>
+  <div class="board-modal-panel auth-panel" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+    <div class="board-modal-head">
+      <div class="board-modal-title">
+        <div class="name" id="loginModalTitle">登录</div>
+        <div class="sub">登录后同步查看和管理自选个股</div>
+      </div>
+      <button class="board-modal-close" type="button" data-login-close aria-label="关闭">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+        </svg>
+      </button>
+    </div>
+    <form class="auth-form" id="loginForm" autocomplete="on">
+      <label class="auth-field">
+        <span class="auth-label">用户名</span>
+        <input class="auth-input" id="loginName" name="name" type="text" maxlength="32" placeholder="请输入用户名" required autocomplete="username" />
+      </label>
+      <label class="auth-field">
+        <span class="auth-label">密码</span>
+        <input class="auth-input" id="loginPassword" name="password" type="password" maxlength="64" placeholder="请输入密码" required autocomplete="current-password" />
+      </label>
+      <div class="auth-error" id="loginError" hidden></div>
+      <button class="btn btn-primary auth-submit" type="submit" id="loginSubmit">登录</button>
+      <div class="auth-switch">
+        还没有账号？
+        <button class="auth-link" type="button" data-open-register>去注册</button>
+      </div>
+    </form>
+  </div>
+</div>

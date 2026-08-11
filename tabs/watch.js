@@ -18,7 +18,6 @@
             <div class="watch-login-desc">自选个股需登录后同步到云端，登录后可新增、删除和查询自选。</div>
             <div class="watch-login-actions">
               <button class="btn btn-primary" type="button" data-open-login>登录</button>
-              <button class="btn btn-ghost" type="button" data-open-register>注册账号</button>
             </div>
           </div>`;
       }

@@ -101,7 +101,7 @@ header p {
 .tabs {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0;
+  gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
   background: rgba(255, 255, 255, 0.7);
@@ -112,6 +112,7 @@ header p {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
 }
 
 .tabs::-webkit-scrollbar {
@@ -121,22 +122,21 @@ header p {
 .tab {
   border: none;
   background: transparent;
-  padding: 10px 6px;
+  padding: 10px 14px;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
   transition: 0.2s ease;
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   box-sizing: border-box;
   white-space: nowrap;
   text-align: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .tab-icon {

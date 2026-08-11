@@ -1462,6 +1462,106 @@ header p {
   display: flex;
 }
 
+.market-breadth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #eef1f6;
+}
+
+.market-breadth[hidden] {
+  display: none !important;
+}
+
+.market-breadth .breadth-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.market-breadth .breadth-values {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-breadth .breadth-item.up,
+.cn-index-card .idx-breadth .up {
+  color: var(--up);
+}
+
+.market-breadth .breadth-item.down,
+.cn-index-card .idx-breadth .down {
+  color: var(--down);
+}
+
+.market-breadth .breadth-item.flat {
+  color: #64748b;
+}
+
+.market-breadth .breadth-sep,
+.cn-index-card .idx-breadth .sep {
+  color: #cbd5e1;
+}
+
+.cn-index-card .idx-breadth {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.fund-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.fund-meta-actions .btn-board,
+.fund-meta-actions .btn-sync {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.fund-meta-actions .btn-board:active,
+.fund-meta-actions .btn-sync:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+.fund-meta-actions .btn-board img,
+.fund-meta-actions .btn-sync img {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+}
+
 /* 美股市场概况弹框 */
 .us-board-panel {
   max-height: min(92vh, 760px);

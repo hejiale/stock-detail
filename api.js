@@ -1255,8 +1255,9 @@
   /**
    * A 股主要市场指数（上交所 / 深交所 / 创业板 / 科创板 / 北交所）
    * GET {push2}/api/qt/ulist.np/get
+   * f104 上涨家数, f105 下跌家数, f106 平盘家数
    *
-   * @returns {Promise<Array<{code,name,label,market,price,change}>>}
+   * @returns {Promise<Array<{code,name,label,market,price,change,upCount,downCount,flatCount}>>}
    */
   async function loadCnIndices() {
     const defs = [
@@ -1267,7 +1268,7 @@
       { code: "899050", market: 0, label: "北交所" }
     ];
     const secids = defs.map((d) => d.market + "." + d.code).join(",");
-    const json = await fetchEastUlist(secids, "f2,f3,f12,f14");
+    const json = await fetchEastUlist(secids, "f2,f3,f12,f14,f104,f105,f106");
     const byCode = new Map();
     normalizeEastDiff(json).forEach((item) => {
       if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
@@ -1278,7 +1279,10 @@
         code: String(item.f12),
         name: String(item.f14 || item.f12),
         price: Number.isNaN(price) ? null : price,
-        change: round2(change)
+        change: round2(change),
+        upCount: Number(item.f104) || 0,
+        downCount: Number(item.f105) || 0,
+        flatCount: Number(item.f106) || 0
       });
     });
 
@@ -1293,6 +1297,97 @@
         };
       })
       .filter(Boolean);
+  }
+
+  /**
+   * 按涨跌幅排序的 clist，统计涨 / 跌家数（二分定位分界页）
+   * @param {string} fs
+   * @param {0|1} po 1=降序统计上涨，0=升序统计下跌
+   */
+  async function countMarketSide(fs, po) {
+    const pz = 100;
+    const wantUp = po === 1;
+    const first = await fetchEastClist({
+      fs,
+      fields: "f3",
+      pn: 1,
+      pz,
+      po,
+      fid: "f3"
+    });
+    const total = first.total || 0;
+    if (!total || !first.list.length) return { count: 0, total };
+
+    function sideMatch(raw) {
+      if (raw == null || raw === "-") return false;
+      const c = Number(raw);
+      if (Number.isNaN(c)) return false;
+      return wantUp ? c > 0 : c < 0;
+    }
+
+    if (!sideMatch(first.list[0].f3)) return { count: 0, total };
+
+    const pages = Math.ceil(total / pz);
+    let left = 1;
+    let right = pages;
+    let lastMatchPage = 1;
+
+    while (left <= right) {
+      const mid = (left + right) >> 1;
+      const pack =
+        mid === 1
+          ? first
+          : await fetchEastClist({
+              fs,
+              fields: "f3",
+              pn: mid,
+              pz,
+              po,
+              fid: "f3"
+            });
+      const head = pack.list[0]?.f3;
+      if (sideMatch(head)) {
+        lastMatchPage = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    let count = (lastMatchPage - 1) * pz;
+    const boundary =
+      lastMatchPage === 1
+        ? first
+        : await fetchEastClist({
+            fs,
+            fields: "f3",
+            pn: lastMatchPage,
+            pz,
+            po,
+            fid: "f3"
+          });
+    for (let i = 0; i < boundary.list.length; i++) {
+      if (sideMatch(boundary.list[i].f3)) count += 1;
+      else break;
+    }
+    return { count, total };
+  }
+
+  /**
+   * 全市场实时涨跌家数
+   * @param {string} fs 如 m:177 / m:105,m:106,m:107
+   * @returns {Promise<{up:number,down:number,flat:number,total:number}>}
+   */
+  async function loadMarketBreadth(fs) {
+    const [upSide, downSide] = await Promise.all([
+      countMarketSide(fs, 1),
+      countMarketSide(fs, 0)
+    ]);
+    const total = Math.max(upSide.total || 0, downSide.total || 0);
+    const up = upSide.count || 0;
+    const down = downSide.count || 0;
+    const flat = Math.max(0, total - up - down);
+    return { up, down, flat, total };
   }
 
   /**
@@ -1333,6 +1428,59 @@
         };
       })
       .filter(Boolean);
+  }
+
+  /**
+   * 美股全市场涨跌家数（纳斯达克 + 纽交所 + 美交所）
+   */
+  async function loadUsMarketBreadth() {
+    return loadMarketBreadth("m:105,m:106,m:107");
+  }
+
+  /**
+   * 韩股主要指数：KOSPI / KOSPI200
+   * GET {push2}/api/qt/ulist.np/get  secids=100.KS11,100.KOSPI200
+   */
+  async function loadKrIndices() {
+    const defs = [
+      { code: "KS11", market: 100, name: "韩国KOSPI" },
+      { code: "KOSPI200", market: 100, name: "韩国KOSPI200" }
+    ];
+    const json = await fetchEastUlist(
+      defs.map((d) => d.market + "." + d.code).join(","),
+      "f2,f3,f12,f14"
+    );
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const change = Number(item.f3);
+      const price = Number(item.f2);
+      if (Number.isNaN(change)) return;
+      byCode.set(String(item.f12).toUpperCase(), {
+        code: String(item.f12).toUpperCase(),
+        price: Number.isNaN(price) ? null : price,
+        change: round2(change)
+      });
+    });
+
+    return defs
+      .map((d) => {
+        const q = byCode.get(d.code.toUpperCase());
+        if (!q) return null;
+        return {
+          ...q,
+          market: d.market,
+          name: d.name
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * 韩股全市场涨跌家数
+   */
+  async function loadKrMarketBreadth() {
+    return loadMarketBreadth("m:177");
   }
 
   /**
@@ -1455,7 +1603,10 @@
     loadUsIndices,
     loadUsSectorBoards,
     loadUsStockRank,
+    loadUsMarketBreadth,
+    loadKrIndices,
     loadKrStockRank,
+    loadKrMarketBreadth,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

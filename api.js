@@ -1079,12 +1079,12 @@
     return json || {};
   }
 
-  /** POST /api/stock  { code, type } */
+  /** POST /api/stock/addStock  { code, type } */
   async function addWatchStock(code, type) {
     const t = normalizeWatchType(type);
     const holding = holdingFromWatchType(code, t);
     if (!holding.code) throw new Error("股票代码无效");
-    const json = await watchlistFetch("/api/stock", {
+    const json = await watchlistFetch("/api/stock/addStock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: holding.code, type: t })
@@ -1115,11 +1115,11 @@
       .filter(Boolean);
   }
 
-  /** DELETE /api/stock/:code */
+  /** DELETE /api/stock/deleteStock/:code */
   async function removeWatchStock(code) {
     const raw = String(code || "").trim();
     if (!raw) throw new Error("缺少股票代码");
-    await watchlistFetch("/api/stock/" + encodeURIComponent(raw), {
+    await watchlistFetch("/api/stock/deleteStock/" + encodeURIComponent(raw), {
       method: "DELETE"
     });
     return true;

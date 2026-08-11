@@ -63,21 +63,15 @@
     }
 
     async function addCustomStock(fundId) {
-      const isWatchPanel = fundId === "watchStocks";
-      const type = isWatchPanel
-        ? normalizeWatchType(watchlistState.type || 1)
-        : watchTypeOfFund(fundId);
-      if (!type || (!isWatchPanel && !ADDABLE_FUNDS.has(fundId))) return;
+      if (fundId === "watchStocks") return;
+      const type = watchTypeOfFund(fundId);
+      if (!type || !ADDABLE_FUNDS.has(fundId)) return;
 
       const input = document.querySelector(`[data-add-code="${fundId}"]`);
       const btn = document.querySelector(`[data-add-stock="${fundId}"]`);
       const raw = (input?.value || "").trim();
       if (!raw) {
-        showToast(
-          isWatchPanel
-            ? `请输入${watchTypeLabel(type)}代码`
-            : addEmptyTipOfFund(fundId)
-        );
+        showToast(addEmptyTipOfFund(fundId));
         input?.focus();
         return;
       }
@@ -88,7 +82,7 @@
       }
       try {
         await addStockToWatchlist(raw, type, {
-          refreshWatch: isWatchPanel
+          refreshWatch: activeMainTab === "watchStocks"
         });
         if (input) input.value = "";
       } catch (err) {

@@ -35,21 +35,6 @@
                 </button>
               </div>
             </div>
-            <div class="add-stock">
-              <div class="add-stock-field">
-                <input
-                  type="text"
-                  class="add-stock-input"
-                  data-add-code="watchStocks"
-                  placeholder="输入代码后添加到当前市场自选"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button class="btn btn-add" type="button" data-add-stock="watchStocks" aria-label="添加股票" title="添加">
-                  <img src="assets/add_zixuan.png" alt="添加" />
-                </button>
-              </div>
-            </div>
             <div class="board-tabs kr-rank-tabs watch-type-tabs">
               ${typeTabs}
             </div>
@@ -168,16 +153,6 @@
       });
     }
 
-    function updateWatchAddPlaceholder(type) {
-      const input = document.querySelector('[data-add-code="watchStocks"]');
-      if (!input) return;
-      const t = normalizeWatchType(type);
-      if (t === 2) input.placeholder = "输入美股代码，如 NVDA";
-      else if (t === 3) input.placeholder = "港股代码，如 00700、09988";
-      else if (t === 4) input.placeholder = "韩股代码，如 005930";
-      else input.placeholder = "沪/深/北交所代码，如 600519";
-    }
-
     async function loadWatchlist(type, { force = false } = {}) {
       const next = normalizeWatchType(type != null ? type : watchlistState.type || 1);
       if (!force && watchlistState.type === next && watchlistState.list?.length) {
@@ -185,7 +160,6 @@
           btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
         });
         renderWatchStockList(watchlistState.list);
-        updateWatchAddPlaceholder(next);
         const subEl = document.getElementById("watchRankSub");
         if (subEl) {
           subEl.textContent = `${watchTypeLabel(next)} · 自选 ${watchlistState.list.length} 只`;
@@ -200,7 +174,6 @@
       document.querySelectorAll("[data-watch-type]").forEach((btn) => {
         btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
       });
-      updateWatchAddPlaceholder(next);
 
       const requestId = (loadWatchlist._req = (loadWatchlist._req || 0) + 1);
       const listEl = document.getElementById("watchStockList");
@@ -221,7 +194,7 @@
         }
         setStatus(
           "watchBoardStatus",
-          list.length ? "" : `暂无${watchTypeLabel(next)}自选，可在上方或各市场页添加`
+          list.length ? "" : `暂无${watchTypeLabel(next)}自选，可在各市场页添加`
         );
         if (list.length) {
           requestAnimationFrame(() => {

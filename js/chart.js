@@ -302,22 +302,28 @@
       const btn = document.getElementById("chartWatchBtn");
       if (!btn) return;
       const type = watchTypeOfFund(fundId) || watchTypeFromHolding(holding, fundId);
-      const canAdd = !!(holding?.code && type && ADDABLE_FUNDS.has(fundId));
+      const code = String(holding?.code || "").trim();
+      const name = String(holding?.name || code).trim();
+      const canAdd = !!(code && type && ADDABLE_FUNDS.has(fundId));
       btn.hidden = !canAdd;
       btn.disabled = false;
       btn.classList.remove("is-added");
       const label = btn.querySelector("span");
       if (label) label.textContent = "加入自选";
       if (canAdd) {
-        btn.dataset.watchFund = fundId;
-        btn.dataset.watchCode = String(holding.code);
-        btn.dataset.watchName = String(holding.name || holding.code);
-        btn.dataset.watchType = String(type);
+        btn.setAttribute("data-watch-fund", fundId);
+        btn.setAttribute("data-watch-code", code);
+        btn.setAttribute("data-watch-name", name);
+        btn.setAttribute("data-watch-type", String(type));
+        if (openChartModal._state) {
+          openChartModal._state.watchAdd = { code, type, name, fundId };
+        }
       } else {
-        delete btn.dataset.watchFund;
-        delete btn.dataset.watchCode;
-        delete btn.dataset.watchName;
-        delete btn.dataset.watchType;
+        btn.removeAttribute("data-watch-fund");
+        btn.removeAttribute("data-watch-code");
+        btn.removeAttribute("data-watch-name");
+        btn.removeAttribute("data-watch-type");
+        if (openChartModal._state) openChartModal._state.watchAdd = null;
       }
     }
 
@@ -327,6 +333,13 @@
 
       const canvas = document.getElementById("chartCanvas");
       const reqId = ++chartRequestId;
+      const code = String(holding.code || "").trim();
+      const type = watchTypeOfFund(fundId) || watchTypeFromHolding(holding, fundId);
+      const name = String(holding.name || code).trim();
+      const watchAdd =
+        code && type && ADDABLE_FUNDS.has(fundId)
+          ? { code, type, name, fundId }
+          : null;
 
       document.getElementById("chartModalName").textContent =
         holding.name;
@@ -344,7 +357,8 @@
         history: null,
         returns: null,
         holding,
-        fundId
+        fundId,
+        watchAdd
       };
       openChartModal._lastSeries = null;
       updateChartWatchBtn(fundId, holding);
@@ -365,7 +379,8 @@
         history: historyResult.status === "fulfilled" ? historyResult.value : null,
         returns: null,
         holding,
-        fundId
+        fundId,
+        watchAdd: openChartModal._state?.watchAdd || null
       };
 
       if (state.history) {

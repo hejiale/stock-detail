@@ -163,15 +163,32 @@
     async function addWatchFromChart(triggerBtn) {
       const btn = triggerBtn || document.getElementById("chartWatchBtn");
       const state = openChartModal._state;
+      const watchAdd = state?.watchAdd;
       const holding = state?.holding;
-      const fundId = state?.fundId || btn?.dataset?.watchFund || "";
+      const fundId = watchAdd?.fundId || state?.fundId || btn?.getAttribute("data-watch-fund") || "";
       const code = String(
-        btn?.dataset?.watchCode || holding?.code || ""
+        watchAdd?.code ||
+          holding?.code ||
+          btn?.getAttribute("data-watch-code") ||
+          ""
       ).trim();
-      const type = Number(btn?.dataset?.watchType) || watchTypeFromHolding(holding, fundId);
+      const name = String(
+        watchAdd?.name ||
+          holding?.name ||
+          btn?.getAttribute("data-watch-name") ||
+          code
+      ).trim();
+      const type =
+        Number(watchAdd?.type) ||
+        Number(btn?.getAttribute("data-watch-type")) ||
+        watchTypeFromHolding(holding, fundId);
 
-      if (!code || !type) {
-        showToast("无法加入自选，请稍后重试");
+      if (!code) {
+        showToast("缺少股票代码，无法加入自选");
+        return;
+      }
+      if (!type) {
+        showToast("无法识别市场类型");
         return;
       }
 
@@ -179,8 +196,8 @@
 
       if (btn) btn.disabled = true;
       try {
-        // 与搜索框添加同一流程：先 resolveStock，再 POST /api/stock（成功提示在共用方法内）
-        await addStockToWatchlist(code, type);
+        await addWatchStock(code, type);
+        showToast(`加入成功：${name}（${code}）`);
         if (btn) {
           btn.classList.add("is-added");
           const label = btn.querySelector("span");

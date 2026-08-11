@@ -48,6 +48,10 @@
     }
 
     async function syncFundQuotes(fundId) {
+      if (isWatchTab(fundId)) {
+        await loadWatchlist(watchlistState.type || 1, { force: true });
+        return;
+      }
       if (isKrTab(fundId)) {
         await loadKrRankKind(krRankState.kind || "gainers", { force: true });
         return;
@@ -457,5 +461,6 @@
       });
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
+      panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
       applyAllChangeColors();
     }

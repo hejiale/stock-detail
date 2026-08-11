@@ -926,10 +926,32 @@
     return result;
   }
 
+  /** 港股代码：纯数字，左侧补零至 5 位 */
+  function normalizeHkCode(raw) {
+    const digits = String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\.HK$/i, "")
+      .replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.length <= 5) return digits.padStart(5, "0");
+    return digits.slice(-5);
+  }
+
+  /** 韩股代码：纯数字，左侧补零至 6 位 */
+  function normalizeKrCode(raw) {
+    const digits = String(raw || "")
+      .trim()
+      .replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.length <= 6) return digits.padStart(6, "0");
+    return digits.slice(0, 6);
+  }
+
   /**
    * 根据代码解析股票（名称 + 市场），用于添加自选
    * @param {string} rawCode
-   * @param {'CN'|'US'} marketType
+   * @param {'CN'|'US'|'HK'|'KR'} marketType
    * @returns {Promise<{ name, code, market, ratio }>}
    */
   async function resolveStock(rawCode, marketType) {
@@ -952,6 +974,32 @@
       throw new Error("未找到该股票，请确认是上交所 / 深交所 / 北交所代码");
     }
 
+    if (marketType === "HK") {
+      const code = normalizeHkCode(rawCode);
+      if (!/^\d{5}$/.test(code)) {
+        throw new Error("港股代码应为数字，如 00700、9988");
+      }
+      const quotes = await loadQuotes([{ code, market: 116 }]);
+      const quote = quotes[quoteKey(code)] || quotes[code];
+      if (quote && quote.name) {
+        return { name: quote.name, code, market: 116, ratio: 1 };
+      }
+      throw new Error("未找到该港股，请检查代码");
+    }
+
+    if (marketType === "KR") {
+      const code = normalizeKrCode(rawCode);
+      if (!/^\d{6}$/.test(code)) {
+        throw new Error("韩股代码应为 6 位数字，如 005930");
+      }
+      const quotes = await loadQuotes([{ code, market: 177 }]);
+      const quote = quotes[quoteKey(code)] || quotes[code];
+      if (quote && quote.name) {
+        return { name: quote.name, code, market: 177, ratio: 1 };
+      }
+      throw new Error("未找到该韩股，请检查代码");
+    }
+
     const code = String(rawCode || "").trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(code)) {
       throw new Error("美股代码格式不正确");
@@ -966,6 +1014,186 @@
       }
     }
     throw new Error("未找到该美股，请检查代码");
+  }
+
+  // ---------------------------------------------------------------------------
+  // 自选个股（远端）
+  // ---------------------------------------------------------------------------
+
+  const WATCHLIST_BASE =
+    "https://stock-backdev-production.up.railway.app";
+  const VALID_WATCH_TYPES = [1, 2, 3, 4]; // 1 A股 2 美股 3 港股 4 韩股
+
+  function normalizeWatchType(type) {
+    const n = Number(type);
+    return VALID_WATCH_TYPES.includes(n) ? n : 1;
+  }
+
+  /**
+   * 自选 type → 行情 holding 骨架（name 可后续用报价补齐）
+   * @param {string} code
+   * @param {number} type
+   */
+  function holdingFromWatchType(code, type) {
+    const t = normalizeWatchType(type);
+    if (t === 1) {
+      const c = normalizeCnCode(code);
+      return {
+        code: c,
+        market: inferCnMarketCandidates(c)[0],
+        name: c,
+        watchType: t
+      };
+    }
+    if (t === 2) {
+      const c = String(code || "").trim().toUpperCase();
+      return { code: c, market: 105, name: c, watchType: t };
+    }
+    if (t === 3) {
+      const c = normalizeHkCode(code);
+      return { code: c, market: 116, name: c, watchType: t };
+    }
+    const c = normalizeKrCode(code);
+    return { code: c, market: 177, name: c, watchType: t };
+  }
+
+  async function watchlistFetch(path, options = {}) {
+    const resp = await fetch(WATCHLIST_BASE + path, {
+      headers: { Accept: "application/json", ...(options.headers || {}) },
+      ...options
+    });
+    let json = null;
+    try {
+      json = await resp.json();
+    } catch {
+      json = null;
+    }
+    const apiCode = json && json.code != null ? Number(json.code) : null;
+    const okHttp = resp.ok;
+    const okApi = apiCode == null || (apiCode >= 200 && apiCode < 300);
+    if (!okHttp || !okApi) {
+      throw new Error(
+        (json && json.message) || "自选接口请求失败（" + resp.status + "）"
+      );
+    }
+    return json || {};
+  }
+
+  /** POST /api/stock  { code, type } */
+  async function addWatchStock(code, type) {
+    const t = normalizeWatchType(type);
+    const holding = holdingFromWatchType(code, t);
+    if (!holding.code) throw new Error("股票代码无效");
+    const json = await watchlistFetch("/api/stock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: holding.code, type: t })
+    });
+    return { ...(json.data || {}), code: holding.code, type: t };
+  }
+
+  /** GET /api/stock?type= */
+  async function listWatchStocks(type) {
+    const t = normalizeWatchType(type);
+    const json = await watchlistFetch("/api/stock?type=" + encodeURIComponent(t));
+    const rows = Array.isArray(json.data) ? json.data : [];
+    const seen = new Set();
+    return rows
+      .map((row) => {
+        const code = String(row?.code || "").trim();
+        if (!code) return null;
+        const key = quoteKey(code);
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return {
+          code,
+          name: row.name || null,
+          tag: row.tag || null,
+          type: normalizeWatchType(row.type != null ? row.type : t)
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /** DELETE /api/stock/:code */
+  async function removeWatchStock(code) {
+    const raw = String(code || "").trim();
+    if (!raw) throw new Error("缺少股票代码");
+    await watchlistFetch("/api/stock/" + encodeURIComponent(raw), {
+      method: "DELETE"
+    });
+    return true;
+  }
+
+  /**
+   * 自选列表 → 带行情的 holdings（按 code 拉三方报价）
+   * @param {Array<{code,name?,type?}>} items
+   * @param {number} type
+   */
+  async function loadWatchQuotes(items, type) {
+    const t = normalizeWatchType(type);
+    const stubs = (items || []).map((item) =>
+      holdingFromWatchType(item.code, item.type != null ? item.type : t)
+    );
+    if (!stubs.length) return [];
+
+    let quotes = await loadQuotes(stubs);
+
+    if (t === 2) {
+      const missing = stubs.filter((h) => {
+        const q = quotes[quoteKey(h.code)] || quotes[h.code];
+        return !q || !q.name;
+      });
+      if (missing.length) {
+        const alt = missing.map((h) => ({ ...h, market: 106 }));
+        const more = await loadQuotes(alt);
+        quotes = { ...quotes, ...more };
+        alt.forEach((h) => {
+          const q = more[quoteKey(h.code)] || more[h.code];
+          if (q) {
+            const stub = stubs.find((s) => quoteKey(s.code) === quoteKey(h.code));
+            if (stub) stub.market = 106;
+          }
+        });
+      }
+    }
+
+    if (t === 1) {
+      const missing = stubs.filter((h) => {
+        const q = quotes[quoteKey(h.code)] || quotes[h.code];
+        return !q || !q.name;
+      });
+      if (missing.length) {
+        const alt = missing.map((h) => {
+          const cands = inferCnMarketCandidates(h.code);
+          const other = cands.find((m) => m !== h.market) ?? cands[0];
+          return { ...h, market: other };
+        });
+        const more = await loadQuotes(alt);
+        quotes = { ...quotes, ...more };
+        alt.forEach((h) => {
+          const q = more[quoteKey(h.code)] || more[h.code];
+          if (q) {
+            const stub = stubs.find((s) => quoteKey(s.code) === quoteKey(h.code));
+            if (stub) stub.market = h.market;
+          }
+        });
+      }
+    }
+
+    return stubs.map((h, i) => {
+      const src = items[i] || {};
+      const q = quotes[quoteKey(h.code)] || quotes[h.code];
+      return {
+        ...h,
+        name: (q && q.name) || src.name || h.name || h.code,
+        price: q && q.price != null ? q.price : null,
+        change:
+          q && q.change != null && !Number.isNaN(Number(q.change))
+            ? Number(q.change)
+            : null
+      };
+    });
   }
 
   /**
@@ -1738,6 +1966,16 @@
     loadHkStockRank,
     loadHkMarketBreadth,
     resolveStock,
+    normalizeHkCode,
+    normalizeKrCode,
+    // 自选个股
+    VALID_WATCH_TYPES,
+    normalizeWatchType,
+    holdingFromWatchType,
+    addWatchStock,
+    listWatchStocks,
+    removeWatchStock,
+    loadWatchQuotes,
     // 区间计算
     calcPeriodReturns,
     sliceKlinesForRange

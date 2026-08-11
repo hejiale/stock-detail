@@ -1601,6 +1601,28 @@ header p {
   height: 24px;
 }
 
+.watch-stock-head {
+  grid-template-columns: minmax(0, 1.4fr) 72px 88px 36px;
+}
+
+.watch-stock-list .board-row,
+.watch-stock-list .kr-stock-row,
+.watch-stock-list .watch-stock-row {
+  grid-template-columns: minmax(0, 1.4fr) 72px 88px 36px;
+  align-items: center;
+}
+
+.watch-stock-row .btn-remove-stock {
+  justify-self: end;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.watch-type-tabs {
+  padding-top: 0;
+}
+
 /* 美股市场概况弹框 */
 .us-board-panel {
   max-height: min(92vh, 760px);

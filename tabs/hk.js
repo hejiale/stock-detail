@@ -120,6 +120,21 @@
                 </button>
               </div>
             </div>
+            <div class="add-stock">
+              <div class="add-stock-field">
+                <input
+                  type="text"
+                  class="add-stock-input"
+                  data-add-code="hkStocks"
+                  placeholder="港股代码，如 00700、09988"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="btn btn-add" type="button" data-add-stock="hkStocks" aria-label="添加股票" title="添加">
+                  <img src="assets/add_zixuan.png" alt="添加" />
+                </button>
+              </div>
+            </div>
             <div class="board-tabs kr-rank-tabs">
               <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-hk-rank="gainers">涨幅前100</button>
               <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-hk-rank="losers">跌幅前100</button>

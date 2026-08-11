@@ -51,45 +51,65 @@
     }
 
     async function addCustomStock(fundId) {
-      if (!CUSTOMIZABLE_FUNDS.has(fundId)) return;
-      const fund = window.FUND_HOLDINGS[fundId];
+      const isWatchPanel = fundId === "watchStocks";
+      const type = isWatchPanel
+        ? normalizeWatchType(watchlistState.type || 1)
+        : watchTypeOfFund(fundId);
+      if (!type || (!isWatchPanel && !ADDABLE_FUNDS.has(fundId))) return;
+
       const input = document.querySelector(`[data-add-code="${fundId}"]`);
       const btn = document.querySelector(`[data-add-stock="${fundId}"]`);
       const raw = (input?.value || "").trim();
       if (!raw) {
-        showToast(fund.market === "US" ? "请输入美股代码" : "请输入 A 股代码");
+        showToast(
+          isWatchPanel
+            ? `请输入${watchTypeLabel(type)}代码`
+            : addEmptyTipOfFund(fundId)
+        );
         input?.focus();
         return;
       }
 
       if (btn) btn.disabled = true;
       try {
-        const stock = await resolveStock(raw, fund.market === "US" ? "US" : "CN");
-        const all = loadCustomStocks();
-        const list = all[fundId] || [];
-        const existsCustom = list.some(
-          (h) => quoteKey(h.code) === quoteKey(stock.code)
-        );
-        if (existsCustom) {
-          showToast(`${stock.name}（${stock.code}）已在自选中`);
-          return;
+        const marketType = watchMarketOfType(type);
+        const stock = await resolveStock(raw, marketType);
+        await addWatchStock(stock.code, type);
+
+        // A股 / 美股页仍同步本地置顶自选（涨跌榜「我的自选」）
+        if (CUSTOMIZABLE_FUNDS.has(fundId)) {
+          const all = loadCustomStocks();
+          const list = all[fundId] || [];
+          const existsCustom = list.some(
+            (h) => quoteKey(h.code) === quoteKey(stock.code)
+          );
+          if (!existsCustom) {
+            all[fundId] = [
+              {
+                name: stock.name,
+                code: stock.code,
+                market: stock.market,
+                ratio: stock.ratio
+              },
+              ...list
+            ];
+            saveCustomStocks(all);
+            pageState[fundId] = 1;
+            const saved = loadInputs();
+            delete saved[fundId];
+            saveInputs(saved);
+          }
         }
-
-        all[fundId] = [
-          { name: stock.name, code: stock.code, market: stock.market, ratio: stock.ratio },
-          ...list
-        ];
-        saveCustomStocks(all);
-
-        // 新增后回到第 1 页，并清掉该页签按 index 缓存的涨跌幅（避免错位）
-        pageState[fundId] = 1;
-        const saved = loadInputs();
-        delete saved[fundId];
-        saveInputs(saved);
 
         if (input) input.value = "";
         showToast(`已添加 ${stock.name}（${stock.code}）`);
-        rerender(fundId);
+
+        if (CUSTOMIZABLE_FUNDS.has(fundId)) {
+          rerender(fundId);
+        }
+        if (activeMainTab === "watchStocks" || isWatchPanel) {
+          await loadWatchlist(type, { force: true });
+        }
       } catch (err) {
         showToast(err.message || "添加失败");
       } finally {
@@ -97,7 +117,26 @@
       }
     }
 
-    function removeCustomStock(fundId, code) {
+    function purgeLocalCustomStock(code) {
+      const all = loadCustomStocks();
+      let changed = false;
+      Object.keys(all).forEach((fundId) => {
+        const list = all[fundId] || [];
+        const next = list.filter((h) => quoteKey(h.code) !== quoteKey(code));
+        if (next.length !== list.length) {
+          all[fundId] = next;
+          changed = true;
+          pageState[fundId] = 1;
+          const saved = loadInputs();
+          delete saved[fundId];
+          saveInputs(saved);
+        }
+      });
+      if (changed) saveCustomStocks(all);
+      return changed;
+    }
+
+    async function removeCustomStock(fundId, code) {
       if (!CUSTOMIZABLE_FUNDS.has(fundId)) return;
       const all = loadCustomStocks();
       const list = all[fundId] || [];
@@ -111,8 +150,34 @@
       delete saved[fundId];
       saveInputs(saved);
 
+      try {
+        await removeWatchStock(code);
+      } catch {
+        /* 远端可能本无此代码，本地仍移除 */
+      }
+
       showToast("已移除自选股票");
       rerender(fundId);
+      if (activeMainTab === "watchStocks") {
+        loadWatchlist(watchlistState.type || 1, { force: true }).catch(() => {});
+      }
+    }
+
+    async function removeWatchlistStock(code) {
+      const raw = String(code || "").trim();
+      if (!raw) return;
+      try {
+        await removeWatchStock(raw);
+        purgeLocalCustomStock(raw);
+        showToast("已移除自选股票");
+        await loadWatchlist(watchlistState.type || 1, { force: true });
+        // 若当前在 A/美股页，同步刷新置顶区
+        if (CUSTOMIZABLE_FUNDS.has(getActiveFundId())) {
+          rerender(getActiveFundId());
+        }
+      } catch (err) {
+        showToast(err.message || "删除失败");
+      }
     }
 
     function getTabButtons() {
@@ -151,6 +216,8 @@
         activeMainTab = "hkStocks";
       } else if (tabOrFundId === "krStocks") {
         activeMainTab = "krStocks";
+      } else if (tabOrFundId === "watchStocks") {
+        activeMainTab = "watchStocks";
       } else {
         activeMainTab = "cnSemi";
       }
@@ -227,6 +294,23 @@
 
       if (e.target.closest("[data-kr-refresh]")) {
         loadKrRankKind(krRankState.kind || "gainers", { force: true });
+        return;
+      }
+
+      const watchTypeBtn = e.target.closest("[data-watch-type]");
+      if (watchTypeBtn) {
+        loadWatchlist(Number(watchTypeBtn.dataset.watchType), { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-watch-refresh]")) {
+        loadWatchlist(watchlistState.type || 1, { force: true });
+        return;
+      }
+
+      const removeWatchBtn = e.target.closest("[data-remove-watch]");
+      if (removeWatchBtn) {
+        removeWatchlistStock(removeWatchBtn.dataset.removeWatch);
         return;
       }
 
@@ -428,6 +512,7 @@
       const activeFundId = getActiveFundId();
       if (activeFundId === "hkStocks") redrawHkSparklines();
       else if (activeFundId === "krStocks") redrawKrSparklines();
+      else if (activeFundId === "watchStocks") redrawWatchSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);
     });
 

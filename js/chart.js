@@ -289,6 +289,9 @@
       if (fundId === "hkStocks" && typeof getHkRankHolding === "function") {
         return getHkRankHolding(index);
       }
+      if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
+        return getWatchHolding(index);
+      }
       return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
     }
 

@@ -50,6 +50,18 @@
       detailEl.textContent = parts.join(" ");
     }
 
+    async function addStockToWatchlist(rawCode, type, { refreshWatch = false } = {}) {
+      const t = normalizeWatchType(type);
+      const marketType = watchMarketOfType(t);
+      const stock = await resolveStock(rawCode, marketType);
+      await addWatchStock(stock.code, t);
+      showToast(`加入成功：${stock.name}（${stock.code}）`);
+      if (refreshWatch || activeMainTab === "watchStocks") {
+        await loadWatchlist(t, { force: true });
+      }
+      return stock;
+    }
+
     async function addCustomStock(fundId) {
       const isWatchPanel = fundId === "watchStocks";
       const type = isWatchPanel
@@ -75,17 +87,10 @@
         btn.disabled = true;
       }
       try {
-        const marketType = watchMarketOfType(type);
-        const stock = await resolveStock(raw, marketType);
-        await addWatchStock(stock.code, type);
-
+        await addStockToWatchlist(raw, type, {
+          refreshWatch: isWatchPanel
+        });
         if (input) input.value = "";
-        showToast(`已加入自选 ${stock.name}（${stock.code}）`);
-
-        // 仅在自选页刷新列表；四大市场页只提示成功
-        if (activeMainTab === "watchStocks" || isWatchPanel) {
-          await loadWatchlist(type, { force: true });
-        }
       } catch (err) {
         showToast(err.message || "添加失败");
       } finally {
@@ -163,7 +168,6 @@
       const code = String(
         btn?.dataset?.watchCode || holding?.code || ""
       ).trim();
-      const name = btn?.dataset?.watchName || holding?.name || code;
       const type = Number(btn?.dataset?.watchType) || watchTypeFromHolding(holding, fundId);
 
       if (!code || !type) {
@@ -175,8 +179,8 @@
 
       if (btn) btn.disabled = true;
       try {
-        await addWatchStock(code, type);
-        showToast(`已加入自选 ${name}`);
+        // 与搜索框添加同一流程：先 resolveStock，再 POST /api/stock（成功提示在共用方法内）
+        await addStockToWatchlist(code, type);
         if (btn) {
           btn.classList.add("is-added");
           const label = btn.querySelector("span");

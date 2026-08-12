@@ -1958,6 +1958,81 @@
   }
 
   /**
+   * 统计单个知名美股行业：上涨/下跌家数、总市值（成分股聚合）
+   */
+  async function summarizeUsFamousSector(sector) {
+    let upCount = 0;
+    let downCount = 0;
+    let flatCount = 0;
+    let mcap = 0;
+    const pz = 100;
+    let total = 0;
+
+    for (let page = 1; page <= 5; page++) {
+      const { list, total: tot } = await fetchEastClist({
+        fs: "b:" + sector.code,
+        fields: "f12,f3,f20",
+        pn: page,
+        pz,
+        po: 1,
+        fid: "f12"
+      });
+      total = Number(tot) || total;
+      if (!list.length) break;
+
+      for (const item of list) {
+        const changeRaw = item?.f3;
+        const change =
+          changeRaw == null || changeRaw === "-"
+            ? null
+            : Number(changeRaw);
+        if (change != null && !Number.isNaN(change)) {
+          if (change > 0) upCount += 1;
+          else if (change < 0) downCount += 1;
+          else flatCount += 1;
+        }
+        const cap = Number(item?.f20);
+        if (!Number.isNaN(cap) && cap > 0) mcap += cap;
+      }
+
+      if (page * pz >= total) break;
+    }
+
+    return {
+      code: sector.code,
+      name: sector.name,
+      upCount,
+      downCount,
+      flatCount,
+      mcap,
+      total
+    };
+  }
+
+  /**
+   * 美股知名行业列表（涨/跌家数 + 总市值）
+   * @returns {Promise<Array<{code,name,upCount,downCount,flatCount,mcap,total}>>}
+   */
+  async function loadUsFamousSectorStats() {
+    const results = await Promise.allSettled(
+      US_FAMOUS_SECTORS.map((sector) => summarizeUsFamousSector(sector))
+    );
+    return US_FAMOUS_SECTORS.map((sector, i) => {
+      const result = results[i];
+      if (result.status === "fulfilled") return result.value;
+      return {
+        code: sector.code,
+        name: sector.name,
+        upCount: 0,
+        downCount: 0,
+        flatCount: 0,
+        mcap: 0,
+        total: 0
+      };
+    });
+  }
+
+  /**
    * 美股知名行业成分股榜
    * - hot：按成交额（人气）
    * - gainers / losers：按涨跌幅
@@ -2239,6 +2314,7 @@
     loadUsSectorBoards,
     listUsFamousSectors,
     resolveUsFamousSector,
+    loadUsFamousSectorStats,
     loadUsSectorStocks,
     loadUsStockRank,
     loadUsMarketBreadth,

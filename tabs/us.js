@@ -21,26 +21,36 @@
         .join("");
     }
 
-    function renderUsSectorLinks() {
-      const wrap = document.getElementById("usSectorLinks");
+    function renderUsSectorList(list) {
+      const wrap = document.getElementById("usSectorList");
       if (!wrap) return;
-      const sectors =
-        typeof listUsFamousSectors === "function" ? listUsFamousSectors() : [];
-      if (!sectors.length) {
+      if (!list.length) {
         wrap.innerHTML = "";
         return;
       }
-      wrap.innerHTML = sectors
+
+      wrap.innerHTML = list
         .map((item) => {
           const safeName = String(item.name || "").replace(/"/g, "&quot;");
+          const up = item.upCount || 0;
+          const down = item.downCount || 0;
           return `
             <button
-              class="us-sector-link"
+              class="board-row board-row-btn region-row us-sector-row"
               type="button"
               data-us-sector="${item.code}"
               data-us-sector-name="${safeName}"
               title="查看 ${safeName} 人气与涨跌榜"
-            >${item.name}</button>`;
+            >
+              <div class="board-info">
+                <div class="board-name-row">
+                  <span class="board-name">${item.name}</span>
+                </div>
+              </div>
+              <div class="region-up">${up}</div>
+              <div class="region-down">${down}</div>
+              <div class="region-mcap">${formatMarketCap(item.mcap)}</div>
+            </button>`;
         })
         .join("");
     }
@@ -78,16 +88,18 @@
       showModal("usBoardModal");
       setStatus("usBoardStatus", "加载中…");
       document.getElementById("usIndexGrid").innerHTML = "";
-      renderUsSectorLinks();
+      document.getElementById("usSectorList").innerHTML = "";
       renderMarketBreadth("usMarketBreadth", null);
 
       const requestId = (openUsBoardModal._req = (openUsBoardModal._req || 0) + 1);
 
       try {
-        const [indicesResult, breadthResult] = await Promise.allSettled([
-          loadUsIndices(),
-          loadUsMarketBreadth()
-        ]);
+        const [indicesResult, breadthResult, sectorsResult] =
+          await Promise.allSettled([
+            loadUsIndices(),
+            loadUsMarketBreadth(),
+            loadUsFamousSectorStats()
+          ]);
         if (requestId !== openUsBoardModal._req) return;
 
         const indices =
@@ -101,7 +113,13 @@
         if (breadthResult.status === "fulfilled") {
           renderMarketBreadth("usMarketBreadth", breadthResult.value);
         }
-        setStatus("usBoardStatus", indices.length ? "" : "暂无指数数据");
+        const sectors =
+          sectorsResult.status === "fulfilled" ? sectorsResult.value : [];
+        renderUsSectorList(sectors);
+        setStatus(
+          "usBoardStatus",
+          indices.length || sectors.length ? "" : "暂无指数数据"
+        );
         requestAnimationFrame(() => {
           if (requestId !== openUsBoardModal._req) return;
           paintUsIndexSparklines(indices).catch(() => {});

@@ -16,6 +16,7 @@
       resolveCnIndexBoard,
       loadUsIndices,
       listUsFamousSectors,
+      loadUsFamousSectorStats,
       loadUsSectorStocks,
       loadUsStockRank,
       loadUsMarketBreadth,

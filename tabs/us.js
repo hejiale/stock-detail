@@ -148,6 +148,7 @@
             <div class="board-list-head us-stock-head kr-stock-head">
               <div>股票</div>
               <div style="text-align:center">走势</div>
+              <div style="text-align:right">最新价</div>
               <div style="text-align:right">涨跌幅%</div>
             </div>
             <div class="kr-rank-body">
@@ -197,8 +198,8 @@
         .map((item, offset) => {
           const i = start + offset;
           const tone = toneClass(item.change);
-          const priceTip =
-            item.price == null ? "" : " · $" + formatPrice(item.price);
+          const priceText =
+            item.price == null ? "--" : "$" + formatPrice(item.price);
           const safeName = String(item.name || "").replace(/"/g, "&quot;");
           return `
             <div class="board-row kr-stock-row">
@@ -224,7 +225,7 @@
                       aria-label="加入自选 ${safeName}"
                     ><img src="assets/add_zixuan.png" alt="自选" /></button>
                   </div>
-                  <div class="board-meta">${item.code}${priceTip}</div>
+                  <div class="board-meta">${item.code}</div>
                 </div>
               </div>
               <div
@@ -237,6 +238,7 @@
               >
                 <canvas class="kr-spark" data-us-rank-spark="${i}" aria-hidden="true"></canvas>
               </div>
+              <div class="board-price ${tone}">${priceText}</div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
             </div>`;
         })

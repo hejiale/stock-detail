@@ -1696,33 +1696,10 @@ header p {
   height: 24px;
 }
 
-.watch-stock-head {
-  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
-}
-
 .kr-stock-list.watch-stock-list .board-row,
 .kr-stock-list.watch-stock-list .kr-stock-row,
 .kr-stock-list.watch-stock-list .watch-stock-row {
-  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
   align-items: center;
-}
-
-.watch-stock-row .board-price {
-  text-align: right;
-  justify-self: end;
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #334155;
-  white-space: nowrap;
-}
-
-.watch-stock-row .board-price.up {
-  color: var(--up);
-}
-
-.watch-stock-row .board-price.down {
-  color: var(--down);
 }
 
 .watch-board-info {
@@ -1985,7 +1962,7 @@ header p {
 .kr-stock-head {
   padding-left: 16px;
   padding-right: 16px;
-  grid-template-columns: minmax(0, 1fr) 72px 88px;
+  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
 }
 
 .kr-rank-body {
@@ -2020,7 +1997,26 @@ header p {
 .kr-stock-list .kr-stock-row {
   padding-left: 8px;
   padding-right: 8px;
-  grid-template-columns: minmax(0, 1fr) 72px 88px;
+  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
+  align-items: center;
+}
+
+.kr-stock-list .board-price {
+  text-align: right;
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.kr-stock-list .board-price.up {
+  color: var(--up);
+}
+
+.kr-stock-list .board-price.down {
+  color: var(--down);
 }
 
 .kr-stock-list .board-name[data-chart-fund] {

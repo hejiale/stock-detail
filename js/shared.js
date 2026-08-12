@@ -13,6 +13,9 @@
       loadUsIndices,
       loadUsStockRank,
       loadUsMarketBreadth,
+      loadJpStockRank,
+      loadJpIndices,
+      loadJpMarketBreadth,
       loadKrStockRank,
       loadKrIndices,
       loadKrMarketBreadth,
@@ -42,17 +45,25 @@
 
     const STORAGE_KEY = "fund_daily_returns_v1";
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";
-    const ADDABLE_FUNDS = new Set(["cnSemi", "usSemi", "hkStocks", "krStocks"]);
+    const ADDABLE_FUNDS = new Set([
+      "cnSemi",
+      "usSemi",
+      "hkStocks",
+      "jpStocks",
+      "krStocks"
+    ]);
     const FUND_WATCH_TYPE = {
       cnSemi: 1,
       usSemi: 2,
       hkStocks: 3,
-      krStocks: 4
+      krStocks: 4,
+      jpStocks: 5
     };
     const WATCH_TYPE_META = [
       { type: 1, label: "A股", market: "CN", pricePrefix: "" },
       { type: 2, label: "美股", market: "US", pricePrefix: "$" },
       { type: 3, label: "港股", market: "HK", pricePrefix: "HK$" },
+      { type: 5, label: "日股", market: "JP", pricePrefix: "¥" },
       { type: 4, label: "韩股", market: "KR", pricePrefix: "₩" }
     ];
     const watchlistState = { type: 1, list: [], trends: null };
@@ -60,6 +71,7 @@
       { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
       { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
       { id: "hkStocks", name: "港股", icon: "assets/gupiao.png" },
+      { id: "jpStocks", name: "日股", icon: "assets/gupiao.png" },
       { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
       { id: "watchStocks", name: "自选个股", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
@@ -80,6 +92,7 @@
       "boardStocksModal",
       "usBoardModal",
       "hkBoardModal",
+      "jpBoardModal",
       "krBoardModal",
       "loginModal",
       "registerModal"
@@ -183,6 +196,7 @@
       if (activeMainTab === "funds") return activeWatchFundId;
       if (activeMainTab === "usSemi") return "usSemi";
       if (activeMainTab === "hkStocks") return "hkStocks";
+      if (activeMainTab === "jpStocks") return "jpStocks";
       if (activeMainTab === "krStocks") return "krStocks";
       if (activeMainTab === "watchStocks") return "watchStocks";
       return "cnSemi";
@@ -194,6 +208,10 @@
 
     function isUsTab(id) {
       return id === "usSemi";
+    }
+
+    function isJpTab(id) {
+      return id === "jpStocks";
     }
 
     function isKrTab(id) {
@@ -219,6 +237,7 @@
       if (m === 105) return 2;
       if (m === 116) return 3;
       if (m === 177) return 4;
+      if (m === 176) return 5;
       if (holding?.code) return 1;
       return null;
     }
@@ -236,6 +255,7 @@
     function addPlaceholderOfFund(fundId) {
       if (fundId === "usSemi") return "输入美股代码，如 NVDA";
       if (fundId === "hkStocks") return "港股代码，如 00700、09988";
+      if (fundId === "jpStocks") return "日股代码，如 7203、6758";
       if (fundId === "krStocks") return "韩股代码，如 005930";
       return "沪/深/北交所代码，如 600519、000001、920001";
     }
@@ -243,6 +263,7 @@
     function addEmptyTipOfFund(fundId) {
       if (fundId === "usSemi") return "请输入美股代码";
       if (fundId === "hkStocks") return "请输入港股代码";
+      if (fundId === "jpStocks") return "请输入日股代码";
       if (fundId === "krStocks") return "请输入韩股代码";
       return "请输入 A 股代码";
     }

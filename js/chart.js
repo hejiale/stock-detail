@@ -507,6 +507,9 @@
       if (fundId === "hkStocks" && typeof getHkRankHolding === "function") {
         return getHkRankHolding(index);
       }
+      if (fundId === "jpStocks" && typeof getJpRankHolding === "function") {
+        return getJpRankHolding(index);
+      }
       if (fundId === "krStocks" && typeof getKrRankHolding === "function") {
         return getKrRankHolding(index);
       }

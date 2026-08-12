@@ -1075,6 +1075,26 @@
     return normalizeDigitCode(raw, 6);
   }
 
+  /**
+   * 日股代码：常见 4 位数字（如 7203），亦有字母后缀（如 285A）
+   * 去掉 .T / .JP / TYO: 后缀后规范大小写；纯数字左侧补零至 4 位
+   */
+  function normalizeJpCode(raw) {
+    let s = String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/^TYO:/i, "")
+      .replace(/\.T$/i, "")
+      .replace(/\.JP$/i, "")
+      .replace(/\s+/g, "");
+    if (!s) return "";
+    if (/^\d+$/.test(s)) {
+      if (s.length <= 4) return s.padStart(4, "0");
+      return s.slice(-4);
+    }
+    return s;
+  }
+
   /** 用报价接口解析名称；按 markets 顺序尝试 */
   async function resolveFromQuotes(code, markets, ratio, notFoundMsg) {
     for (const market of markets) {
@@ -1090,7 +1110,7 @@
   /**
    * 根据代码解析股票（名称 + 市场），用于添加自选
    * @param {string} rawCode
-   * @param {'CN'|'US'|'HK'|'KR'} marketType
+   * @param {'CN'|'US'|'HK'|'JP'|'KR'} marketType
    * @returns {Promise<{ name, code, market, ratio }>}
    */
   async function resolveStock(rawCode, marketType) {
@@ -1115,6 +1135,14 @@
         throw new Error("港股代码应为数字，如 00700、9988");
       }
       return resolveFromQuotes(code, [116], 1, "未找到该港股，请检查代码");
+    }
+
+    if (marketType === "JP") {
+      const code = normalizeJpCode(rawCode);
+      if (!/^[0-9A-Z]{3,5}$/.test(code)) {
+        throw new Error("日股代码如 7203、6758、285A");
+      }
+      return resolveFromQuotes(code, [176], 1, "未找到该日股，请检查代码");
     }
 
     if (marketType === "KR") {
@@ -1607,6 +1635,19 @@
     return loadMarketBreadth("m:177");
   }
 
+  /** 日股主要指数：日经225 */
+  async function loadJpIndices() {
+    return loadIndicesByDefs(
+      [{ code: "N225", market: 100, name: "日经225" }],
+      { upperCode: true }
+    );
+  }
+
+  /** 日股全市场涨跌家数 */
+  async function loadJpMarketBreadth() {
+    return loadMarketBreadth("m:176");
+  }
+
   /** 港股主要指数：恒生 / 国企 / 恒生科技 */
   async function loadHkIndices() {
     return loadIndicesByDefs(
@@ -1846,6 +1887,13 @@
     });
   }
 
+  /** 日股涨幅榜 / 跌幅榜（东财 market=176，分页） */
+  async function loadJpStockRank(kind = "gainers", limit = 10, page = 1) {
+    return loadStockRankByFs("m:176", kind, limit, page, {
+      defaultMarket: 176
+    });
+  }
+
   /** 港股涨幅榜 / 跌幅榜（主板 + 创业板，分页） */
   async function loadHkStockRank(kind = "gainers", limit = 10, page = 1) {
     return loadStockRankByFs("m:116+t:3,m:116+t:4", kind, limit, page, {
@@ -1862,6 +1910,7 @@
     normalizeCnCode,
     inferCnMarketCandidates,
     normalizeHkCode,
+    normalizeJpCode,
     normalizeKrCode,
     // 请求（东方财富 / 新浪等三方）
     loadQuotes,
@@ -1881,6 +1930,9 @@
     loadUsSectorBoards,
     loadUsStockRank,
     loadUsMarketBreadth,
+    loadJpIndices,
+    loadJpStockRank,
+    loadJpMarketBreadth,
     loadKrIndices,
     loadKrStockRank,
     loadKrMarketBreadth,

@@ -9,7 +9,7 @@
  * 依赖：window.MarketAPI（代码规范化、报价）
  *
  * 数据源：stock-backdev-production.up.railway.app
- *   type：1 A股 / 2 美股 / 3 港股 / 4 韩股
+ *   type：1 A股 / 2 美股 / 3 港股 / 4 韩股 / 5 日股
  */
 (function (global) {
   "use strict";
@@ -17,7 +17,7 @@
   const WATCHLIST_BASE =
     "https://stock-backdev-production.up.railway.app";
   const AUTH_USER_KEY = "watch_user_v1";
-  const VALID_WATCH_TYPES = [1, 2, 3, 4];
+  const VALID_WATCH_TYPES = [1, 2, 3, 4, 5];
 
   function market() {
     const api = global.MarketAPI;
@@ -97,8 +97,12 @@
       const c = m.normalizeHkCode(code);
       return { code: c, market: 116, name: c, watchType: t };
     }
-    const c = m.normalizeKrCode(code);
-    return { code: c, market: 177, name: c, watchType: t };
+    if (t === 4) {
+      const c = m.normalizeKrCode(code);
+      return { code: c, market: 177, name: c, watchType: t };
+    }
+    const c = m.normalizeJpCode(code);
+    return { code: c, market: 176, name: c, watchType: t };
   }
 
   async function watchlistFetch(path, options = {}) {

@@ -208,6 +208,8 @@
         activeMainTab = "cnSemi";
       } else if (tabOrFundId === "hkStocks") {
         activeMainTab = "hkStocks";
+      } else if (tabOrFundId === "jpStocks") {
+        activeMainTab = "jpStocks";
       } else if (tabOrFundId === "krStocks") {
         activeMainTab = "krStocks";
       } else if (tabOrFundId === "watchStocks") {
@@ -283,6 +285,11 @@
         return;
       }
 
+      if (e.target.closest("[data-jp-board-close]")) {
+        closeJpBoardModal();
+        return;
+      }
+
       if (e.target.closest("[data-kr-board-close]")) {
         closeKrBoardModal();
         return;
@@ -318,6 +325,17 @@
 
       if (e.target.closest("[data-hk-refresh]")) {
         loadHkRankKind(hkRankState.kind || "gainers", { force: true });
+        return;
+      }
+
+      const jpRankBtn = e.target.closest("[data-jp-rank]");
+      if (jpRankBtn) {
+        loadJpRankKind(jpRankBtn.dataset.jpRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-jp-refresh]")) {
+        loadJpRankKind(jpRankState.kind || "gainers", { force: true });
         return;
       }
 
@@ -379,6 +397,7 @@
       if (openBoardBtn) {
         if (openBoardBtn.dataset.openBoard === "us") openUsBoardModal();
         else if (openBoardBtn.dataset.openBoard === "hk") openHkBoardModal();
+        else if (openBoardBtn.dataset.openBoard === "jp") openJpBoardModal();
         else if (openBoardBtn.dataset.openBoard === "kr") openKrBoardModal();
         else openBoardModal();
         return;
@@ -509,6 +528,11 @@
           closeHkBoardModal();
           return;
         }
+        const jpBoardModal = document.getElementById("jpBoardModal");
+        if (jpBoardModal?.classList.contains("show")) {
+          closeJpBoardModal();
+          return;
+        }
         const krBoardModal = document.getElementById("krBoardModal");
         if (krBoardModal?.classList.contains("show")) {
           closeKrBoardModal();
@@ -554,6 +578,10 @@
       if (hkBoardModal?.classList.contains("show")) {
         redrawHkIndexSparklines();
       }
+      const jpBoardModal = document.getElementById("jpBoardModal");
+      if (jpBoardModal?.classList.contains("show")) {
+        redrawJpIndexSparklines();
+      }
       const krBoardModal = document.getElementById("krBoardModal");
       if (krBoardModal?.classList.contains("show")) {
         redrawKrIndexSparklines();
@@ -562,6 +590,7 @@
       if (activeFundId === "cnSemi") redrawCnSparklines();
       else if (activeFundId === "usSemi") redrawUsSparklines();
       else if (activeFundId === "hkStocks") redrawHkSparklines();
+      else if (activeFundId === "jpStocks") redrawJpSparklines();
       else if (activeFundId === "krStocks") redrawKrSparklines();
       else if (activeFundId === "watchStocks") redrawWatchSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);

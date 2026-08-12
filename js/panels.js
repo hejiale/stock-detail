@@ -13,6 +13,10 @@
         await loadUsRankKind(usRankState.kind || "gainers", { force: true });
         return;
       }
+      if (isJpTab(fundId)) {
+        await loadJpRankKind(jpRankState.kind || "gainers", { force: true });
+        return;
+      }
       if (isKrTab(fundId)) {
         await loadKrRankKind(krRankState.kind || "gainers", { force: true });
         return;
@@ -306,6 +310,7 @@
       panels.appendChild(buildCnPanelElement(activeFundId === "cnSemi"));
       panels.appendChild(buildUsPanelElement(activeFundId === "usSemi"));
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
+      panels.appendChild(buildJpPanelElement(activeFundId === "jpStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
       applyAllChangeColors();

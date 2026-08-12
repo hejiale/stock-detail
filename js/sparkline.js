@@ -87,12 +87,27 @@
       const up = Number(breadth.up) || 0;
       const down = Number(breadth.down) || 0;
       const flat = Number(breadth.flat) || 0;
+      const total = up + down + flat;
+      const upPct = total ? (up / total) * 100 : 0;
+      const flatPct = total ? (flat / total) * 100 : 0;
+      const downPct = total ? (down / total) * 100 : 0;
       return `
-        <span class="breadth-item up">涨 ${up}</span>
-        <span class="breadth-sep">·</span>
-        <span class="breadth-item down">跌 ${down}</span>
-        <span class="breadth-sep">·</span>
-        <span class="breadth-item flat">平 ${flat}</span>`;
+        <div class="breadth-bar" role="img" aria-label="涨 ${up}，平 ${flat}，跌 ${down}">
+          <div class="breadth-seg up" style="flex:${upPct || 0}" title="涨 ${up}">
+            ${upPct >= 12 ? `<span>涨 ${up}</span>` : ""}
+          </div>
+          <div class="breadth-seg flat" style="flex:${flatPct || 0}" title="平 ${flat}">
+            ${flatPct >= 12 ? `<span>平 ${flat}</span>` : ""}
+          </div>
+          <div class="breadth-seg down" style="flex:${downPct || 0}" title="跌 ${down}">
+            ${downPct >= 12 ? `<span>跌 ${down}</span>` : ""}
+          </div>
+        </div>
+        <div class="breadth-legend">
+          <span class="breadth-item up">涨 ${up}</span>
+          <span class="breadth-item flat">平 ${flat}</span>
+          <span class="breadth-item down">跌 ${down}</span>
+        </div>`;
     }
 
     function renderMarketBreadth(elId, breadth) {
@@ -104,7 +119,7 @@
         return;
       }
       el.hidden = false;
-      el.innerHTML = `<div class="breadth-label">实时涨跌家数</div><div class="breadth-values">${formatBreadthHtml(breadth)}</div>`;
+      el.innerHTML = `<div class="breadth-label">实时涨跌家数</div><div class="breadth-body">${formatBreadthHtml(breadth)}</div>`;
     }
 
 

@@ -9,10 +9,6 @@
       wrap.innerHTML = list
         .map((item, i) => {
           const tone = toneClass(item.change);
-          const breadth =
-            item.upCount || item.downCount
-              ? `<div class="idx-breadth"><span class="up">涨${item.upCount || 0}</span><span class="sep">/</span><span class="down">跌${item.downCount || 0}</span></div>`
-              : "";
           return `
             <div class="cn-index-card" data-cn-index="${i}">
               <div class="idx-head">
@@ -20,7 +16,6 @@
                 <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
               </div>
               <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
-              ${breadth}
               <canvas class="idx-chart" data-cn-spark="${i}" aria-hidden="true"></canvas>
             </div>`;
         })

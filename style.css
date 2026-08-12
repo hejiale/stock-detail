@@ -1538,41 +1538,12 @@ header p {
 
 .region-list-head {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) 0.75fr 0.75fr 1fr;
+  grid-template-columns: minmax(4.5em, 1.2fr) 0.85fr 0.85fr 1.1fr;
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
   font-size: 11px;
   color: var(--muted);
-}
-
-.region-row {
-  grid-template-columns: minmax(0, 1.35fr) 0.75fr 0.75fr 1fr;
-  gap: 6px;
-}
-
-.region-row .region-up,
-.region-row .region-down,
-.region-row .region-mcap {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.region-row .region-up {
-  text-align: center;
-  color: var(--up);
-}
-
-.region-row .region-down {
-  text-align: center;
-  color: var(--down);
-}
-
-.region-row .region-mcap {
-  text-align: right;
-  color: #475569;
-  font-weight: 500;
 }
 
 .board-row {
@@ -1582,6 +1553,39 @@ header p {
   align-items: center;
   padding: 10px 8px;
   border-radius: 10px;
+}
+
+.board-row.region-row {
+  grid-template-columns: minmax(4.5em, 1.2fr) 0.85fr 0.85fr 1.1fr;
+  gap: 6px;
+}
+
+.board-row.region-row .region-up,
+.board-row.region-row .region-down,
+.board-row.region-row .region-mcap {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.board-row.region-row .region-up {
+  text-align: center;
+  color: var(--up);
+}
+
+.board-row.region-row .region-down {
+  text-align: center;
+  color: var(--down);
+}
+
+.board-row.region-row .region-mcap {
+  text-align: right;
+  color: #475569;
+  font-weight: 500;
+}
+
+.board-row.region-row .board-name {
+  white-space: nowrap;
 }
 
 .board-row-btn {

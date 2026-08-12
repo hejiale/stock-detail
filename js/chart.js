@@ -278,10 +278,8 @@
       if (tip) tip.hidden = true;
       if (!restoreMeta) return;
       const series = openChartModal._lastSeries;
-      const state = openChartModal._state;
       const canvas = document.getElementById("chartCanvas");
       if (series && canvas) drawIntradayChart(canvas, series, null);
-      if (series && state) updateChartMeta(series, state);
     }
 
     function pointIndexFromClientX(canvas, clientX, pointsLen) {
@@ -294,45 +292,6 @@
       if (pointsLen === 1) return 0;
       const t = (x - pad.left) / plotW;
       return Math.round(Math.max(0, Math.min(1, t)) * (pointsLen - 1));
-    }
-
-    function updateChartScrubMeta(point, series) {
-      const base = series.baseline;
-      const chg =
-        base != null && base !== 0
-          ? ((point.price - base) / base) * 100
-          : null;
-      const tone = chg == null ? "flat" : toneClass(chg);
-      const priceEl = document.getElementById("chartModalPrice");
-      const chgAmtEl = document.getElementById("chartModalChgAmt");
-      const chgEl = document.getElementById("chartModalChg");
-      const arrowEl = document.getElementById("chartModalChgArrow");
-      if (priceEl) {
-        priceEl.textContent = formatPrice(point.price);
-        priceEl.className = "price " + tone;
-      }
-      if (chgAmtEl) {
-        if (chg == null || base == null) {
-          chgAmtEl.textContent = "--";
-          chgAmtEl.className = "chg-amt flat";
-        } else {
-          chgAmtEl.textContent = formatPrice(point.price - base);
-          chgAmtEl.className = "chg-amt " + tone;
-        }
-      }
-      if (chgEl) {
-        if (chg == null) {
-          chgEl.textContent = "--";
-          chgEl.className = "chg flat";
-        } else {
-          chgEl.textContent = formatPct(chg);
-          chgEl.className = "chg " + tone;
-        }
-      }
-      if (arrowEl) {
-        arrowEl.innerHTML =
-          typeof chgArrowHtml === "function" ? chgArrowHtml(chg) : "";
-      }
     }
 
     function updateCrosshairTip(point, series, x, cssW) {
@@ -363,9 +322,7 @@
       const safeIndex = Math.max(0, Math.min(series.points.length - 1, index));
       if (chartScrub.index === safeIndex) return;
       chartScrub.index = safeIndex;
-      const point = series.points[safeIndex];
       drawIntradayChart(canvas, series, safeIndex);
-      updateChartScrubMeta(point, series);
     }
 
     function bindChartPointer(canvas) {

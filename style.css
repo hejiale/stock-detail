@@ -910,16 +910,23 @@ header p {
 
 .chart-modal-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   padding: 16px 16px 12px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
 }
 
+.chart-modal-head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .chart-modal-title {
   min-width: 0;
+  flex: 1;
 }
 
 .chart-modal-title .name {
@@ -963,16 +970,12 @@ header p {
   color: var(--muted);
 }
 
-.chart-quote {
-  margin-top: 8px;
-  min-width: 0;
-}
-
 .chart-quote-summary {
+  margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px 14px;
+  gap: 6px 12px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -987,7 +990,7 @@ header p {
 .chart-quote-chg {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1010,7 +1013,7 @@ header p {
 .chart-quote-summary .chg-arrow-host {
   display: inline-flex;
   align-items: center;
-  margin-left: -4px;
+  margin-left: 0;
 }
 
 .chart-quote-summary .chg-arrow-host .chg-arrow {
@@ -1020,14 +1023,14 @@ header p {
 }
 
 .chart-quote-grid {
-  margin-top: 10px;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px 10px;
+  gap: 8px 8px;
   padding-top: 10px;
   border-top: 1px solid #eef1f6;
   font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
 }
 
 @media (max-width: 420px) {
@@ -1042,7 +1045,6 @@ header p {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -1053,7 +1055,7 @@ header p {
 
 .chart-quote-item .q-val {
   color: #1f2937;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   max-width: 100%;
   overflow: hidden;

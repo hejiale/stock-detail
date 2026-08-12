@@ -34,6 +34,11 @@
           const safeName = String(item.name || "").replace(/"/g, "&quot;");
           const up = item.upCount || 0;
           const down = item.downCount || 0;
+          const tone = item.change == null ? "flat" : toneClass(item.change);
+          const chgText =
+            item.change == null ? "--" : formatPct(item.change);
+          const arrow =
+            item.change == null ? "" : chgArrowHtml(item.change);
           return `
             <button
               class="board-row board-row-btn region-row us-sector-row"
@@ -49,7 +54,7 @@
               </div>
               <div class="region-up">${up}</div>
               <div class="region-down">${down}</div>
-              <div class="region-mcap">${formatMarketCap(item.mcap)}</div>
+              <div class="board-chg ${tone}">${chgText}${arrow}</div>
             </button>`;
         })
         .join("");

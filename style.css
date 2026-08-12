@@ -1584,6 +1584,13 @@ header p {
   font-weight: 500;
 }
 
+.board-row.us-sector-row .board-chg {
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .board-row.region-row .board-name {
   white-space: nowrap;
 }

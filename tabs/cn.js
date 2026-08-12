@@ -118,10 +118,10 @@
 
       wrap.innerHTML = list
         .map((item) => {
-          const safeName = String(item.name || item.code || "").replace(
-            /"/g,
-            "&quot;"
-          );
+          const displayName = /板块$/u.test(item.name)
+            ? item.name
+            : `${item.name}板块`;
+          const safeName = String(displayName).replace(/"/g, "&quot;");
           const up = item.upCount || 0;
           const down = item.downCount || 0;
           return `
@@ -135,10 +135,7 @@
             >
               <div class="board-info">
                 <div class="board-name-row">
-                  <span class="board-name">${item.name}</span>
-                  <svg class="board-name-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
-                  </svg>
+                  <span class="board-name">${displayName}</span>
                 </div>
               </div>
               <div class="region-up">${up}</div>

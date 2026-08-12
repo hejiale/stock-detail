@@ -251,11 +251,21 @@
       const points = series.points;
       if (!points?.length) return;
 
-      const pad = { top: 16, right: 52, bottom: 56, left: 52 };
       const volH = 48;
+      const volGap = 8;
+      const timeGap = 4;
+      const timeLabelH = 14;
+      const bottomPad = 14;
+      const pad = {
+        top: 16,
+        right: 52,
+        bottom: timeGap + timeLabelH + bottomPad,
+        left: 52
+      };
       const plotW = cssW - pad.left - pad.right;
-      const plotH = cssH - pad.top - pad.bottom - volH - 10;
-      const volTop = pad.top + plotH + 10;
+      const plotH = cssH - pad.top - pad.bottom - volH - volGap;
+      const volTop = pad.top + plotH + volGap;
+      const timeY = volTop + volH + timeGap;
 
       const prices = points.map((p) => p.price);
       let minP = Math.min(...prices);
@@ -398,7 +408,7 @@
       ctx.textBaseline = "top";
       const timeIdx = [0, Math.floor((points.length - 1) / 2), points.length - 1];
       timeIdx.forEach((i) => {
-        ctx.fillText(points[i].label, xAt(i), cssH - 18);
+        ctx.fillText(points[i].label, xAt(i), timeY);
       });
 
       ctx.textAlign = "left";

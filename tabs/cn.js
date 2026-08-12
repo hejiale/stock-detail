@@ -333,12 +333,13 @@
       panel.dataset.panel = "cnSemi";
       const kind = cnRankState.kind || "gainers";
       const loaded = cnRankState.list?.length || 0;
+      const loading = loaded === 0 && !(cnRankState.page > 0);
       panel.innerHTML = `
           <div class="fund-card kr-rank-card cn-rank-card">
             <div class="fund-meta">
               <div class="fund-meta-text">
                 <div class="name">A股涨跌榜</div>
-                <div class="sub" id="cnRankSub">${cnRankSubText(kind, loaded)}</div>
+                <div class="sub" id="cnRankSub">${cnRankSubText(kind, loaded, { loading })}</div>
               </div>
               <div class="fund-meta-actions">
                 <button class="btn-board" type="button" data-open-board="cn" title="查看A股板块涨幅" aria-label="板块">
@@ -382,19 +383,20 @@
       return panel;
     }
 
-    function cnRankSubText(kind, loaded) {
+    function cnRankSubText(kind, loaded, { loading = false } = {}) {
       const tip = kind === "losers" ? "跌幅" : "涨幅";
-      return loaded
-        ? `沪深京 A 股 · ${tip}榜已加载 ${loaded} 只`
-        : "沪深京 A 股 · 加载中…";
+      if (loading) return "沪深京 A 股 · 加载中…";
+      if (loaded) return `沪深京 A 股 · ${tip}榜已加载 ${loaded} 只`;
+      return `沪深京 A 股 · 暂无${tip}数据`;
     }
 
-    function updateCnRankSub() {
+    function updateCnRankSub({ loading = false } = {}) {
       const subEl = document.getElementById("cnRankSub");
       if (!subEl) return;
       subEl.textContent = cnRankSubText(
         cnRankState.kind || "gainers",
-        cnRankState.list?.length || 0
+        cnRankState.list?.length || 0,
+        { loading }
       );
     }
 
@@ -621,7 +623,7 @@
         "cnRankStatus",
         next === "losers" ? "加载跌幅榜…" : "加载涨幅榜…"
       );
-      updateCnRankSub();
+      updateCnRankSub({ loading: true });
       updateCnRankLoadMoreUI();
 
       try {
@@ -651,8 +653,10 @@
         if (requestId !== loadCnRankKind._req) return;
         cnRankState.list = [];
         cnRankState.trends = null;
+        cnRankState.page = 1;
         cnRankState.hasMore = false;
         if (listEl) listEl.innerHTML = "";
+        updateCnRankSub();
         updateCnRankLoadMoreUI();
         setStatus("cnRankStatus", err?.message || "A股涨跌榜加载失败，请稍后重试");
       }

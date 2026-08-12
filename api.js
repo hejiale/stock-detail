@@ -10,6 +10,7 @@
  * 数据源：
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
+ *      及 Market_Center 涨跌榜（东财 delay 对 A 股 f3 常为 "-" 时的榜单兜底）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -70,6 +71,17 @@
     return [];
   }
 
+  /** clist 是否含可用涨跌幅（push2delay 对 A 股常返回 f3="-"） */
+  function eastClistHasValidChange(json) {
+    return normalizeEastDiff(json).some(
+      (item) =>
+        item &&
+        item.f3 != null &&
+        item.f3 !== "-" &&
+        !Number.isNaN(Number(item.f3))
+    );
+  }
+
   /**
    * 按主机列表依次请求东财 JSON，直到成功
    * @param {string[]} hosts
@@ -120,7 +132,8 @@
     pn = 1,
     pz = 50,
     po = 1,
-    fid = "f3"
+    fid = "f3",
+    requireValidChange = false
   }) {
     const path = buildEastPath("/api/qt/clist/get", {
       pn,
@@ -133,7 +146,11 @@
       fs,
       fields
     });
-    const json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
+    const json = await fetchEastMoneyJson(
+      EAST_PUSH_HOSTS,
+      path,
+      requireValidChange ? eastClistHasValidChange : undefined
+    );
     return {
       list: normalizeEastDiff(json),
       total: Number(json?.data?.total) || 0,
@@ -1609,9 +1626,108 @@
   }
 
   /**
+   * 映射东财 A 股涨跌榜行；f3 为 "-" / 无效时丢弃
+   * （push2delay 对 A 股常返回 f2/f3="-"，海外市场正常）
+   */
+  function mapEastCnRankItems(list, take) {
+    return (list || [])
+      .map((item) => {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
+          return null;
+        }
+        const change = Number(item.f3);
+        const price = Number(item.f2);
+        if (Number.isNaN(change)) return null;
+        const market = item.f13 != null ? Number(item.f13) : null;
+        return {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: round2(change),
+          market: Number.isNaN(market) ? null : market
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+  }
+
+  /**
+   * 新浪 A 股涨跌榜兜底（东财 delay 无 A 股涨跌幅时使用）
+   * GET .../Market_Center.getHQNodeDataSimple  node=hs_a
+   */
+  async function loadCnStockRankFromSina(kind = "gainers", limit = 10, page = 1) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
+    const pn = Math.max(1, Number(page) || 1);
+    // 多取一些，过滤停牌/无行情占位后再截断
+    const fetchNum = Math.min(100, Math.max(take * 5, 40));
+    const asc = kind === "losers" ? "1" : "0";
+    const url =
+      "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeDataSimple" +
+      "?page=" +
+      pn +
+      "&num=" +
+      fetchNum +
+      "&sort=changepercent&asc=" +
+      asc +
+      "&node=hs_a&_=" +
+      Date.now();
+
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" }
+    });
+    if (!resp.ok) throw new Error("新浪 A 股涨跌榜请求失败");
+    const rows = await resp.json();
+    if (!Array.isArray(rows)) throw new Error("新浪 A 股涨跌榜返回无效");
+
+    const list = rows
+      .map((item) => {
+        if (!item || item.code == null) return null;
+        const change = Number(item.changepercent);
+        if (Number.isNaN(change)) return null;
+        const trade = Number(item.trade);
+        const settle = Number(item.settlement);
+        // 无最新价且涨跌为 0：多为未开盘/停牌占位
+        if ((Number.isNaN(trade) || trade === 0) && change === 0) return null;
+        const code = normalizeCnCode(item.code);
+        if (!code) return null;
+        const ex = resolveCnExchange(code);
+        const price =
+          !Number.isNaN(trade) && trade !== 0
+            ? trade
+            : !Number.isNaN(settle) && settle !== 0
+              ? settle
+              : null;
+        return {
+          code,
+          name: String(item.name || code),
+          price,
+          change: round2(change),
+          market: ex === "sh" ? 1 : 0
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+
+    let total = 0;
+    try {
+      const countResp = await fetch(
+        "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeStockCount?node=hs_a&_=" +
+          Date.now(),
+        { headers: { Accept: "application/json" } }
+      );
+      if (countResp.ok) {
+        total = Number(await countResp.json()) || 0;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { list, total: total || list.length };
+  }
+
+  /**
    * A 股涨幅榜 / 跌幅榜（沪深京 A 股，分页）
-   * GET {push2}/api/qt/clist/get
-   * fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048
+   * 优先东财 clist；push2 不可达或 delay 涨跌幅全为 "-" 时回退新浪
    *
    * @param {"gainers"|"losers"} kind
    * @param {number} [limit=10]
@@ -1621,36 +1737,25 @@
   async function loadCnStockRank(kind = "gainers", limit = 10, page = 1) {
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    const { list, total } = await fetchEastClist({
-      fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
-      fields: "f12,f13,f14,f2,f3",
-      pn,
-      pz: take,
-      po: kind === "losers" ? 0 : 1
-    });
 
-    return {
-      list: list
-        .map((item) => {
-          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-            return null;
-          }
-          const change = Number(item.f3);
-          const price = Number(item.f2);
-          if (Number.isNaN(change)) return null;
-          const market = item.f13 != null ? Number(item.f13) : null;
-          return {
-            code: String(item.f12),
-            name: String(item.f14 || item.f12),
-            price: Number.isNaN(price) || price === 0 ? null : price,
-            change: round2(change),
-            market: Number.isNaN(market) ? null : market
-          };
-        })
-        .filter(Boolean)
-        .slice(0, take),
-      total: Number(total) || 0
-    };
+    try {
+      const { list, total } = await fetchEastClist({
+        fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
+        fields: "f12,f13,f14,f2,f3",
+        pn,
+        pz: take,
+        po: kind === "losers" ? 0 : 1,
+        requireValidChange: true
+      });
+      const mapped = mapEastCnRankItems(list, take);
+      if (mapped.length) {
+        return { list: mapped, total: Number(total) || 0 };
+      }
+    } catch {
+      /* 东财失败或 delay 无有效涨跌幅 → 新浪 */
+    }
+
+    return loadCnStockRankFromSina(kind, take, pn);
   }
 
   /**

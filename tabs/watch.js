@@ -58,6 +58,7 @@
             <div class="board-list-head us-stock-head kr-stock-head watch-stock-head">
               <div>股票</div>
               <div style="text-align:center">走势</div>
+              <div style="text-align:right">最新价</div>
               <div style="text-align:right">涨跌幅%</div>
             </div>
             <div class="kr-rank-body">
@@ -85,8 +86,8 @@
             item.change == null
               ? "--"
               : formatPct(item.change) + chgArrowHtml(item.change);
-          const priceTip =
-            item.price == null ? "" : " · " + prefix + formatPrice(item.price);
+          const priceText =
+            item.price == null ? "--" : prefix + formatPrice(item.price);
           const safeName = String(item.name || item.code || "").replace(
             /"/g,
             "&quot;"
@@ -110,7 +111,7 @@
                     data-chart-index="${i}"
                     title="查看 ${safeName} 行情"
                   >${item.name || item.code}</div>
-                  <div class="board-meta">${item.code}${priceTip}</div>
+                  <div class="board-meta">${item.code}</div>
                 </div>
               </div>
               <div
@@ -123,6 +124,7 @@
               >
                 <canvas class="kr-spark" data-watch-spark="${i}" aria-hidden="true"></canvas>
               </div>
+              <div class="board-price ${tone}">${priceText}</div>
               <div class="board-chg ${tone}">${chgText}</div>
             </div>`;
         })

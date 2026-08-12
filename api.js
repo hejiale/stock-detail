@@ -1931,23 +1931,49 @@
   }
 
   /**
-   * 美股行业板块（展示名保持门户常用叫法，数据用东财全市场 GICS）
-   * US8 信息技术 / US7 金融 / US6+US5 医疗+日常消费 /
-   * US9 通讯服务 / US1+US4 能源+非必需消费（含汽车）
+   * 美股行业板块
+   * - boards：全市场 GICS，用于外层涨跌家数 / 涨跌幅
+   * - stockBoards：东财「知名美股」分类，用于弹框成分股榜（GICS 的 b:USx 无成分列表）
    */
   const US_FAMOUS_SECTORS = [
-    { code: "tech", name: "科技类", boards: ["US8"] },
-    { code: "finance", name: "金融类", boards: ["US7"] },
-    { code: "medfood", name: "医药食品类", boards: ["US6", "US5"] },
-    { code: "media", name: "媒体类", boards: ["US9"] },
-    { code: "autoene", name: "汽车能源类", boards: ["US1", "US4"] }
+    {
+      code: "tech",
+      name: "科技类",
+      boards: ["US8"],
+      stockBoards: ["MK0215"]
+    },
+    {
+      code: "finance",
+      name: "金融类",
+      boards: ["US7"],
+      stockBoards: ["MK0217"]
+    },
+    {
+      code: "medfood",
+      name: "医药食品类",
+      boards: ["US6", "US5"],
+      stockBoards: ["MK0218"]
+    },
+    {
+      code: "media",
+      name: "媒体类",
+      boards: ["US9"],
+      stockBoards: ["MK0220"]
+    },
+    {
+      code: "autoene",
+      name: "汽车能源类",
+      boards: ["US1", "US4"],
+      stockBoards: ["MK0219"]
+    }
   ];
 
   function listUsFamousSectors() {
     return US_FAMOUS_SECTORS.map((s) => ({
       code: s.code,
       name: s.name,
-      boards: s.boards.slice()
+      boards: s.boards.slice(),
+      stockBoards: (s.stockBoards || s.boards).slice()
     }));
   }
 
@@ -1961,15 +1987,17 @@
           s.code === raw ||
           s.code.toUpperCase() === upper ||
           s.name === raw ||
-          s.boards.some((b) => b.toUpperCase() === upper)
+          s.boards.some((b) => b.toUpperCase() === upper) ||
+          (s.stockBoards || []).some((b) => b.toUpperCase() === upper)
       ) || null
     );
   }
 
-  function usSectorFs(sector) {
-    return (sector.boards || [sector.code])
-      .map((b) => "b:" + b)
-      .join(",");
+  function usSectorFs(sector, { forStocks = false } = {}) {
+    const codes = forStocks
+      ? sector.stockBoards || sector.boards || [sector.code]
+      : sector.boards || [sector.code];
+    return codes.map((b) => "b:" + b).join(",");
   }
 
   /**
@@ -2022,7 +2050,6 @@
           weighted += row.change * row.mcap;
           weight += row.mcap;
         } else if (row.change != null && weight === 0) {
-          // 无市值时退回简单平均
           weighted += row.change;
           weight += 1;
         }
@@ -2041,11 +2068,11 @@
   }
 
   /**
-   * 美股行业成分股榜（全市场对应 GICS 成分）
+   * 美股行业成分股榜（知名美股分类池，弹框人气 / 涨跌幅）
    * - hot：按成交额（人气）
    * - gainers / losers：按涨跌幅
    *
-   * @param {string} boardCodeOrName tech / 科技类 / US8
+   * @param {string} boardCodeOrName tech / 科技类 / MK0215
    * @param {"hot"|"gainers"|"losers"} [kind=hot]
    * @param {number} [limit=20]
    */
@@ -2063,7 +2090,7 @@
     const po = rank === "losers" ? 0 : 1;
 
     const { list } = await fetchEastClist({
-      fs: usSectorFs(sector),
+      fs: usSectorFs(sector, { forStocks: true }),
       fields: "f12,f13,f14,f2,f3,f6",
       pn: 1,
       pz: take,

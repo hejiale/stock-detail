@@ -255,7 +255,7 @@
       const volGap = 8;
       const timeGap = 4;
       const timeLabelH = 14;
-      const bottomPad = 14;
+      const bottomPad = 60;
       const pad = {
         top: 16,
         right: 52,

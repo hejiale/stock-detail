@@ -247,20 +247,12 @@
       };
     }
 
-    function drawIntradayChart(canvas, series) {
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = canvas.clientWidth || 320;
-      const cssH = canvas.clientHeight || 280;
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
+    const chartScrub = {
+      index: null,
+      dragging: false
+    };
 
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-
-      const points = series.points;
-      if (!points?.length) return;
-
+    function getChartPlotMetrics(cssW, cssH) {
       const volH = 48;
       const volGap = 8;
       const timeGap = 4;
@@ -276,6 +268,176 @@
       const plotH = cssH - pad.top - pad.bottom - volH - volGap;
       const volTop = pad.top + plotH + volGap;
       const timeY = volTop + volH + timeGap;
+      return { pad, plotW, plotH, volH, volGap, volTop, timeY };
+    }
+
+    function clearChartScrub(restoreMeta = true) {
+      chartScrub.index = null;
+      chartScrub.dragging = false;
+      const tip = document.getElementById("chartCrosshairTip");
+      if (tip) tip.hidden = true;
+      if (!restoreMeta) return;
+      const series = openChartModal._lastSeries;
+      const state = openChartModal._state;
+      const canvas = document.getElementById("chartCanvas");
+      if (series && canvas) drawIntradayChart(canvas, series, null);
+      if (series && state) updateChartMeta(series, state);
+    }
+
+    function pointIndexFromClientX(canvas, clientX, pointsLen) {
+      if (!pointsLen) return null;
+      const rect = canvas.getBoundingClientRect();
+      const cssW = canvas.clientWidth || rect.width || 320;
+      const cssH = canvas.clientHeight || rect.height || 280;
+      const { pad, plotW } = getChartPlotMetrics(cssW, cssH);
+      const x = clientX - rect.left;
+      if (pointsLen === 1) return 0;
+      const t = (x - pad.left) / plotW;
+      return Math.round(Math.max(0, Math.min(1, t)) * (pointsLen - 1));
+    }
+
+    function updateChartScrubMeta(point, series) {
+      const base = series.baseline;
+      const chg =
+        base != null && base !== 0
+          ? ((point.price - base) / base) * 100
+          : null;
+      const tone = chg == null ? "flat" : toneClass(chg);
+      const priceEl = document.getElementById("chartModalPrice");
+      const chgAmtEl = document.getElementById("chartModalChgAmt");
+      const chgEl = document.getElementById("chartModalChg");
+      const arrowEl = document.getElementById("chartModalChgArrow");
+      if (priceEl) {
+        priceEl.textContent = formatPrice(point.price);
+        priceEl.className = "price " + tone;
+      }
+      if (chgAmtEl) {
+        if (chg == null || base == null) {
+          chgAmtEl.textContent = "--";
+          chgAmtEl.className = "chg-amt flat";
+        } else {
+          chgAmtEl.textContent = formatPrice(point.price - base);
+          chgAmtEl.className = "chg-amt " + tone;
+        }
+      }
+      if (chgEl) {
+        if (chg == null) {
+          chgEl.textContent = "--";
+          chgEl.className = "chg flat";
+        } else {
+          chgEl.textContent = formatPct(chg);
+          chgEl.className = "chg " + tone;
+        }
+      }
+      if (arrowEl) {
+        arrowEl.innerHTML =
+          typeof chgArrowHtml === "function" ? chgArrowHtml(chg) : "";
+      }
+    }
+
+    function updateCrosshairTip(point, series, x, cssW) {
+      const tip = document.getElementById("chartCrosshairTip");
+      if (!tip) return;
+      const base = series.baseline;
+      const chg =
+        base != null && base !== 0
+          ? ((point.price - base) / base) * 100
+          : null;
+      const tone = chg == null ? "flat" : toneClass(chg);
+      tip.querySelector(".t-time").textContent = point.label || "--";
+      tip.querySelector(".t-price").textContent = formatPrice(point.price);
+      const pctEl = tip.querySelector(".t-pct");
+      pctEl.textContent = chg == null ? "--" : formatPct(chg);
+      pctEl.className = "t-pct " + tone;
+      tip.hidden = false;
+
+      const tipW = tip.offsetWidth || 120;
+      const left = Math.max(8 + tipW / 2, Math.min(cssW - 8 - tipW / 2, x));
+      tip.style.left = left + "px";
+    }
+
+    function applyChartScrub(index) {
+      const series = openChartModal._lastSeries;
+      const canvas = document.getElementById("chartCanvas");
+      if (!series?.points?.length || !canvas) return;
+      const safeIndex = Math.max(0, Math.min(series.points.length - 1, index));
+      if (chartScrub.index === safeIndex) return;
+      chartScrub.index = safeIndex;
+      const point = series.points[safeIndex];
+      drawIntradayChart(canvas, series, safeIndex);
+      updateChartScrubMeta(point, series);
+    }
+
+    function bindChartPointer(canvas) {
+      if (!canvas || canvas._chartPointerBound) return;
+      canvas._chartPointerBound = true;
+
+      const onMove = (e) => {
+        const series = openChartModal._lastSeries;
+        if (!series?.points?.length) return;
+        // 鼠标悬停即可；触摸需按下后滑动
+        if (e.pointerType !== "mouse" && !chartScrub.dragging) return;
+        e.preventDefault();
+        const idx = pointIndexFromClientX(canvas, e.clientX, series.points.length);
+        if (idx == null) return;
+        applyChartScrub(idx);
+      };
+
+      canvas.addEventListener("pointerdown", (e) => {
+        const series = openChartModal._lastSeries;
+        if (!series?.points?.length) return;
+        chartScrub.dragging = true;
+        canvas.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+        const idx = pointIndexFromClientX(canvas, e.clientX, series.points.length);
+        if (idx != null) applyChartScrub(idx);
+      });
+
+      canvas.addEventListener("pointermove", onMove);
+
+      const endScrub = (e) => {
+        const wasDragging = chartScrub.dragging;
+        chartScrub.dragging = false;
+        try {
+          canvas.releasePointerCapture?.(e.pointerId);
+        } catch (_) {}
+        if (e.pointerType !== "mouse") {
+          if (wasDragging) clearChartScrub(true);
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const outside =
+          e.clientX < rect.left ||
+          e.clientX > rect.right ||
+          e.clientY < rect.top ||
+          e.clientY > rect.bottom;
+        if (outside) clearChartScrub(true);
+      };
+
+      canvas.addEventListener("pointerup", endScrub);
+      canvas.addEventListener("pointercancel", endScrub);
+      canvas.addEventListener("pointerleave", (e) => {
+        if (e.pointerType === "mouse") clearChartScrub(true);
+      });
+    }
+
+    function drawIntradayChart(canvas, series, activeIndex = null) {
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || 320;
+      const cssH = canvas.clientHeight || 280;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const points = series.points;
+      if (!points?.length) return;
+
+      bindChartPointer(canvas);
+
+      const { pad, plotW, plotH, volH, volTop, timeY } = getChartPlotMetrics(cssW, cssH);
 
       const prices = points.map((p) => p.price);
       let minP = Math.min(...prices);
@@ -423,6 +585,40 @@
 
       ctx.textAlign = "left";
       ctx.fillText("成交量", pad.left, volTop - 2);
+
+      if (activeIndex == null || activeIndex < 0 || activeIndex >= points.length) {
+        const tip = document.getElementById("chartCrosshairTip");
+        if (tip) tip.hidden = true;
+        return;
+      }
+
+      const ap = points[activeIndex];
+      const ax = xAt(activeIndex);
+      const ay = yAt(ap.price);
+
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "rgba(71, 85, 105, 0.85)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ax, pad.top);
+      ctx.lineTo(ax, volTop + volH);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pad.left, ay);
+      ctx.lineTo(pad.left + plotW, ay);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(ax, ay, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = lineColor;
+      ctx.stroke();
+
+      updateCrosshairTip(ap, series, ax, cssW);
     }
 
     function updateChartMeta(series, state) {
@@ -473,16 +669,21 @@
     function renderActiveChart() {
       const state = openChartModal._state;
       if (!state) return;
+      chartScrub.index = null;
+      chartScrub.dragging = false;
+      const tip = document.getElementById("chartCrosshairTip");
+      if (tip) tip.hidden = true;
       const series = buildRangeSeries(state.range, state);
       const canvas = document.getElementById("chartCanvas");
       if (!series) {
+        openChartModal._lastSeries = null;
         setStatus("chartStatus", state.range === "day" ? "暂无当日分时数据" : "暂无该区间行情");
         return;
       }
       openChartModal._lastSeries = series;
       setStatus("chartStatus", "");
       updateChartMeta(series, state);
-      drawIntradayChart(canvas, series);
+      drawIntradayChart(canvas, series, null);
     }
 
     function setChartRange(range) {
@@ -526,6 +727,7 @@
       const canvas = document.getElementById("chartCanvas");
       const reqId = ++chartRequestId;
 
+      clearChartScrub(false);
       document.getElementById("chartModalName").textContent =
         holding.name;
       resetChartQuoteUi();
@@ -608,6 +810,7 @@
 
     function closeChartModal() {
       chartRequestId += 1;
+      clearChartScrub(false);
       openChartModal._state = null;
       openChartModal._lastSeries = null;
       if (document.getElementById("profileModal")?.classList.contains("show")) {

@@ -564,7 +564,11 @@
     window.addEventListener("resize", () => {
       const chartModal = document.getElementById("chartModal");
       if (chartModal.classList.contains("show") && openChartModal._lastSeries) {
-        drawIntradayChart(document.getElementById("chartCanvas"), openChartModal._lastSeries);
+        drawIntradayChart(
+          document.getElementById("chartCanvas"),
+          openChartModal._lastSeries,
+          typeof chartScrub !== "undefined" ? chartScrub.index : null
+        );
       }
       const boardModal = document.getElementById("boardModal");
       if (boardModal?.classList.contains("show")) {

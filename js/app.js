@@ -212,6 +212,8 @@
         activeMainTab = "jpStocks";
       } else if (tabOrFundId === "krStocks") {
         activeMainTab = "krStocks";
+      } else if (tabOrFundId === "fundRank") {
+        activeMainTab = "fundRank";
       } else if (tabOrFundId === "watchStocks") {
         activeMainTab = "watchStocks";
       } else {
@@ -367,6 +369,17 @@
 
       if (e.target.closest("[data-kr-refresh]")) {
         loadKrRankKind(krRankState.kind || "gainers", { force: true });
+        return;
+      }
+
+      const fundRankBtn = e.target.closest("[data-fund-rank]");
+      if (fundRankBtn) {
+        loadFundRankPeriod(fundRankBtn.dataset.fundRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-fund-rank-refresh]")) {
+        loadFundRankPeriod(fundRankState.period || "month", { force: true });
         return;
       }
 

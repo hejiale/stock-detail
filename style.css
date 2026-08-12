@@ -2207,6 +2207,15 @@ header p {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.fund-rank-head {
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 0.85fr));
+}
+
+.fund-rank-tabs .board-tab {
+  font-size: 12px;
+  padding: 0 4px;
+}
+
 .kr-rank-body {
   position: relative;
   min-height: 220px;
@@ -2241,6 +2250,10 @@ header p {
   padding-right: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
+}
+
+.fund-rank-list .fund-rank-row {
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 0.85fr));
 }
 
 .kr-stock-list .board-price {

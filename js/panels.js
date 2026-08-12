@@ -5,6 +5,10 @@
         await loadWatchlist(watchlistState.type || 1, { force: true });
         return;
       }
+      if (isFundRankTab(fundId)) {
+        await loadFundRankPeriod(fundRankState.period || "month", { force: true });
+        return;
+      }
       if (isCnTab(fundId)) {
         await loadCnRankKind(cnRankState.kind || "gainers", { force: true });
         return;
@@ -312,6 +316,7 @@
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
       panels.appendChild(buildJpPanelElement(activeFundId === "jpStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
+      panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
       applyAllChangeColors();
     }

@@ -2316,6 +2316,86 @@
     });
   }
 
+  /**
+   * 开放式基金阶段涨幅排行（天天基金 FundMNRank，CORS 可用）
+   * period: month=近1月, 3m=近3月, 6m=近6月, 1y=近1年
+   */
+  const FUND_RANK_PERIOD = {
+    month: { sort: "SYL_Y", field: "SYL_Y", label: "近1月" },
+    "3m": { sort: "SYL_3Y", field: "SYL_3Y", label: "近3月" },
+    "6m": { sort: "SYL_6Y", field: "SYL_6Y", label: "近6月" },
+    "1y": { sort: "SYL_1N", field: "SYL_1N", label: "近1年" }
+  };
+
+  function parseFundRankPct(raw) {
+    if (raw == null || raw === "" || raw === "-" || raw === "--") return null;
+    const n = Number(raw);
+    return Number.isNaN(n) ? null : round2(n);
+  }
+
+  async function loadOpenFundRank(period = "month", limit = 20) {
+    const meta = FUND_RANK_PERIOD[period] || FUND_RANK_PERIOD.month;
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const resolvedPeriod = period in FUND_RANK_PERIOD ? period : "month";
+
+    const url =
+      "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNRank?" +
+      buildQuery({
+        FundType: "0",
+        SortColumn: meta.sort,
+        Sort: "desc",
+        pageIndex: "1",
+        pageSize: String(take),
+        plat: "Android",
+        product: "EFund",
+        version: "6.5.5",
+        deviceid: "browser",
+        MobileKey: "browser",
+        UserId: "uid",
+        passportid: "0",
+        OSVersion: "10",
+        AppVersion: "6.5.5",
+        _: String(Date.now())
+      });
+
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" }
+    });
+    if (!resp.ok) throw new Error("基金排行请求失败（" + resp.status + "）");
+    const json = await resp.json();
+    if (json?.Success === false || (json?.ErrCode && json.ErrCode !== 0)) {
+      throw new Error(json?.ErrMsg || json?.ErrorMessage || "基金排行暂不可用");
+    }
+
+    const rows = Array.isArray(json?.Datas) ? json.Datas : [];
+    const list = rows
+      .map((row) => {
+        if (!row?.FCODE) return null;
+        const change = parseFundRankPct(row[meta.field]);
+        if (change == null) return null;
+        const nav = Number(row.DWJZ);
+        return {
+          code: String(row.FCODE),
+          name: String(row.SHORTNAME || row.FCODE),
+          date: row.FSRQ || "",
+          nav: Number.isNaN(nav) ? null : nav,
+          dayChange: parseFundRankPct(row.RZDF),
+          change,
+          period: resolvedPeriod,
+          periodLabel: meta.label
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+
+    return {
+      list,
+      total: Number(json?.TotalCount) || list.length,
+      period: resolvedPeriod,
+      periodLabel: meta.label
+    };
+  }
+
   global.MarketAPI = {
     // 工具
     quoteKey,
@@ -2362,6 +2442,7 @@
     loadHkIndices,
     loadHkStockRank,
     loadHkMarketBreadth,
+    loadOpenFundRank,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

@@ -29,6 +29,7 @@
       loadHkStockRank,
       loadHkIndices,
       loadHkMarketBreadth,
+      loadOpenFundRank,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock
@@ -80,6 +81,7 @@
       { id: "hkStocks", name: "港股", icon: "assets/gupiao.png" },
       { id: "jpStocks", name: "日股", icon: "assets/gupiao.png" },
       { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
+      { id: "fundRank", name: "基金", icon: "assets/jijin.png", iconClass: "tab-icon-sm" },
       { id: "watchStocks", name: "自选个股", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
@@ -207,6 +209,7 @@
       if (activeMainTab === "hkStocks") return "hkStocks";
       if (activeMainTab === "jpStocks") return "jpStocks";
       if (activeMainTab === "krStocks") return "krStocks";
+      if (activeMainTab === "fundRank") return "fundRank";
       if (activeMainTab === "watchStocks") return "watchStocks";
       return "cnSemi";
     }
@@ -229,6 +232,10 @@
 
     function isHkTab(id) {
       return id === "hkStocks";
+    }
+
+    function isFundRankTab(id) {
+      return id === "fundRank";
     }
 
     function isWatchTab(id) {

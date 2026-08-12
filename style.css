@@ -1419,6 +1419,21 @@ header p {
   border: 1px solid #eef1f6;
   min-width: 0;
   text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cn-index-card:hover {
+  border-color: #c7d7f5;
+  background: #f3f7ff;
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.08);
+}
+
+.cn-index-card:focus-visible {
+  outline: 2px solid rgba(22, 119, 255, 0.45);
+  outline-offset: 2px;
 }
 
 .cn-index-card .idx-head {

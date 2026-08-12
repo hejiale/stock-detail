@@ -372,9 +372,29 @@
         return;
       }
 
+      if (e.target.closest("[data-index-stocks-close]")) {
+        closeIndexStocksModal();
+        return;
+      }
+
       const cnStockRankBtn = e.target.closest("[data-cn-stock-rank]");
       if (cnStockRankBtn) {
         loadBoardStocksRank(cnStockRankBtn.dataset.cnStockRank);
+        return;
+      }
+
+      const cnIndexRankBtn = e.target.closest("[data-cn-index-rank]");
+      if (cnIndexRankBtn) {
+        loadIndexStocksRank(cnIndexRankBtn.dataset.cnIndexRank);
+        return;
+      }
+
+      const cnIndexCard = e.target.closest("[data-cn-index-code]");
+      if (cnIndexCard) {
+        openIndexStocksModal(
+          cnIndexCard.dataset.cnIndexCode,
+          cnIndexCard.dataset.cnIndexLabel
+        );
         return;
       }
 
@@ -516,6 +536,11 @@
         const boardStocksModal = document.getElementById("boardStocksModal");
         if (boardStocksModal?.classList.contains("show")) {
           closeBoardStocksModal();
+          return;
+        }
+        const indexStocksModal = document.getElementById("indexStocksModal");
+        if (indexStocksModal?.classList.contains("show")) {
+          closeIndexStocksModal();
           return;
         }
         const usBoardModal = document.getElementById("usBoardModal");

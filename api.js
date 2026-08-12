@@ -1512,6 +1512,195 @@
   }
 
   /**
+   * 市场市场指数 → 成分范围（与指数卡片一一对应）
+   * fs 为东财 clist 市场过滤；key 用于人气榜代码筛选
+   */
+  const CN_INDEX_BOARDS = {
+    "000001": { key: "sh", label: "上交所", fs: "m:1+t:2" },
+    "399001": { key: "sz", label: "深交所", fs: "m:0+t:6" },
+    "399006": { key: "cyb", label: "创业板", fs: "m:0+t:80" },
+    "000688": { key: "kcb", label: "科创板", fs: "m:1+t:23" },
+    "899050": { key: "bj", label: "北交所", fs: "m:0+t:81" }
+  };
+
+  function resolveCnIndexBoard(indexCodeOrKey) {
+    const raw = String(indexCodeOrKey || "").trim();
+    if (!raw) return null;
+    if (CN_INDEX_BOARDS[raw]) return { code: raw, ...CN_INDEX_BOARDS[raw] };
+    const byKey = Object.entries(CN_INDEX_BOARDS).find(
+      ([, v]) => v.key === raw || v.label === raw
+    );
+    if (byKey) return { code: byKey[0], ...byKey[1] };
+    return null;
+  }
+
+  /** 人气榜 sc（如 SH600519）或纯代码是否属于某指数范围 */
+  function matchesCnIndexBoard(scOrCode, boardKey) {
+    const raw = String(scOrCode || "").trim().toUpperCase();
+    const code = normalizeCnCode(/^(SH|SZ|BJ)/.test(raw) ? raw.slice(2) : raw);
+    if (!code) return false;
+    switch (boardKey) {
+      case "sh":
+        return /^60\d{4}$/.test(code) && !code.startsWith("688");
+      case "sz":
+        return /^(000|001|002|003)\d{3}$/.test(code);
+      case "cyb":
+        return /^(300|301)\d{3}$/.test(code);
+      case "kcb":
+        return code.startsWith("688");
+      case "bj":
+        return isBjCode(code);
+      default:
+        return false;
+    }
+  }
+
+  function hotScToSecId(sc) {
+    const s = String(sc || "").trim().toUpperCase();
+    if (s.startsWith("SH")) return "1." + s.slice(2);
+    if (s.startsWith("SZ") || s.startsWith("BJ")) return "0." + s.slice(2);
+    const code = normalizeCnCode(s);
+    if (!code) return "";
+    const ex = resolveCnExchange(code);
+    return (ex === "sh" ? "1." : "0.") + code;
+  }
+
+  /** 东财股吧人气榜一页 */
+  async function fetchCnHotRankPage(pageNo = 1, pageSize = 100) {
+    const resp = await fetch(
+      "https://emappdata.eastmoney.com/stockrank/getAllCurrentList",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          appId: "appId01",
+          globalId: "786e4c21-70dc-435a-93bb-38",
+          marketType: "",
+          pageNo: Math.max(1, Number(pageNo) || 1),
+          pageSize: Math.max(1, Math.min(100, Number(pageSize) || 100))
+        })
+      }
+    );
+    if (!resp.ok) throw new Error("人气榜请求失败");
+    const json = await resp.json();
+    const rows = Array.isArray(json?.data) ? json.data : [];
+    return rows
+      .map((row) => {
+        const sc = String(row?.sc || "").toUpperCase();
+        if (!sc) return null;
+        return {
+          sc,
+          rank: Number(row.rk) || 0,
+          code: normalizeCnCode(sc.replace(/^(SH|SZ|BJ)/, ""))
+        };
+      })
+      .filter((x) => x?.code);
+  }
+
+  /**
+   * 指数范围内人气股（东财人气榜筛选 + ulist 补行情）
+   * @param {string} indexCodeOrKey 指数代码如 000001 / key 如 sh
+   * @param {number} [limit=20]
+   */
+  async function loadCnIndexHotStocks(indexCodeOrKey, limit = 20) {
+    const board = resolveCnIndexBoard(indexCodeOrKey);
+    if (!board) throw new Error("未知市场指数");
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+
+    const picked = [];
+    const seen = new Set();
+    for (let page = 1; page <= 5 && picked.length < take; page++) {
+      const rows = await fetchCnHotRankPage(page, 100);
+      if (!rows.length) break;
+      for (const row of rows) {
+        if (!matchesCnIndexBoard(row.sc, board.key)) continue;
+        if (seen.has(row.code)) continue;
+        seen.add(row.code);
+        picked.push(row);
+        if (picked.length >= take) break;
+      }
+      if (rows.length < 100) break;
+    }
+    if (!picked.length) return [];
+
+    const secids = picked
+      .map((r) => hotScToSecId(r.sc))
+      .filter(Boolean)
+      .join(",");
+    const json = await fetchEastUlist(secids, "f2,f3,f12,f13,f14");
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item?.f12) return;
+      byCode.set(String(item.f12), item);
+    });
+
+    return picked
+      .map((row) => {
+        const q = byCode.get(row.code);
+        const price = q ? Number(q.f2) : NaN;
+        const changeRaw = q?.f3;
+        const change =
+          changeRaw == null || changeRaw === "-"
+            ? null
+            : Number(changeRaw);
+        const market = q?.f13 != null ? Number(q.f13) : null;
+        return {
+          code: row.code,
+          name: String(q?.f14 || row.code),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change:
+            change == null || Number.isNaN(change) ? null : round2(change),
+          market: Number.isNaN(market) ? null : market,
+          hotRank: row.rank
+        };
+      });
+  }
+
+  /**
+   * 指数范围内近1月涨幅榜（clist fid=f110，约 20 个交易日）
+   * @param {string} indexCodeOrKey
+   * @param {number} [limit=20]
+   */
+  async function loadCnIndexMonthGainers(indexCodeOrKey, limit = 20) {
+    const board = resolveCnIndexBoard(indexCodeOrKey);
+    if (!board) throw new Error("未知市场指数");
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const { list } = await fetchEastClist({
+      fs: board.fs,
+      fields: "f12,f13,f14,f2,f3,f110",
+      pn: 1,
+      pz: Math.min(100, Math.max(take * 2, take)),
+      po: 1,
+      fid: "f110"
+    });
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f110 == null || item.f110 === "-") {
+          return null;
+        }
+        const monthChange = Number(item.f110);
+        if (Number.isNaN(monthChange)) return null;
+        const price = Number(item.f2);
+        const dayChange = Number(item.f3);
+        const market = item.f13 != null ? Number(item.f13) : null;
+        return {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: round2(monthChange),
+          dayChange: Number.isNaN(dayChange) ? null : round2(dayChange),
+          market: Number.isNaN(market) ? null : market
+        };
+      })
+      .filter(Boolean)
+      .slice(0, take);
+  }
+
+  /**
    * 按涨跌幅排序的 clist，统计涨 / 跌家数（二分定位分界页）
    * @param {string} fs
    * @param {0|1} po 1=降序统计上涨，0=升序统计下跌
@@ -1926,6 +2115,9 @@
     loadCnSectorStocks,
     loadCnStockRank,
     loadCnIndices,
+    loadCnIndexHotStocks,
+    loadCnIndexMonthGainers,
+    resolveCnIndexBoard,
     loadUsIndices,
     loadUsSectorBoards,
     loadUsStockRank,

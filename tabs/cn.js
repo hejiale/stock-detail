@@ -9,15 +9,24 @@
       wrap.innerHTML = list
         .map((item, i) => {
           const tone = toneClass(item.change);
+          const label = item.label || item.name || item.code;
+          const safeLabel = String(label).replace(/"/g, "&quot;");
           return `
-            <div class="cn-index-card" data-cn-index="${i}">
+            <button
+              class="cn-index-card"
+              type="button"
+              data-cn-index="${i}"
+              data-cn-index-code="${item.code}"
+              data-cn-index-label="${safeLabel}"
+              title="查看 ${safeLabel} 人气股与月涨幅榜"
+            >
               <div class="idx-head">
-                <div class="idx-name">${item.label || item.name}</div>
+                <div class="idx-name">${label}</div>
                 <div class="idx-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
               </div>
               <div class="idx-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
               <canvas class="idx-chart" data-cn-spark="${i}" aria-hidden="true"></canvas>
-            </div>`;
+            </button>`;
         })
         .join("");
     }
@@ -222,6 +231,130 @@
       setStatus("boardStocksStatus", "");
     }
 
+    let indexStocksRequestId = 0;
+    const indexStocksState = {
+      code: "",
+      label: "",
+      rank: "hot"
+    };
+
+    function setIndexStocksRankTabs(kind) {
+      document.querySelectorAll("[data-cn-index-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.cnIndexRank === kind);
+      });
+      const head = document.getElementById("indexStocksChgHead");
+      if (head) {
+        head.textContent = kind === "month" ? "月涨幅%" : "涨跌幅%";
+      }
+    }
+
+    function renderIndexStocksList(list) {
+      const wrap = document.getElementById("indexStocksList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const chg = item.change;
+          const tone = chg == null ? "flat" : toneClass(chg);
+          const arrow = chg == null ? "" : chgArrowHtml(chg);
+          const chgText = chg == null ? "--" : formatPct(chg);
+          const safeName = String(item.name || item.code || "").replace(
+            /"/g,
+            "&quot;"
+          );
+          const meta =
+            item.hotRank != null
+              ? `人气第${item.hotRank} · ${item.code}`
+              : `${i + 1} · ${item.code}`;
+          return `
+            <div class="board-row board-stock-row">
+              <div class="board-info">
+                <div class="board-name-row">
+                  <div class="board-name">${item.name}</div>
+                  <button
+                    class="btn-add-watch"
+                    type="button"
+                    data-add-watch="cnSemi"
+                    data-watch-code="${item.code}"
+                    data-watch-name="${safeName}"
+                    data-watch-type="1"
+                    title="加入自选"
+                    aria-label="加入自选 ${safeName}"
+                  ><img src="assets/add_zixuan.png" alt="自选" /></button>
+                </div>
+                <div class="board-meta">${meta}</div>
+              </div>
+              <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
+              <div class="board-chg ${tone}">${chgText}${arrow}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadIndexStocksRank(kind) {
+      if (!indexStocksState.code) return;
+      const rank = kind === "month" ? "month" : "hot";
+      indexStocksState.rank = rank;
+      setIndexStocksRankTabs(rank);
+
+      const reqId = ++indexStocksRequestId;
+      const rankLabel = rank === "month" ? "月涨幅" : "人气";
+      document.getElementById("indexStocksModalSub").textContent =
+        `${indexStocksState.label} · 加载${rankLabel}榜…`;
+      document.getElementById("indexStocksList").innerHTML = "";
+      setStatus(
+        "indexStocksStatus",
+        rank === "month" ? "加载月涨幅榜…" : "加载人气榜…"
+      );
+
+      try {
+        const list =
+          rank === "month"
+            ? await loadCnIndexMonthGainers(indexStocksState.code, 20)
+            : await loadCnIndexHotStocks(indexStocksState.code, 20);
+        if (reqId !== indexStocksRequestId) return;
+        document.getElementById("indexStocksModalSub").textContent =
+          `${indexStocksState.label} · ${rankLabel}前 ${list.length} 只`;
+        renderIndexStocksList(list);
+        setStatus(
+          "indexStocksStatus",
+          list.length ? "" : `暂无${rankLabel}数据`
+        );
+      } catch (err) {
+        if (reqId !== indexStocksRequestId) return;
+        document.getElementById("indexStocksModalSub").textContent = "加载失败";
+        setStatus("indexStocksStatus", err?.message || "榜单加载失败");
+      }
+    }
+
+    async function openIndexStocksModal(indexCode, indexLabel) {
+      const board =
+        typeof resolveCnIndexBoard === "function"
+          ? resolveCnIndexBoard(indexCode)
+          : null;
+      if (!board && !indexCode) return;
+
+      indexStocksState.code = board?.code || indexCode;
+      indexStocksState.label =
+        indexLabel || board?.label || indexStocksState.code;
+      indexStocksState.rank = "hot";
+
+      document.getElementById("indexStocksModalName").textContent =
+        indexStocksState.label;
+      showModal("indexStocksModal");
+      await loadIndexStocksRank("hot");
+    }
+
+    function closeIndexStocksModal() {
+      indexStocksRequestId += 1;
+      hideModal("indexStocksModal");
+      setStatus("indexStocksStatus", "");
+    }
+
     async function loadBoardList() {
       const requestId = (loadBoardList._req = (loadBoardList._req || 0) + 1);
       document.getElementById("boardModalSub").textContent = "加载市场指数与行业板块…";
@@ -306,6 +439,9 @@
       loadBoardList._req = (loadBoardList._req || 0) + 1;
       if (document.getElementById("boardStocksModal")?.classList.contains("show")) {
         closeBoardStocksModal();
+      }
+      if (document.getElementById("indexStocksModal")?.classList.contains("show")) {
+        closeIndexStocksModal();
       }
       hideModal("boardModal");
       setStatus("boardStatus", "");

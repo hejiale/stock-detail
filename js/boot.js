@@ -6,6 +6,7 @@
     "tabs/modals/chart.html",
     "tabs/modals/cn-board.html",
     "tabs/modals/cn-board-stocks.html",
+    "tabs/modals/cn-index-stocks.html",
     "tabs/modals/us-board.html",
     "tabs/modals/hk-board.html",
     "tabs/modals/jp-board.html",

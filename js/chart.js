@@ -286,6 +286,12 @@
     let chartRequestId = 0;
 
     function resolveChartHolding(fundId, index) {
+      if (fundId === "cnSemi" && typeof getCnRankHolding === "function") {
+        return getCnRankHolding(index);
+      }
+      if (fundId === "usSemi" && typeof getUsRankHolding === "function") {
+        return getUsRankHolding(index);
+      }
       if (fundId === "hkStocks" && typeof getHkRankHolding === "function") {
         return getHkRankHolding(index);
       }

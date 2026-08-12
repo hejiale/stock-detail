@@ -23,7 +23,6 @@
   rootEl.insertAdjacentHTML("beforebegin", htmls[0]);
   rootEl.innerHTML = htmls.slice(1).join("\n");
 
-  applyCustomHoldings();
   render();
   switchTab(activeMainTab, { forceSync: true });
   updateTabArrows();

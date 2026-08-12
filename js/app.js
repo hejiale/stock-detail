@@ -11,7 +11,7 @@
 
     function calcFund(fundId) {
       const fund = window.FUND_HOLDINGS[fundId];
-      if (fund.viewOnly) return;
+      if (!fund) return;
       persistFromDom();
       const saved = loadInputs()[fundId] || {};
       let weighted = 0;
@@ -116,37 +116,6 @@
       return changed;
     }
 
-    async function removeCustomStock(fundId, code) {
-      if (!CUSTOMIZABLE_FUNDS.has(fundId)) return;
-      const all = loadCustomStocks();
-      const list = all[fundId] || [];
-      const next = list.filter((h) => quoteKey(h.code) !== quoteKey(code));
-      if (next.length === list.length) return;
-      all[fundId] = next;
-      saveCustomStocks(all);
-
-      pageState[fundId] = 1;
-      const saved = loadInputs();
-      delete saved[fundId];
-      saveInputs(saved);
-
-      try {
-        if (!isLoggedIn()) {
-          /* 未登录只清本地 */
-        } else {
-          await removeWatchStock(code);
-        }
-      } catch {
-        /* 远端可能本无此代码，本地仍移除 */
-      }
-
-      showToast("已移除自选股票");
-      rerender(fundId);
-      if (activeMainTab === "watchStocks") {
-        loadWatchlist(watchlistState.type || 1, { force: true }).catch(() => {});
-      }
-    }
-
     async function removeWatchlistStock(code) {
       const raw = String(code || "").trim();
       if (!raw) return;
@@ -234,6 +203,8 @@
         }
       } else if (tabOrFundId === "usSemi") {
         activeMainTab = "usSemi";
+      } else if (tabOrFundId === "cnSemi") {
+        activeMainTab = "cnSemi";
       } else if (tabOrFundId === "hkStocks") {
         activeMainTab = "hkStocks";
       } else if (tabOrFundId === "krStocks") {
@@ -316,17 +287,25 @@
         return;
       }
 
-      const semiRankBtn = e.target.closest("[data-semi-rank]");
-      if (semiRankBtn) {
-        const fundId = semiRankBtn.dataset.semiFund;
-        if (isRankFund(fundId)) {
-          if (!semiRankState[fundId]) {
-            semiRankState[fundId] = { kind: "gainers" };
-          }
-          semiRankState[fundId].kind =
-            semiRankBtn.dataset.semiRank === "losers" ? "losers" : "gainers";
-          syncFundQuotes(fundId);
-        }
+      const cnRankBtn = e.target.closest("[data-cn-rank]");
+      if (cnRankBtn) {
+        loadCnRankKind(cnRankBtn.dataset.cnRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-cn-refresh]")) {
+        loadCnRankKind(cnRankState.kind || "gainers", { force: true });
+        return;
+      }
+
+      const usRankBtn = e.target.closest("[data-us-rank]");
+      if (usRankBtn) {
+        loadUsRankKind(usRankBtn.dataset.usRank, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-us-refresh]")) {
+        loadUsRankKind(usRankState.kind || "gainers", { force: true });
         return;
       }
 
@@ -428,12 +407,6 @@
       const rangeBtn = e.target.closest("[data-chart-range]");
       if (rangeBtn) {
         setChartRange(rangeBtn.dataset.chartRange);
-        return;
-      }
-
-      const removeBtn = e.target.closest("[data-remove-stock]");
-      if (removeBtn) {
-        removeCustomStock(removeBtn.dataset.removeStock, removeBtn.dataset.removeCode);
         return;
       }
 
@@ -585,7 +558,9 @@
         redrawKrIndexSparklines();
       }
       const activeFundId = getActiveFundId();
-      if (activeFundId === "hkStocks") redrawHkSparklines();
+      if (activeFundId === "cnSemi") redrawCnSparklines();
+      else if (activeFundId === "usSemi") redrawUsSparklines();
+      else if (activeFundId === "hkStocks") redrawHkSparklines();
       else if (activeFundId === "krStocks") redrawKrSparklines();
       else if (activeFundId === "watchStocks") redrawWatchSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);

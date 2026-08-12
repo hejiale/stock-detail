@@ -1,5 +1,5 @@
 /**
- * 基金持仓 / A股·美股·港股·韩股涨跌榜观察数据
+ * 自选基金持仓数据
  * 可直接被页面或其他脚本引用：<script src="data.js"></script>
  *
  * market（东方财富 secid 前缀）:
@@ -9,7 +9,7 @@
  *   日股: 176
  *   韩股: 177
  *
- * cnSemi / usSemi 的 holdings 由实时涨跌幅榜动态填充，本地仅保留自选。
+ * A股/美股/港股/韩股涨跌榜由各自 Tab 独立维护，不在此登记。
  */
 window.FUND_HOLDINGS = {
   dongfang: {
@@ -151,25 +151,5 @@ window.FUND_HOLDINGS = {
       { name: "希捷科技", code: "STX", market: 105, ratio: 4.28 },
       { name: "西部数据", code: "WDC", market: 105, ratio: 4.22 }
     ]
-  },
-  cnSemi: {
-    id: "cnSemi",
-    name: "A股",
-    fundName: "A股涨跌榜",
-    fundCode: "CN-RANK",
-    market: "CN",
-    viewOnly: true,
-    top10Total: 100,
-    holdings: []
-  },
-  usSemi: {
-    id: "usSemi",
-    name: "美股",
-    fundName: "美股涨跌榜",
-    fundCode: "US-RANK",
-    market: "US",
-    viewOnly: true,
-    top10Total: 100,
-    holdings: []
   }
 };

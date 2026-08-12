@@ -317,3 +317,344 @@
       renderMarketBreadth("cnMarketBreadth", null);
     }
 
+    const cnRankState = {
+      kind: "gainers",
+      list: [],
+      page: 0,
+      total: 0,
+      hasMore: true,
+      loadingMore: false,
+      trends: null
+    };
+
+    function buildCnPanelElement(isActive) {
+      const panel = document.createElement("section");
+      panel.className = "panel" + (isActive ? " active" : "");
+      panel.dataset.panel = "cnSemi";
+      const kind = cnRankState.kind || "gainers";
+      const loaded = cnRankState.list?.length || 0;
+      panel.innerHTML = `
+          <div class="fund-card kr-rank-card cn-rank-card">
+            <div class="fund-meta">
+              <div class="fund-meta-text">
+                <div class="name">A股涨跌榜</div>
+                <div class="sub" id="cnRankSub">${cnRankSubText(kind, loaded)}</div>
+              </div>
+              <div class="fund-meta-actions">
+                <button class="btn-board" type="button" data-open-board="cn" title="查看A股板块涨幅" aria-label="板块">
+                  <img src="assets/bankuai.png" alt="板块" />
+                </button>
+                <button class="btn-sync" type="button" data-cn-refresh title="刷新涨跌榜" aria-label="刷新涨跌榜">
+                  <img src="assets/pull.png" alt="刷新" />
+                </button>
+              </div>
+            </div>
+            <div class="add-stock">
+              <div class="add-stock-field">
+                <input
+                  type="text"
+                  class="add-stock-input"
+                  data-add-code="cnSemi"
+                  placeholder="沪/深/北交所代码，如 600519、000001、920001"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="btn btn-add" type="button" data-add-stock="cnSemi" aria-label="添加股票" title="添加">
+                  <img src="assets/add_zixuan.png" alt="添加" />
+                </button>
+              </div>
+            </div>
+            <div class="board-tabs kr-rank-tabs">
+              <button class="board-tab${kind === "gainers" ? " active" : ""}" type="button" data-cn-rank="gainers">涨幅前100</button>
+              <button class="board-tab${kind === "losers" ? " active" : ""}" type="button" data-cn-rank="losers">跌幅前100</button>
+            </div>
+            <div class="board-list-head us-stock-head kr-stock-head">
+              <div>股票</div>
+              <div style="text-align:center">走势</div>
+              <div style="text-align:right">涨跌幅%</div>
+            </div>
+            <div class="kr-rank-body">
+              <div class="us-stock-list kr-stock-list" id="cnStockList"></div>
+              <div class="rank-load-more" data-rank-more="cnSemi" hidden></div>
+              <div class="board-status show" id="cnRankStatus">加载中…</div>
+            </div>
+          </div>`;
+      return panel;
+    }
+
+    function cnRankSubText(kind, loaded) {
+      const tip = kind === "losers" ? "跌幅" : "涨幅";
+      return loaded
+        ? `沪深京 A 股 · ${tip}榜已加载 ${loaded} 只`
+        : "沪深京 A 股 · 加载中…";
+    }
+
+    function updateCnRankSub() {
+      const subEl = document.getElementById("cnRankSub");
+      if (!subEl) return;
+      subEl.textContent = cnRankSubText(
+        cnRankState.kind || "gainers",
+        cnRankState.list?.length || 0
+      );
+    }
+
+    function updateCnRankLoadMoreUI() {
+      const host = document.querySelector(`[data-rank-more="cnSemi"]`);
+      const html = buildRankLoadMoreHtml("cnSemi", {
+        hasMore: cnRankState.hasMore !== false,
+        loading: !!cnRankState.loadingMore,
+        loaded: cnRankState.list?.length || 0
+      });
+      if (!host) return;
+      if (!html) {
+        host.hidden = true;
+        host.innerHTML = "";
+        host.removeAttribute("data-rank-sentinel");
+        return;
+      }
+      host.outerHTML = html;
+    }
+
+    function renderCnStockRankRows(list, start = 0) {
+      return list
+        .map((item, offset) => {
+          const i = start + offset;
+          const tone = toneClass(item.change);
+          const priceTip =
+            item.price == null ? "" : " · " + formatPrice(item.price);
+          const safeName = String(item.name || "").replace(/"/g, "&quot;");
+          return `
+            <div class="board-row kr-stock-row">
+              <div class="board-info rank-board-info">
+                <div class="rank-board-text">
+                  <div class="board-name-row">
+                    <div
+                      class="board-name"
+                      role="button"
+                      tabindex="0"
+                      data-chart-fund="cnSemi"
+                      data-chart-index="${i}"
+                      title="查看 ${safeName} 行情与个股资料"
+                    >${item.name}</div>
+                    <button
+                      class="btn-add-watch"
+                      type="button"
+                      data-add-watch="cnSemi"
+                      data-watch-code="${item.code}"
+                      data-watch-name="${safeName}"
+                      data-watch-type="1"
+                      title="加入自选"
+                      aria-label="加入自选 ${safeName}"
+                    ><img src="assets/add_zixuan.png" alt="自选" /></button>
+                  </div>
+                  <div class="board-meta">${item.code}${priceTip}</div>
+                </div>
+              </div>
+              <div
+                class="kr-spark-wrap"
+                role="button"
+                tabindex="0"
+                data-chart-fund="cnSemi"
+                data-chart-index="${i}"
+                title="查看 ${safeName} 行情与个股资料"
+              >
+                <canvas class="kr-spark" data-cn-rank-spark="${i}" aria-hidden="true"></canvas>
+              </div>
+              <div class="board-chg ${tone}">${formatPct(item.change)}${chgArrowHtml(item.change)}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    function renderCnStockRank(list, { append = false, start = 0 } = {}) {
+      const wrap = document.getElementById("cnStockList");
+      if (!wrap) return;
+      if (!append) {
+        wrap.innerHTML = list.length ? renderCnStockRankRows(list, 0) : "";
+        return;
+      }
+      if (!list.length) return;
+      wrap.insertAdjacentHTML("beforeend", renderCnStockRankRows(list, start));
+    }
+
+    function getCnRankHolding(index) {
+      const item = cnRankState.list?.[index];
+      if (!item) return null;
+      return {
+        name: item.name,
+        code: item.code,
+        market: item.market != null ? item.market : 1
+      };
+    }
+
+    async function paintCnSparklines(list, requestId, { start = 0 } = {}) {
+      const results = await Promise.allSettled(
+        list.map((item) =>
+          loadIntradayTrends({
+            code: item.code,
+            market: item.market != null ? item.market : 1,
+            name: item.name
+          })
+        )
+      );
+      if (requestId != null && requestId !== loadCnRankKind._req) return;
+
+      const trends = results.map((result) =>
+        result.status === "fulfilled" ? result.value : null
+      );
+      if (!Array.isArray(cnRankState.trends) || start === 0) {
+        cnRankState.trends = [];
+      }
+      while (cnRankState.trends.length < start) cnRankState.trends.push(null);
+      trends.forEach((trend, i) => {
+        cnRankState.trends[start + i] = trend;
+      });
+      redrawCnSparklines();
+    }
+
+    function redrawCnSparklines() {
+      const trends = cnRankState.trends;
+      if (!trends?.length) return;
+      trends.forEach((trend, i) => {
+        const canvas = document.querySelector(`[data-cn-rank-spark="${i}"]`);
+        if (!canvas) return;
+        if (!trend?.points?.length) {
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const dpr = window.devicePixelRatio || 1;
+          const cssW = canvas.clientWidth || 72;
+          const cssH = canvas.clientHeight || 28;
+          canvas.width = Math.round(cssW * dpr);
+          canvas.height = Math.round(cssH * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, cssW, cssH);
+          return;
+        }
+        drawSparkline(canvas, trend.points, trend.preClose);
+      });
+    }
+
+    function bindCnRankLoadMore() {
+      bindRankLoadMore("cnSemi", () => {
+        loadCnRankKind(cnRankState.kind || "gainers", { append: true }).catch(
+          () => {}
+        );
+      });
+    }
+
+    async function loadCnRankKind(kind, { force = false, append = false } = {}) {
+      const next = kind === "losers" ? "losers" : "gainers";
+      if (!force && !append && cnRankState.kind === next && cnRankState.list?.length) {
+        document.querySelectorAll("[data-cn-rank]").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.cnRank === next);
+        });
+        renderCnStockRank(cnRankState.list);
+        updateCnRankSub();
+        updateCnRankLoadMoreUI();
+        setStatus("cnRankStatus", "");
+        requestAnimationFrame(() => {
+          redrawCnSparklines();
+          bindCnRankLoadMore();
+        });
+        return;
+      }
+
+      if (append) {
+        if (cnRankState.loadingMore || cnRankState.hasMore === false) return;
+        if (cnRankState.kind !== next) return;
+        cnRankState.loadingMore = true;
+        updateCnRankLoadMoreUI();
+        const requestId = loadCnRankKind._req;
+        const nextPage = (cnRankState.page || 1) + 1;
+        try {
+          const result = await loadCnStockRank(next, RANK_PAGE_SIZE, nextPage);
+          if (requestId !== loadCnRankKind._req) return;
+          const list = result.list || [];
+          const start = cnRankState.list?.length || 0;
+          cnRankState.list = mergeRankList(cnRankState.list, list);
+          const added = (cnRankState.list?.length || 0) - start;
+          cnRankState.page = nextPage;
+          cnRankState.total = result.total || cnRankState.total || 0;
+          cnRankState.hasMore =
+            added > 0 &&
+            computeRankHasMore(
+              cnRankState.list.length,
+              list.length,
+              cnRankState.total
+            );
+          renderCnStockRank(cnRankState.list.slice(start), { append: true, start });
+          updateCnRankSub();
+          setStatus("cnRankStatus", "");
+          if (list.length) {
+            await paintCnSparklines(cnRankState.list.slice(start), requestId, {
+              start
+            });
+          }
+        } catch (err) {
+          if (requestId === loadCnRankKind._req) {
+            showToast(err?.message || "加载更多失败");
+          }
+        } finally {
+          if (requestId === loadCnRankKind._req) {
+            cnRankState.loadingMore = false;
+            updateCnRankLoadMoreUI();
+            bindCnRankLoadMore();
+          }
+        }
+        return;
+      }
+
+      cnRankState.kind = next;
+      cnRankState.list = [];
+      cnRankState.trends = null;
+      cnRankState.page = 0;
+      cnRankState.hasMore = true;
+      cnRankState.loadingMore = false;
+      document.querySelectorAll("[data-cn-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.cnRank === next);
+      });
+
+      const requestId = (loadCnRankKind._req = (loadCnRankKind._req || 0) + 1);
+      const listEl = document.getElementById("cnStockList");
+      if (listEl) listEl.innerHTML = "";
+      setStatus(
+        "cnRankStatus",
+        next === "losers" ? "加载跌幅榜…" : "加载涨幅榜…"
+      );
+      updateCnRankSub();
+      updateCnRankLoadMoreUI();
+
+      try {
+        const result = await loadCnStockRank(next, RANK_PAGE_SIZE, 1);
+        if (requestId !== loadCnRankKind._req) return;
+        const list = result.list || [];
+        cnRankState.list = list;
+        cnRankState.page = 1;
+        cnRankState.total = result.total || 0;
+        cnRankState.hasMore = computeRankHasMore(
+          list.length,
+          list.length,
+          cnRankState.total
+        );
+        renderCnStockRank(list);
+        updateCnRankSub();
+        updateCnRankLoadMoreUI();
+        setStatus("cnRankStatus", list.length ? "" : "暂无A股数据");
+        if (list.length) {
+          requestAnimationFrame(() => {
+            if (requestId !== loadCnRankKind._req) return;
+            paintCnSparklines(list, requestId, { start: 0 }).catch(() => {});
+            bindCnRankLoadMore();
+          });
+        }
+      } catch (err) {
+        if (requestId !== loadCnRankKind._req) return;
+        cnRankState.list = [];
+        cnRankState.trends = null;
+        cnRankState.hasMore = false;
+        if (listEl) listEl.innerHTML = "";
+        updateCnRankLoadMoreUI();
+        setStatus("cnRankStatus", err?.message || "A股涨跌榜加载失败，请稍后重试");
+      }
+    }
+

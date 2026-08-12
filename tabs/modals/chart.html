@@ -10,9 +10,14 @@
             </svg>
           </button>
           <div class="sub" id="chartModalSub">当日分时走势</div>
-          <div class="chart-modal-meta">
-            <span class="price flat" id="chartModalPrice">--</span>
-            <span class="chg flat" id="chartModalChg">--</span>
+          <div class="chart-quote">
+            <div class="chart-quote-summary">
+              <span class="price flat" id="chartModalPrice">--</span>
+              <span class="chg-amt flat" id="chartModalChgAmt">--</span>
+              <span class="chg flat" id="chartModalChg">--</span>
+              <span class="chg-arrow-host" id="chartModalChgArrow" aria-hidden="true"></span>
+            </div>
+            <div class="chart-quote-grid" id="chartQuoteGrid" hidden></div>
           </div>
         </div>
         <div class="chart-modal-actions">

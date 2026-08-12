@@ -8,6 +8,188 @@
       });
     }
 
+    function resetChartQuoteUi() {
+      const priceEl = document.getElementById("chartModalPrice");
+      const chgAmtEl = document.getElementById("chartModalChgAmt");
+      const chgEl = document.getElementById("chartModalChg");
+      const arrowEl = document.getElementById("chartModalChgArrow");
+      const gridEl = document.getElementById("chartQuoteGrid");
+      if (priceEl) {
+        priceEl.textContent = "--";
+        priceEl.className = "price flat";
+      }
+      if (chgAmtEl) {
+        chgAmtEl.textContent = "--";
+        chgAmtEl.className = "chg-amt flat";
+      }
+      if (chgEl) {
+        chgEl.textContent = "--";
+        chgEl.className = "chg flat";
+      }
+      if (arrowEl) arrowEl.innerHTML = "";
+      if (gridEl) {
+        gridEl.innerHTML = "";
+        gridEl.hidden = true;
+      }
+    }
+
+    function quoteToneVsBase(value, base) {
+      if (value == null || base == null || Number.isNaN(value) || Number.isNaN(base)) {
+        return "flat";
+      }
+      if (value > base) return "up";
+      if (value < base) return "down";
+      return "flat";
+    }
+
+    function formatQuoteRatio(n, digits = 2) {
+      if (n == null || Number.isNaN(n)) return "--";
+      return n.toFixed(digits);
+    }
+
+    function formatQuotePctValue(n) {
+      if (n == null || Number.isNaN(n)) return "--";
+      return n.toFixed(2) + "%";
+    }
+
+    function renderQuoteGrid(quote) {
+      const gridEl = document.getElementById("chartQuoteGrid");
+      if (!gridEl) return;
+      if (!quote) {
+        gridEl.innerHTML = "";
+        gridEl.hidden = true;
+        return;
+      }
+
+      const base = quote.preClose;
+      const kind =
+        typeof getMarketKind === "function"
+          ? getMarketKind({ code: quote.code, market: openChartModal._state?.holding?.market })
+          : "CN";
+      const showLimit = kind === "CN";
+
+      const cells = [
+        {
+          label: "今开",
+          text: formatPrice(quote.open),
+          tone: quoteToneVsBase(quote.open, base)
+        },
+        {
+          label: "最高",
+          text: formatPrice(quote.high),
+          tone: quoteToneVsBase(quote.high, base)
+        },
+        {
+          label: "涨停",
+          text: showLimit ? formatPrice(quote.limitUp) : "--",
+          tone: showLimit ? "up" : "flat"
+        },
+        {
+          label: "换手",
+          text: formatQuotePctValue(quote.turnoverRate),
+          tone: "flat"
+        },
+        {
+          label: "成交量",
+          text: formatVolume(quote.volume),
+          tone: "flat"
+        },
+        {
+          label: "市盈(动)",
+          text: formatQuoteRatio(quote.pe),
+          tone: "flat"
+        },
+        {
+          label: "总市值",
+          text: formatMarketCap(quote.marketCap),
+          tone: "flat"
+        },
+        {
+          label: "昨收",
+          text: formatPrice(quote.preClose),
+          tone: "flat"
+        },
+        {
+          label: "最低",
+          text: formatPrice(quote.low),
+          tone: quoteToneVsBase(quote.low, base)
+        },
+        {
+          label: "跌停",
+          text: showLimit ? formatPrice(quote.limitDown) : "--",
+          tone: showLimit ? "down" : "flat"
+        },
+        {
+          label: "量比",
+          text: formatQuoteRatio(quote.volumeRatio),
+          tone: "flat"
+        },
+        {
+          label: "成交额",
+          text: formatMarketCap(quote.amount),
+          tone: "flat"
+        },
+        {
+          label: "市净",
+          text: formatQuoteRatio(quote.pb),
+          tone: "flat"
+        },
+        {
+          label: "流通市值",
+          text: formatMarketCap(quote.floatCap),
+          tone: "flat"
+        }
+      ];
+
+      gridEl.innerHTML = cells
+        .map(
+          (c) => `
+            <div class="chart-quote-item">
+              <span class="q-label">${c.label}</span>
+              <span class="q-val ${c.tone}">${c.text}</span>
+            </div>`
+        )
+        .join("");
+      gridEl.hidden = false;
+    }
+
+    function updateQuoteSummary(quote) {
+      if (!quote) return;
+      const tone =
+        quote.change == null ? "flat" : toneClass(quote.change);
+      const priceEl = document.getElementById("chartModalPrice");
+      const chgAmtEl = document.getElementById("chartModalChgAmt");
+      const chgEl = document.getElementById("chartModalChg");
+      const arrowEl = document.getElementById("chartModalChgArrow");
+
+      if (priceEl) {
+        priceEl.textContent = formatPrice(quote.price);
+        priceEl.className = "price " + tone;
+      }
+      if (chgAmtEl) {
+        if (quote.changeAmt == null || Number.isNaN(quote.changeAmt)) {
+          chgAmtEl.textContent = "--";
+          chgAmtEl.className = "chg-amt flat";
+        } else {
+          chgAmtEl.textContent = formatPrice(quote.changeAmt);
+          chgAmtEl.className = "chg-amt " + tone;
+        }
+      }
+      if (chgEl) {
+        if (quote.change == null || Number.isNaN(quote.change)) {
+          chgEl.textContent = "--";
+          chgEl.className = "chg flat";
+        } else {
+          chgEl.textContent = formatPct(quote.change);
+          chgEl.className = "chg " + tone;
+        }
+      }
+      if (arrowEl) {
+        arrowEl.innerHTML =
+          typeof chgArrowHtml === "function" ? chgArrowHtml(quote.change) : "";
+      }
+    }
+
     function renderPeriodReturns(returns) {
       Object.entries(returns || {}).forEach(([key, value]) => {
         const el = document.querySelector(`[data-period-value="${key}"]`);
@@ -238,21 +420,43 @@
       const base = series.baseline;
       const chg = base ? ((last.price - base) / base) * 100 : null;
       const tone = chg == null ? "flat" : toneClass(chg);
+      const isDay = state.range === "day";
+      const quote = state.quote;
 
-      const priceEl = document.getElementById("chartModalPrice");
-      const chgEl = document.getElementById("chartModalChg");
-      priceEl.textContent = formatPrice(last.price);
-      priceEl.className = "price " + tone;
-
-      if (chg == null) {
-        chgEl.textContent = "--";
-        chgEl.className = "chg flat";
+      // 当日优先用盘口行情（含涨跌额）；其它区间用走势相对涨跌
+      if (isDay && quote) {
+        updateQuoteSummary(quote);
       } else {
-        chgEl.textContent = formatPct(chg);
-        chgEl.className = "chg " + tone;
+        const priceEl = document.getElementById("chartModalPrice");
+        const chgAmtEl = document.getElementById("chartModalChgAmt");
+        const chgEl = document.getElementById("chartModalChg");
+        const arrowEl = document.getElementById("chartModalChgArrow");
+        priceEl.textContent = formatPrice(last.price);
+        priceEl.className = "price " + tone;
+        if (chgAmtEl) {
+          if (chg == null || base == null) {
+            chgAmtEl.textContent = "--";
+            chgAmtEl.className = "chg-amt flat";
+          } else {
+            chgAmtEl.textContent = formatPrice(last.price - base);
+            chgAmtEl.className = "chg-amt " + tone;
+          }
+        }
+        if (chg == null) {
+          chgEl.textContent = "--";
+          chgEl.className = "chg flat";
+        } else {
+          chgEl.textContent = formatPct(chg);
+          chgEl.className = "chg " + tone;
+        }
+        if (arrowEl) {
+          arrowEl.innerHTML =
+            typeof chgArrowHtml === "function" ? chgArrowHtml(chg) : "";
+        }
       }
 
-      const name = state.trend?.name || state.history?.name || "";
+      const name =
+        quote?.name || state.trend?.name || state.history?.name || "";
       document.getElementById("chartModalName").textContent = name || "--";
       document.getElementById("chartModalSub").textContent =
         `${series.title} · ${series.baselineLabel || "基准"} ${formatPrice(base)}`;
@@ -314,10 +518,7 @@
       document.getElementById("chartModalName").textContent =
         holding.name;
       document.getElementById("chartModalSub").textContent = "加载行情中…";
-      document.getElementById("chartModalPrice").textContent = "--";
-      document.getElementById("chartModalPrice").className = "price flat";
-      document.getElementById("chartModalChg").textContent = "--";
-      document.getElementById("chartModalChg").className = "chg flat";
+      resetChartQuoteUi();
       resetPeriodValues();
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
 
@@ -325,6 +526,7 @@
         range: "day",
         trend: null,
         history: null,
+        quote: null,
         returns: null,
         holding,
         fundId
@@ -334,17 +536,22 @@
       showModal("chartModal");
       setStatus("chartStatus", "加载分时与区间涨跌幅…");
 
-      const [trendResult, historyResult] = await Promise.allSettled([
+      const [trendResult, historyResult, quoteResult] = await Promise.allSettled([
         loadIntradayTrends(holding),
-        loadDailyKlines(holding)
+        loadDailyKlines(holding),
+        loadStockQuoteDetail(holding)
       ]);
 
       if (reqId !== chartRequestId) return;
+
+      const quote =
+        quoteResult.status === "fulfilled" ? quoteResult.value : null;
 
       const state = {
         range: "day",
         trend: trendResult.status === "fulfilled" ? trendResult.value : null,
         history: historyResult.status === "fulfilled" ? historyResult.value : null,
+        quote,
         returns: null,
         holding,
         fundId
@@ -356,17 +563,29 @@
         state.returns = { day: null, "1m": null, "3m": null, "6m": null, ytd: null, "1y": null };
       }
 
-      if (state.trend?.preClose != null && state.trend.points?.length) {
+      if (quote?.change != null) {
+        state.returns.day = quote.change;
+      } else if (state.trend?.preClose != null && state.trend.points?.length) {
         const last = state.trend.points[state.trend.points.length - 1];
         state.returns.day =
           Math.round(((last.price - state.trend.preClose) / state.trend.preClose) * 10000) / 100;
       }
       renderPeriodReturns(state.returns);
+      renderQuoteGrid(quote);
 
       openChartModal._state = state;
 
       if (!state.trend && !state.history) {
         openChartModal._lastSeries = null;
+        if (quote) {
+          updateQuoteSummary(quote);
+          document.getElementById("chartModalName").textContent =
+            quote.name || holding.name || "--";
+          document.getElementById("chartModalSub").textContent =
+            quote.preClose != null
+              ? `昨收 ${formatPrice(quote.preClose)}`
+              : "行情概览";
+        }
         setStatus("chartStatus", "行情加载失败，请稍后重试");
         return;
       }
@@ -391,5 +610,5 @@
       hideModal("chartModal");
       setStatus("chartStatus", "");
       resetPeriodValues();
+      resetChartQuoteUi();
     }
-

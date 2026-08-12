@@ -429,6 +429,80 @@
     };
   }
 
+  /** 东财数值字段：有效数字则返回，否则 null */
+  function eastNum(v) {
+    if (v == null || v === "-" || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /**
+   * 个股盘口行情（今开/高低/涨跌停/换手/量比/市盈市净/市值等）
+   * ulist：f2最新 f3涨跌幅 f4涨跌额 f5成交量(手) f6成交额 f8换手 f9市盈动
+   *        f10量比 f15最高 f16最低 f17今开 f18昨收 f20总市值 f21流通市值 f23市净
+   * stock/get：f57涨停 f58跌停
+   *
+   * @returns {Promise<Object>}
+   */
+  async function loadStockQuoteDetail(holding) {
+    const secid = toEastSecId(holding);
+    const fields =
+      "f2,f3,f4,f5,f6,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23";
+
+    const [ulistResult, limitResult] = await Promise.allSettled([
+      fetchEastUlist(secid, fields),
+      fetchEastMoneyJson(
+        EAST_PUSH_HOSTS,
+        buildEastPath("/api/qt/stock/get", {
+          fltt: 2,
+          invt: 2,
+          secid,
+          fields: "f57,f58"
+        })
+      )
+    ]);
+
+    if (ulistResult.status !== "fulfilled") {
+      throw ulistResult.reason || new Error("暂无行情数据");
+    }
+    const item = normalizeEastDiff(ulistResult.value)[0];
+    if (!item) throw new Error("暂无行情数据");
+
+    const limitData =
+      limitResult.status === "fulfilled" ? limitResult.value?.data : null;
+
+    const price = eastNum(item.f2);
+    const prev = eastNum(item.f18);
+    const live =
+      price != null && price !== 0
+        ? price
+        : prev != null && prev !== 0
+          ? prev
+          : null;
+
+    return {
+      name: item.f14 ? String(item.f14) : holding.name || null,
+      code: item.f12 != null ? String(item.f12) : holding.code,
+      price: live,
+      change: eastNum(item.f3),
+      changeAmt: eastNum(item.f4),
+      open: eastNum(item.f17),
+      high: eastNum(item.f15),
+      low: eastNum(item.f16),
+      preClose: prev,
+      limitUp: eastNum(limitData?.f57),
+      limitDown: eastNum(limitData?.f58),
+      turnoverRate: eastNum(item.f8),
+      volumeRatio: eastNum(item.f10),
+      volume: eastNum(item.f5),
+      amount: eastNum(item.f6),
+      pe: eastNum(item.f9),
+      pb: eastNum(item.f23),
+      marketCap: eastNum(item.f20),
+      floatCap: eastNum(item.f21)
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // 个股资料（市值 + 财报）
   // ---------------------------------------------------------------------------
@@ -1762,6 +1836,7 @@
     loadIntradayTrends,
     loadDailyKlines,
     loadStockMarketCap,
+    loadStockQuoteDetail,
     loadStockProfile,
     getMarketKind,
     loadCnSectorBoards,

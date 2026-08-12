@@ -3,7 +3,9 @@
       loadQuotes,
       loadIntradayTrends,
       loadDailyKlines,
+      loadStockQuoteDetail,
       loadStockProfile,
+      getMarketKind,
       loadCnSectorBoards,
       loadCnSectorStocks,
       loadCnStockRank,
@@ -371,7 +373,16 @@
       return n.toFixed(2);
     }
 
-    /** 金额/市值（元）格式化为 万 / 亿 / 万亿 */
+    /** 成交量（手）格式化为 万 / 亿 */
+    function formatVolume(n) {
+      if (n == null || Number.isNaN(n)) return "--";
+      const abs = Math.abs(n);
+      const sign = n < 0 ? "-" : "";
+      if (abs >= 1e8) return sign + (abs / 1e8).toFixed(2) + "亿";
+      if (abs >= 1e4) return sign + (abs / 1e4).toFixed(1) + "万";
+      return sign + String(Math.round(abs));
+    }
+
     function formatMarketCap(n) {
       if (n == null || Number.isNaN(n)) return "--";
       const abs = Math.abs(n);

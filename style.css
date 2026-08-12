@@ -885,8 +885,8 @@ header p {
 
 .chart-modal-panel {
   position: relative;
-  width: min(560px, 100%);
-  max-height: min(92vh, 720px);
+  width: min(640px, 100%);
+  max-height: min(92vh, 780px);
   background: var(--card);
   border-radius: 18px;
   box-shadow: 0 20px 48px rgba(15, 23, 42, 0.22);
@@ -963,27 +963,107 @@ header p {
   color: var(--muted);
 }
 
-.chart-modal-meta {
+.chart-quote {
   margin-top: 8px;
+  min-width: 0;
+}
+
+.chart-quote-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  align-items: baseline;
+  gap: 6px 12px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
-.chart-modal-meta .price {
-  font-size: 22px;
+.chart-quote-summary .price {
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
-.chart-modal-meta .price.up,
-.chart-modal-meta .chg.up { color: var(--up); }
-.chart-modal-meta .price.down,
-.chart-modal-meta .chg.down { color: var(--down); }
-.chart-modal-meta .price.flat,
-.chart-modal-meta .chg.flat { color: #64748b; }
+.chart-quote-summary .chg-amt,
+.chart-quote-summary .chg {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chart-quote-summary .price.up,
+.chart-quote-summary .chg-amt.up,
+.chart-quote-summary .chg.up { color: var(--up); }
+.chart-quote-summary .price.down,
+.chart-quote-summary .chg-amt.down,
+.chart-quote-summary .chg.down { color: var(--down); }
+.chart-quote-summary .price.flat,
+.chart-quote-summary .chg-amt.flat,
+.chart-quote-summary .chg.flat { color: #64748b; }
+
+.chart-quote-summary .chg-arrow-host {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+}
+
+.chart-quote-summary .chg-arrow-host .chg-arrow {
+  width: 14px;
+  height: 14px;
+}
+
+.chart-quote-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eef1f6;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 420px) {
+  .chart-quote-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 560px) {
+  .chart-quote-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px 6px;
+  }
+}
+
+.chart-quote-item {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.chart-quote-item .q-label {
+  color: #8a8f98;
+  flex-shrink: 0;
+}
+
+.chart-quote-item .q-label::after {
+  content: ":";
+}
+
+.chart-quote-item .q-val {
+  color: #1f2937;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-quote-item .q-val.up { color: var(--up); }
+.chart-quote-item .q-val.down { color: var(--down); }
+.chart-quote-item .q-val.flat { color: #1f2937; }
 
 .chart-modal-actions {
   flex-shrink: 0;

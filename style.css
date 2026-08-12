@@ -606,7 +606,12 @@ header p {
   text-align: center;
 }
 
-.list-head > :last-child,
+.list-head > :last-child {
+  justify-self: stretch;
+  text-align: right;
+  padding-right: 28px;
+}
+
 .row > .change-field {
   justify-self: stretch;
 }

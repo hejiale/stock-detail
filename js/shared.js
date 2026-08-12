@@ -7,6 +7,7 @@
       loadStockProfile,
       getMarketKind,
       loadCnSectorBoards,
+      loadCnRegionBoards,
       loadCnSectorStocks,
       loadCnStockRank,
       loadCnIndices,

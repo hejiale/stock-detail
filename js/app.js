@@ -403,6 +403,12 @@
         return;
       }
 
+      const sectionToggle = e.target.closest("[data-cn-section-toggle]");
+      if (sectionToggle) {
+        toggleCnSection(sectionToggle.dataset.cnSectionToggle);
+        return;
+      }
+
       const boardRowBtn = e.target.closest("[data-board-code]");
       if (boardRowBtn) {
         openBoardStocksModal(

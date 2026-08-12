@@ -1394,10 +1394,53 @@ header p {
 }
 
 .cn-section-title {
-  padding: 0 4px 8px;
+  padding: 0;
   font-size: 13px;
   font-weight: 700;
   color: #334155;
+}
+
+.cn-section > .cn-section-title {
+  padding: 0 4px 8px;
+}
+
+.cn-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.cn-section-toggle:hover .cn-section-title {
+  color: #1677ff;
+}
+
+.cn-section-chevron {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.cn-section.is-collapsed .cn-section-chevron {
+  transform: rotate(-90deg);
+}
+
+.cn-section.is-collapsed .cn-section-body {
+  display: none;
+}
+
+.cn-section-body {
+  min-width: 0;
 }
 
 .cn-index-grid {
@@ -1491,6 +1534,45 @@ header p {
 .cn-section .board-list-head {
   padding-left: 8px;
   padding-right: 8px;
+}
+
+.region-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) 0.75fr 0.75fr 1fr;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.region-row {
+  grid-template-columns: minmax(0, 1.35fr) 0.75fr 0.75fr 1fr;
+  gap: 6px;
+}
+
+.region-row .region-up,
+.region-row .region-down,
+.region-row .region-mcap {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.region-row .region-up {
+  text-align: center;
+  color: var(--up);
+}
+
+.region-row .region-down {
+  text-align: center;
+  color: var(--down);
+}
+
+.region-row .region-mcap {
+  text-align: right;
+  color: #475569;
+  font-weight: 500;
 }
 
 .board-row {

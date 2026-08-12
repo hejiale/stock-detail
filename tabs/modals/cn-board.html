@@ -18,14 +18,50 @@
           <div class="cn-section-title">市场指数</div>
           <div class="cn-index-grid" id="cnIndexGrid"></div>
         </div>
-        <div class="cn-section">
-          <div class="cn-section-title">行业板块</div>
-          <div class="board-list-head">
-            <div>#</div>
-            <div>板块名称</div>
-            <div style="text-align:right">涨跌幅%</div>
+        <div class="cn-section" data-cn-collapsible="industry">
+          <button
+            class="cn-section-toggle"
+            type="button"
+            data-cn-section-toggle="industry"
+            aria-expanded="true"
+            aria-controls="cnIndustryBody"
+          >
+            <span class="cn-section-title">行业板块</span>
+            <svg class="cn-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="cn-section-body" id="cnIndustryBody">
+            <div class="board-list-head">
+              <div>#</div>
+              <div>板块名称</div>
+              <div style="text-align:right">涨跌幅%</div>
+            </div>
+            <div id="boardList"></div>
           </div>
-          <div id="boardList"></div>
+        </div>
+        <div class="cn-section" data-cn-collapsible="region">
+          <button
+            class="cn-section-toggle"
+            type="button"
+            data-cn-section-toggle="region"
+            aria-expanded="true"
+            aria-controls="cnRegionBody"
+          >
+            <span class="cn-section-title">地域板块</span>
+            <svg class="cn-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="cn-section-body" id="cnRegionBody">
+            <div class="board-list-head region-list-head">
+              <div>省板块</div>
+              <div style="text-align:center">上涨家数</div>
+              <div style="text-align:center">下跌家数</div>
+              <div style="text-align:right">总市值</div>
+            </div>
+            <div id="regionBoardList"></div>
+          </div>
         </div>
         <div class="board-status show" id="boardStatus">加载中…</div>
       </div>

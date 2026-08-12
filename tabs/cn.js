@@ -108,6 +108,62 @@
         .join("");
     }
 
+    function renderRegionBoardList(list) {
+      const wrap = document.getElementById("regionBoardList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      wrap.innerHTML = list
+        .map((item) => {
+          const safeName = String(item.name || item.code || "").replace(
+            /"/g,
+            "&quot;"
+          );
+          const up = item.upCount || 0;
+          const down = item.downCount || 0;
+          return `
+            <button
+              class="board-row board-row-btn region-row"
+              type="button"
+              data-board-code="${item.code}"
+              data-board-codes="${item.code}"
+              data-board-name="${safeName}"
+              title="查看 ${safeName} 成分股涨跌榜"
+            >
+              <div class="board-info">
+                <div class="board-name-row">
+                  <span class="board-name">${item.name}</span>
+                  <svg class="board-name-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="region-up">${up}</div>
+              <div class="region-down">${down}</div>
+              <div class="region-mcap">${formatMarketCap(item.mcap)}</div>
+            </button>`;
+        })
+        .join("");
+    }
+
+    function setCnSectionExpanded(key, expanded) {
+      const section = document.querySelector(`[data-cn-collapsible="${key}"]`);
+      const btn = document.querySelector(`[data-cn-section-toggle="${key}"]`);
+      if (!section || !btn) return;
+      section.classList.toggle("is-collapsed", !expanded);
+      btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+
+    function toggleCnSection(key) {
+      const btn = document.querySelector(`[data-cn-section-toggle="${key}"]`);
+      if (!btn) return;
+      const expanded = btn.getAttribute("aria-expanded") !== "false";
+      setCnSectionExpanded(key, !expanded);
+    }
+
     function renderBoardStocksList(list) {
       const wrap = document.getElementById("boardStocksList");
       if (!wrap) return;
@@ -357,16 +413,22 @@
 
     async function loadBoardList() {
       const requestId = (loadBoardList._req = (loadBoardList._req || 0) + 1);
-      document.getElementById("boardModalSub").textContent = "加载市场指数与行业板块…";
+      document.getElementById("boardModalSub").textContent =
+        "加载市场指数、行业与地域板块…";
       setStatus("boardStatus", "加载中…");
       document.getElementById("cnIndexGrid").innerHTML = "";
       document.getElementById("boardList").innerHTML = "";
+      const regionWrap = document.getElementById("regionBoardList");
+      if (regionWrap) regionWrap.innerHTML = "";
       renderMarketBreadth("cnMarketBreadth", null);
+      setCnSectionExpanded("industry", true);
+      setCnSectionExpanded("region", true);
 
       try {
-        const [indicesResult, boardsResult] = await Promise.allSettled([
+        const [indicesResult, boardsResult, regionsResult] = await Promise.allSettled([
           loadCnIndices(),
-          loadCnSectorBoards()
+          loadCnSectorBoards(),
+          loadCnRegionBoards()
         ]);
         if (requestId !== loadBoardList._req) return;
 
@@ -374,9 +436,12 @@
           indicesResult.status === "fulfilled" ? indicesResult.value : [];
         const list =
           boardsResult.status === "fulfilled" ? boardsResult.value : [];
+        const regions =
+          regionsResult.status === "fulfilled" ? regionsResult.value : [];
 
         openBoardModal._indices = indices;
         openBoardModal._list = list;
+        openBoardModal._regions = regions;
         renderCnIndices(indices);
 
         const sh = indices.find((x) => x.code === "000001");
@@ -398,20 +463,27 @@
           renderMarketBreadth("cnMarketBreadth", null);
         }
 
-        if (boardsResult.status === "rejected" && !indices.length) {
-          throw boardsResult.reason || new Error("板块数据加载失败");
+        if (
+          boardsResult.status === "rejected" &&
+          regionsResult.status === "rejected" &&
+          !indices.length
+        ) {
+          throw boardsResult.reason || regionsResult.reason || new Error("板块数据加载失败");
         }
 
-        document.getElementById("boardModalSub").textContent =
-          list.length
-            ? `共 ${list.length} 个行业板块（相近已归类）· 按涨跌幅排序`
-            : indices.length
-              ? "行业板块加载失败"
-              : "暂无数据";
+        const parts = [];
+        if (list.length) parts.push(`行业 ${list.length}`);
+        if (regions.length) parts.push(`地域 ${regions.length}`);
+        document.getElementById("boardModalSub").textContent = parts.length
+          ? `共 ${parts.join(" · ")}（行业已归类）· 按涨跌幅排序`
+          : indices.length
+            ? "板块列表加载失败"
+            : "暂无数据";
         renderBoardList(list);
+        renderRegionBoardList(regions);
         setStatus(
           "boardStatus",
-          list.length || indices.length
+          list.length || regions.length || indices.length
             ? ""
             : "暂无板块数据"
         );

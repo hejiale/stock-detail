@@ -1374,6 +1374,46 @@
   }
 
   /**
+   * A 股地域（省）板块列表
+   * GET {push2}/api/qt/clist/get  fs=m:90+t:1+f:!50
+   * f104 上涨家数, f105 下跌家数, f20 总市值
+   *
+   * @returns {Promise<Array<{code,name,change,upCount,downCount,mcap}>>}
+   */
+  async function loadCnRegionBoards() {
+    const { list } = await fetchEastClist({
+      fs: "m:90+t:1+f:!50",
+      fields: "f12,f14,f3,f20,f104,f105",
+      pn: 1,
+      pz: 50,
+      po: 1,
+      fid: "f3"
+    });
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f14 == null) return null;
+        const changeRaw = item.f3;
+        const change =
+          changeRaw == null || changeRaw === "-"
+            ? null
+            : Number(changeRaw);
+        const mcap = Number(item.f20);
+        const name = String(item.f14).replace(/板块$/u, "");
+        return {
+          code: String(item.f12),
+          name,
+          change: change == null || Number.isNaN(change) ? null : round2(change),
+          upCount: Number(item.f104) || 0,
+          downCount: Number(item.f105) || 0,
+          mcap: !Number.isNaN(mcap) && mcap > 0 ? mcap : 0
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.change ?? -Infinity) - (a.change ?? -Infinity));
+  }
+
+  /**
    * A 股板块成分股涨幅 / 跌幅榜
    * GET {push2}/api/qt/clist/get  fs=b:BK1625+f:!50  fid=f3
    *
@@ -2121,6 +2161,7 @@
     loadStockProfile,
     getMarketKind,
     loadCnSectorBoards,
+    loadCnRegionBoards,
     loadCnSectorStocks,
     loadCnStockRank,
     loadCnIndices,

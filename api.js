@@ -1931,6 +1931,73 @@
   }
 
   /**
+   * 东财「知名美股」行业分类（与门户导航一致）
+   * b:MK0215 科技 / MK0217 金融 / MK0218 医药食品 / MK0220 媒体 / MK0219 汽车能源
+   */
+  const US_FAMOUS_SECTORS = [
+    { code: "MK0215", name: "科技类" },
+    { code: "MK0217", name: "金融类" },
+    { code: "MK0218", name: "医药食品类" },
+    { code: "MK0220", name: "媒体类" },
+    { code: "MK0219", name: "汽车能源类" }
+  ];
+
+  function listUsFamousSectors() {
+    return US_FAMOUS_SECTORS.map((s) => ({ ...s }));
+  }
+
+  function resolveUsFamousSector(codeOrName) {
+    const raw = String(codeOrName || "").trim();
+    if (!raw) return null;
+    const upper = raw.toUpperCase();
+    return (
+      US_FAMOUS_SECTORS.find(
+        (s) => s.code === upper || s.name === raw || s.name === upper
+      ) || null
+    );
+  }
+
+  /**
+   * 美股知名行业成分股榜
+   * - hot：按成交额（人气）
+   * - gainers / losers：按涨跌幅
+   *
+   * @param {string} boardCodeOrName MK0215 / 科技类
+   * @param {"hot"|"gainers"|"losers"} [kind=hot]
+   * @param {number} [limit=20]
+   */
+  async function loadUsSectorStocks(
+    boardCodeOrName,
+    kind = "hot",
+    limit = 20
+  ) {
+    const sector = resolveUsFamousSector(boardCodeOrName);
+    if (!sector) throw new Error("未知美股行业板块");
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const rank =
+      kind === "losers" ? "losers" : kind === "gainers" ? "gainers" : "hot";
+    const fid = rank === "hot" ? "f6" : "f3";
+    const po = rank === "losers" ? 0 : 1;
+
+    const { list } = await fetchEastClist({
+      fs: "b:" + sector.code,
+      fields: "f12,f13,f14,f2,f3,f6",
+      pn: 1,
+      pz: take,
+      po,
+      fid
+    });
+
+    return mapEastRankItems(list, take, {
+      upperCode: true,
+      zeroPriceNull: false,
+      defaultMarket: 105
+    }).map((item, i) =>
+      rank === "hot" ? { ...item, hotRank: i + 1 } : item
+    );
+  }
+
+  /**
    * 映射东财涨跌榜行；f3 为 "-" / 无效时丢弃
    * （push2delay 对 A 股常返回 f2/f3="-"，海外市场正常）
    * @param {{ upperCode?: boolean, zeroPriceNull?: boolean, defaultMarket?: number|null }} [opts]
@@ -2170,6 +2237,9 @@
     resolveCnIndexBoard,
     loadUsIndices,
     loadUsSectorBoards,
+    listUsFamousSectors,
+    resolveUsFamousSector,
+    loadUsSectorStocks,
     loadUsStockRank,
     loadUsMarketBreadth,
     loadJpIndices,

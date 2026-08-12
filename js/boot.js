@@ -8,6 +8,7 @@
     "tabs/modals/cn-board-stocks.html",
     "tabs/modals/cn-index-stocks.html",
     "tabs/modals/us-board.html",
+    "tabs/modals/us-board-stocks.html",
     "tabs/modals/hk-board.html",
     "tabs/modals/jp-board.html",
     "tabs/modals/kr-board.html",

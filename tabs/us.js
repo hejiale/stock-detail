@@ -21,6 +21,30 @@
         .join("");
     }
 
+    function renderUsSectorLinks() {
+      const wrap = document.getElementById("usSectorLinks");
+      if (!wrap) return;
+      const sectors =
+        typeof listUsFamousSectors === "function" ? listUsFamousSectors() : [];
+      if (!sectors.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+      wrap.innerHTML = sectors
+        .map((item) => {
+          const safeName = String(item.name || "").replace(/"/g, "&quot;");
+          return `
+            <button
+              class="us-sector-link"
+              type="button"
+              data-us-sector="${item.code}"
+              data-us-sector-name="${safeName}"
+              title="查看 ${safeName} 人气与涨跌榜"
+            >${item.name}</button>`;
+        })
+        .join("");
+    }
+
     async function paintUsIndexSparklines(list) {
       const results = await Promise.allSettled(
         list.map((item) =>
@@ -54,6 +78,7 @@
       showModal("usBoardModal");
       setStatus("usBoardStatus", "加载中…");
       document.getElementById("usIndexGrid").innerHTML = "";
+      renderUsSectorLinks();
       renderMarketBreadth("usMarketBreadth", null);
 
       const requestId = (openUsBoardModal._req = (openUsBoardModal._req || 0) + 1);
@@ -89,9 +114,133 @@
 
     function closeUsBoardModal() {
       openUsBoardModal._req = (openUsBoardModal._req || 0) + 1;
+      if (document.getElementById("usBoardStocksModal")?.classList.contains("show")) {
+        closeUsBoardStocksModal();
+      }
       hideModal("usBoardModal");
       setStatus("usBoardStatus", "");
       renderMarketBreadth("usMarketBreadth", null);
+    }
+
+    let usBoardStocksRequestId = 0;
+    const usBoardStocksState = {
+      code: "",
+      name: "",
+      rank: "hot"
+    };
+
+    function setUsBoardStocksRankTabs(kind) {
+      document.querySelectorAll("[data-us-sector-rank]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.usSectorRank === kind);
+      });
+    }
+
+    function renderUsBoardStocksList(list) {
+      const wrap = document.getElementById("usBoardStocksList");
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+
+      wrap.innerHTML = list
+        .map((item, i) => {
+          const chg = item.change;
+          const tone = chg == null ? "flat" : toneClass(chg);
+          const arrow = chg == null ? "" : chgArrowHtml(chg);
+          const chgText = chg == null ? "--" : formatPct(chg);
+          const safeName = String(item.name || item.code || "").replace(
+            /"/g,
+            "&quot;"
+          );
+          const meta =
+            item.hotRank != null
+              ? `人气第${item.hotRank} · ${item.code}`
+              : `${i + 1} · ${item.code}`;
+          const priceText =
+            item.price == null ? "--" : "$" + formatPrice(item.price);
+          return `
+            <div class="board-row board-stock-row">
+              <div class="board-info">
+                <div class="board-name-row">
+                  <div class="board-name">${item.name}</div>
+                  <button
+                    class="btn-add-watch"
+                    type="button"
+                    data-add-watch="usSemi"
+                    data-watch-code="${item.code}"
+                    data-watch-name="${safeName}"
+                    data-watch-type="2"
+                    title="加入自选"
+                    aria-label="加入自选 ${safeName}"
+                  ><img src="assets/add_zixuan.png" alt="自选" /></button>
+                </div>
+                <div class="board-meta">${meta}</div>
+              </div>
+              <div class="board-price">${priceText}</div>
+              <div class="board-chg ${tone}">${chgText}${arrow}</div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadUsBoardStocksRank(kind) {
+      if (!usBoardStocksState.code) return;
+      const rank =
+        kind === "losers" ? "losers" : kind === "gainers" ? "gainers" : "hot";
+      usBoardStocksState.rank = rank;
+      setUsBoardStocksRankTabs(rank);
+
+      const reqId = ++usBoardStocksRequestId;
+      const rankLabel =
+        rank === "losers" ? "跌幅" : rank === "gainers" ? "涨幅" : "人气";
+      document.getElementById("usBoardStocksModalSub").textContent =
+        `${usBoardStocksState.name} · 加载${rankLabel}榜…`;
+      document.getElementById("usBoardStocksList").innerHTML = "";
+      setStatus(
+        "usBoardStocksStatus",
+        rank === "losers"
+          ? "加载跌幅榜…"
+          : rank === "gainers"
+            ? "加载涨幅榜…"
+            : "加载人气榜…"
+      );
+
+      try {
+        const list = await loadUsSectorStocks(usBoardStocksState.code, rank, 20);
+        if (reqId !== usBoardStocksRequestId) return;
+        document.getElementById("usBoardStocksModalSub").textContent =
+          `${usBoardStocksState.name} · ${rankLabel}前 ${list.length} 只`;
+        renderUsBoardStocksList(list);
+        setStatus(
+          "usBoardStocksStatus",
+          list.length ? "" : `暂无${rankLabel}数据`
+        );
+      } catch (err) {
+        if (reqId !== usBoardStocksRequestId) return;
+        document.getElementById("usBoardStocksModalSub").textContent = "加载失败";
+        setStatus("usBoardStocksStatus", err?.message || "榜单加载失败");
+      }
+    }
+
+    async function openUsBoardStocksModal(sectorCode, sectorName) {
+      const code = String(sectorCode || "").trim();
+      if (!code) return;
+
+      usBoardStocksState.code = code;
+      usBoardStocksState.name = sectorName || code;
+      usBoardStocksState.rank = "hot";
+
+      document.getElementById("usBoardStocksModalName").textContent =
+        usBoardStocksState.name;
+      showModal("usBoardStocksModal");
+      await loadUsBoardStocksRank("hot");
+    }
+
+    function closeUsBoardStocksModal() {
+      usBoardStocksRequestId += 1;
+      hideModal("usBoardStocksModal");
+      setStatus("usBoardStocksStatus", "");
     }
 
     const usRankState = {

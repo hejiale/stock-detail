@@ -1,0 +1,30 @@
+<div class="board-modal board-stocks-modal" id="usBoardStocksModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-us-board-stocks-close></div>
+    <div class="board-modal-panel board-stocks-panel" role="dialog" aria-modal="true" aria-labelledby="usBoardStocksModalName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="usBoardStocksModalName">行业板块</div>
+          <div class="sub" id="usBoardStocksModalSub">人气 / 涨跌幅前 20</div>
+        </div>
+        <button class="board-modal-close" type="button" data-us-board-stocks-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="board-tabs board-stocks-tabs">
+        <button class="board-tab active" type="button" data-us-sector-rank="hot">人气前20</button>
+        <button class="board-tab" type="button" data-us-sector-rank="gainers">涨幅前20</button>
+        <button class="board-tab" type="button" data-us-sector-rank="losers">跌幅前20</button>
+      </div>
+      <div class="board-list-head board-stocks-head">
+        <div>股票名称</div>
+        <div style="text-align:center">现价</div>
+        <div style="text-align:right">涨跌幅%</div>
+      </div>
+      <div class="board-modal-body">
+        <div id="usBoardStocksList"></div>
+        <div class="board-status show" id="usBoardStocksStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

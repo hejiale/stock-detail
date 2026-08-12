@@ -280,6 +280,26 @@
         return;
       }
 
+      if (e.target.closest("[data-us-board-stocks-close]")) {
+        closeUsBoardStocksModal();
+        return;
+      }
+
+      const usSectorRankBtn = e.target.closest("[data-us-sector-rank]");
+      if (usSectorRankBtn) {
+        loadUsBoardStocksRank(usSectorRankBtn.dataset.usSectorRank);
+        return;
+      }
+
+      const usSectorLink = e.target.closest("[data-us-sector]");
+      if (usSectorLink) {
+        openUsBoardStocksModal(
+          usSectorLink.dataset.usSector,
+          usSectorLink.dataset.usSectorName
+        );
+        return;
+      }
+
       if (e.target.closest("[data-hk-board-close]")) {
         closeHkBoardModal();
         return;
@@ -547,6 +567,11 @@
         const indexStocksModal = document.getElementById("indexStocksModal");
         if (indexStocksModal?.classList.contains("show")) {
           closeIndexStocksModal();
+          return;
+        }
+        const usBoardStocksModal = document.getElementById("usBoardStocksModal");
+        if (usBoardStocksModal?.classList.contains("show")) {
+          closeUsBoardStocksModal();
           return;
         }
         const usBoardModal = document.getElementById("usBoardModal");

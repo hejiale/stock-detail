@@ -1,10 +1,11 @@
     function persistFromDom() {
       const saved = loadInputs();
-      document.querySelectorAll("input[data-fund]").forEach((input) => {
-        const fundId = input.dataset.fund;
-        const index = input.dataset.index;
+      document.querySelectorAll(".change-value[data-fund]").forEach((el) => {
+        const fundId = el.dataset.fund;
+        const index = el.dataset.index;
         if (!saved[fundId]) saved[fundId] = {};
-        saved[fundId][index] = input.value === "" ? "" : input.value;
+        const raw = String(el.dataset.raw ?? "").trim();
+        saved[fundId][index] = raw;
       });
       saveInputs(saved);
     }
@@ -42,10 +43,10 @@
 
       const coverLabel = fund.market === "US" ? "等权合计" : "前十大合计";
       const parts = [
-        `已填写 ${filledCount}/${fund.holdings.length} 只，覆盖权重 ${filledWeight.toFixed(2)}%（${coverLabel} ${fund.top10Total.toFixed(2)}%）。`
+        `已同步 ${filledCount}/${fund.holdings.length} 只，覆盖权重 ${filledWeight.toFixed(2)}%（${coverLabel} ${fund.top10Total.toFixed(2)}%）。`
       ];
       if (missing.length) {
-        parts.push(`未填写：${missing.join("、")}（按 0 处理）。`);
+        parts.push(`未同步：${missing.join("、")}（按 0 处理）。`);
       }
       detailEl.textContent = parts.join(" ");
     }
@@ -564,12 +565,5 @@
       else if (activeFundId === "krStocks") redrawKrSparklines();
       else if (activeFundId === "watchStocks") redrawWatchSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);
-    });
-
-    document.addEventListener("input", (e) => {
-      if (e.target.matches("input[data-fund]")) {
-        applyChangeColor(e.target);
-        persistFromDom();
-      }
     });
 

@@ -278,7 +278,7 @@
       });
     }
 
-    /** 翻页：先持久化当前页输入，再只渲染目标页行 */
+    /** 翻页：先持久化当前页涨跌幅，再只渲染目标页行 */
     function goToPage(fundId, page) {
       persistFromDom();
       setCurrentPage(fundId, page);
@@ -286,6 +286,12 @@
       updatePagerUI(fundId);
       applyAllChangeColors(fundId);
       syncFundQuotes(fundId);
+    }
+
+    function formatChangeDisplay(raw) {
+      const s = String(raw ?? "").trim();
+      if (s === "" || Number.isNaN(Number(s))) return "--";
+      return Number(s).toFixed(2);
     }
 
     function buildPagerHtml(fund) {
@@ -319,27 +325,27 @@
       return sign + n.toFixed(2) + "%";
     }
 
-    function applyChangeColor(input) {
-      const field = input.closest(".change-field") || input;
-      input.classList.remove("up", "down");
+    function applyChangeColor(el) {
+      const field = el.closest(".change-field") || el;
+      el.classList.remove("up", "down");
       field.classList.remove("up", "down");
 
-      const raw = input.value.trim();
+      const raw = String(el.dataset.raw ?? "").trim();
       if (raw === "" || Number.isNaN(Number(raw))) return;
       const n = Number(raw);
       if (n > 0) {
-        input.classList.add("up");
+        el.classList.add("up");
         field.classList.add("up");
       } else if (n < 0) {
-        input.classList.add("down");
+        el.classList.add("down");
         field.classList.add("down");
       }
     }
 
     function applyAllChangeColors(fundId) {
       const selector = fundId
-        ? `input[data-fund="${fundId}"]`
-        : "input[data-fund]";
+        ? `.change-value[data-fund="${fundId}"]`
+        : ".change-value[data-fund]";
       document.querySelectorAll(selector).forEach(applyChangeColor);
     }
 

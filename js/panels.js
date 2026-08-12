@@ -58,7 +58,7 @@
           const quote =
             liveQuotes[h.code] || liveQuotes[quoteKey(h.code)];
           const input = document.querySelector(
-            `input[data-fund="${fundId}"][data-index="${i}"]`
+            `.change-value[data-fund="${fundId}"][data-index="${i}"]`
           );
           const priceEl = document.querySelector(
             `[data-row-price][data-fund="${fundId}"][data-index="${i}"]`
@@ -80,7 +80,9 @@
             failed.push(h.name);
             return;
           }
-          input.value = Number(quote.change).toFixed(2);
+          const raw = Number(quote.change).toFixed(2);
+          input.dataset.raw = raw;
+          input.textContent = raw;
           applyChangeColor(input);
           ok += 1;
         });
@@ -188,15 +190,12 @@
                 ></canvas>
               </div>
               <div class="change-field">
-                <input
-                  type="number"
-                  step="0.01"
-                  inputmode="decimal"
-                  placeholder="如 1.25"
+                <span
+                  class="change-value"
                   data-fund="${fund.id}"
                   data-index="${i}"
-                  value="${fundSaved[i] ?? ""}"
-                />
+                  data-raw="${fundSaved[i] ?? ""}"
+                >${formatChangeDisplay(fundSaved[i])}</span>
                 <span class="change-icon up-icon" aria-hidden="true">
                   <img src="assets/aesc.png" alt="" />
                 </span>

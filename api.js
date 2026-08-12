@@ -436,11 +436,33 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  /** A 股涨跌停幅度：ST 5%、创业/科创/北交 20%、主板 10% */
+  function cnLimitRatio(code, name) {
+    const c = String(code || "");
+    const n = String(name || "");
+    if (/\*?ST|退/.test(n)) return 0.05;
+    if (/^(300|301|688|689|8|4|92)/.test(c)) return 0.2;
+    return 0.1;
+  }
+
+  function calcCnLimitPrice(preClose, ratio, up) {
+    if (preClose == null || !(preClose > 0)) return null;
+    const raw = up ? preClose * (1 + ratio) : preClose * (1 - ratio);
+    return Math.round(raw * 100) / 100;
+  }
+
+  /** 涨跌停价合理性校验（过滤误把代码等字段当价格） */
+  function saneLimitPrice(v, preClose) {
+    if (v == null || !(v > 0)) return null;
+    if (preClose > 0 && (v > preClose * 2.5 || v < preClose * 0.4)) return null;
+    return v;
+  }
+
   /**
    * 个股盘口行情（今开/高低/涨跌停/换手/量比/市盈市净/市值等）
    * ulist：f2最新 f3涨跌幅 f4涨跌额 f5成交量(手) f6成交额 f8换手 f9市盈动
    *        f10量比 f15最高 f16最低 f17今开 f18昨收 f20总市值 f21流通市值 f23市净
-   * stock/get：f57涨停 f58跌停
+   * stock/get：f57涨停 f58跌停（异常时按板幅推算）
    *
    * @returns {Promise<Object>}
    */
@@ -480,9 +502,21 @@
           ? prev
           : null;
 
+    const code = item.f12 != null ? String(item.f12) : holding.code;
+    const name = item.f14 ? String(item.f14) : holding.name || null;
+    const kind = getMarketKind({ code, market: holding.market });
+
+    let limitUp = saneLimitPrice(eastNum(limitData?.f57), prev);
+    let limitDown = saneLimitPrice(eastNum(limitData?.f58), prev);
+    if (kind === "CN" && prev != null && (limitUp == null || limitDown == null)) {
+      const ratio = cnLimitRatio(code, name);
+      if (limitUp == null) limitUp = calcCnLimitPrice(prev, ratio, true);
+      if (limitDown == null) limitDown = calcCnLimitPrice(prev, ratio, false);
+    }
+
     return {
-      name: item.f14 ? String(item.f14) : holding.name || null,
-      code: item.f12 != null ? String(item.f12) : holding.code,
+      name,
+      code,
       price: live,
       change: eastNum(item.f3),
       changeAmt: eastNum(item.f4),
@@ -490,8 +524,8 @@
       high: eastNum(item.f15),
       low: eastNum(item.f16),
       preClose: prev,
-      limitUp: eastNum(limitData?.f57),
-      limitDown: eastNum(limitData?.f58),
+      limitUp,
+      limitDown,
       turnoverRate: eastNum(item.f8),
       volumeRatio: eastNum(item.f10),
       volume: eastNum(item.f5),

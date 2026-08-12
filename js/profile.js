@@ -133,8 +133,6 @@
       document.getElementById("profileModalName").textContent = name;
       document.getElementById("profileModalSub").textContent =
         `代码 ${holding.code} · 加载中…`;
-      document.getElementById("profileTotalMcap").textContent = "--";
-      document.getElementById("profileFloatMcap").textContent = "--";
       document.getElementById("profileList").innerHTML = "";
       renderProfileHolders(null, "");
       document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
@@ -155,10 +153,6 @@
           profile.name || name;
         document.getElementById("profileModalSub").textContent =
           `代码 ${profile.code} · 金额单位：${profile.currencyLabel || "本币"}`;
-        document.getElementById("profileTotalMcap").textContent =
-          formatMarketCap(profile.marketCap?.total);
-        document.getElementById("profileFloatMcap").textContent =
-          formatMarketCap(profile.marketCap?.float);
 
         renderProfileHolders(profile.holders, profile.holdersError);
 

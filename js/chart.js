@@ -100,11 +100,6 @@
           tone: "flat"
         },
         {
-          label: "总市值",
-          text: formatMarketCap(quote.marketCap),
-          tone: "flat"
-        },
-        {
           label: "昨收",
           text: formatPrice(quote.preClose),
           tone: "flat"
@@ -132,11 +127,6 @@
         {
           label: "市净",
           text: formatQuoteRatio(quote.pb),
-          tone: "flat"
-        },
-        {
-          label: "流通市值",
-          text: formatMarketCap(quote.floatCap),
           tone: "flat"
         }
       ];
@@ -458,8 +448,6 @@
       const name =
         quote?.name || state.trend?.name || state.history?.name || "";
       document.getElementById("chartModalName").textContent = name || "--";
-      document.getElementById("chartModalSub").textContent =
-        `${series.title} · ${series.baselineLabel || "基准"} ${formatPrice(base)}`;
     }
 
     function renderActiveChart() {
@@ -517,7 +505,6 @@
 
       document.getElementById("chartModalName").textContent =
         holding.name;
-      document.getElementById("chartModalSub").textContent = "加载行情中…";
       resetChartQuoteUi();
       resetPeriodValues();
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -581,10 +568,6 @@
           updateQuoteSummary(quote);
           document.getElementById("chartModalName").textContent =
             quote.name || holding.name || "--";
-          document.getElementById("chartModalSub").textContent =
-            quote.preClose != null
-              ? `昨收 ${formatPrice(quote.preClose)}`
-              : "行情概览";
         }
         setStatus("chartStatus", "行情加载失败，请稍后重试");
         return;

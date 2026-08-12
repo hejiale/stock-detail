@@ -1962,7 +1962,7 @@ header p {
 .kr-stock-head {
   padding-left: 16px;
   padding-right: 16px;
-  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .kr-rank-body {
@@ -1997,18 +1997,20 @@ header p {
 .kr-stock-list .kr-stock-row {
   padding-left: 8px;
   padding-right: 8px;
-  grid-template-columns: minmax(0, 1fr) 64px 70px 82px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
 }
 
 .kr-stock-list .board-price {
   text-align: right;
-  justify-self: end;
+  justify-self: stretch;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: #334155;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kr-stock-list .board-price.up {
@@ -2017,6 +2019,19 @@ header p {
 
 .kr-stock-list .board-price.down {
   color: var(--down);
+}
+
+.kr-stock-list .board-chg {
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  width: auto;
+  box-sizing: border-box;
+}
+
+.kr-stock-list .kr-spark {
+  max-width: 100%;
+  width: 100%;
 }
 
 .kr-stock-list .board-name[data-chart-fund] {

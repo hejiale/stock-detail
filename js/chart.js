@@ -128,6 +128,16 @@
           label: "市净",
           text: formatQuoteRatio(quote.pb),
           tone: "flat"
+        },
+        {
+          label: "流通市值",
+          text: formatMarketCap(quote.floatCap),
+          tone: "flat"
+        },
+        {
+          label: "总市值",
+          text: formatMarketCap(quote.marketCap),
+          tone: "flat"
         }
       ];
 

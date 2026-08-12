@@ -91,21 +91,16 @@
       const upPct = total ? (up / total) * 100 : 0;
       const flatPct = total ? (flat / total) * 100 : 0;
       const downPct = total ? (down / total) * 100 : 0;
+      const flatCenter = upPct + flatPct / 2;
       return `
         <div class="breadth-bar" role="img" aria-label="涨 ${up}，平 ${flat}，跌 ${down}">
-          <div class="breadth-seg up" style="flex:${upPct || 0}" title="涨 ${up}">
-            ${upPct >= 12 ? `<span>涨 ${up}</span>` : ""}
-          </div>
-          <div class="breadth-seg flat" style="flex:${flatPct || 0}" title="平 ${flat}">
-            ${flatPct >= 12 ? `<span>平 ${flat}</span>` : ""}
-          </div>
-          <div class="breadth-seg down" style="flex:${downPct || 0}" title="跌 ${down}">
-            ${downPct >= 12 ? `<span>跌 ${down}</span>` : ""}
-          </div>
+          <div class="breadth-seg up" style="flex:${upPct || 0}"></div>
+          <div class="breadth-seg flat" style="flex:${flatPct || 0}"></div>
+          <div class="breadth-seg down" style="flex:${downPct || 0}"></div>
         </div>
         <div class="breadth-legend">
           <span class="breadth-item up">涨 ${up}</span>
-          <span class="breadth-item flat">平 ${flat}</span>
+          <span class="breadth-item flat" style="left:${flatCenter}%">平 ${flat}</span>
           <span class="breadth-item down">跌 ${down}</span>
         </div>`;
     }

@@ -151,8 +151,8 @@
             <div class="board-list-head us-stock-head kr-stock-head">
               <div>股票</div>
               <div style="text-align:center">走势</div>
-              <div style="text-align:right">最新价</div>
-              <div style="text-align:right">涨跌幅%</div>
+              <div style="text-align:center">最新价</div>
+              <div style="text-align:center">涨跌幅%</div>
             </div>
             <div class="kr-rank-body">
               <div class="us-stock-list kr-stock-list" id="hkStockList"></div>

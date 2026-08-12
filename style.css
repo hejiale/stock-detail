@@ -2002,8 +2002,8 @@ header p {
 }
 
 .kr-stock-list .board-price {
-  text-align: right;
-  justify-self: stretch;
+  text-align: center;
+  justify-self: center;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -2011,6 +2011,7 @@ header p {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .kr-stock-list .board-price.up {
@@ -2022,7 +2023,7 @@ header p {
 }
 
 .kr-stock-list .board-chg {
-  justify-self: end;
+  justify-self: center;
   min-width: 0;
   max-width: 100%;
   width: auto;

@@ -42,15 +42,20 @@
     return Math.round(Number(n) * 100) / 100;
   }
 
+  /** 拼接 query：k=encode(v)&... */
+  function buildQuery(params) {
+    return Object.keys(params)
+      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
+      .join("&");
+  }
+
   /**
    * 拼接东财路径+查询串（自动附带 ut、防缓存 _）
    * @param {string} apiPath 如 /api/qt/ulist.np/get
    * @param {Object} params
    */
   function buildEastPath(apiPath, params) {
-    const q = Object.keys(params)
-      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
-      .join("&");
+    const q = buildQuery(params);
     return (
       apiPath +
       "?" +
@@ -221,7 +226,7 @@
    */
   function toSinaSymbol(holding) {
     const code = holding.code;
-    if (holding.market === 105 || holding.market === 106 || /[A-Za-z]/.test(code)) {
+    if (isUsHolding(holding)) {
       return "gb_" + code.toLowerCase();
     }
     return resolveCnExchange(code) + code;
@@ -235,6 +240,18 @@
     if (holding.market != null) return holding.market + "." + holding.code;
     const ex = resolveCnExchange(holding.code);
     return (ex === "sh" ? "1" : "0") + "." + holding.code;
+  }
+
+  /** 市场归类：CN / US / HK / JP / KR */
+  function getMarketKind(holding) {
+    const m = Number(holding.market);
+    if (m === 105 || m === 106) return "US";
+    if (m === 116) return "HK";
+    if (m === 176) return "JP";
+    if (m === 177) return "KR";
+    if (m === 0 || m === 1) return "CN";
+    if (/[A-Za-z]/.test(String(holding.code || ""))) return "US";
+    return "CN";
   }
 
   /** 是否按美股逻辑处理（含字母代码） */
@@ -419,18 +436,6 @@
   const EAST_DC_WEB = "https://datacenter-web.eastmoney.com/api/data/v1/get";
   const EAST_DC_SEC = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
 
-  /** 市场归类：CN / US / HK / JP / KR */
-  function getMarketKind(holding) {
-    const m = Number(holding.market);
-    if (m === 105 || m === 106) return "US";
-    if (m === 116) return "HK";
-    if (m === 176) return "JP";
-    if (m === 177) return "KR";
-    if (m === 0 || m === 1) return "CN";
-    if (/[A-Za-z]/.test(String(holding.code || ""))) return "US";
-    return "CN";
-  }
-
   function normalizeReportDate(d) {
     return String(d || "").slice(0, 10);
   }
@@ -458,10 +463,7 @@
   }
 
   function buildDatacenterUrl(base, params) {
-    const q = Object.keys(params)
-      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
-      .join("&");
-    return base + "?" + q;
+    return base + "?" + buildQuery(params);
   }
 
   /** 美股 SECUCODE：纳斯达克 .O / 纽交所 .N */
@@ -945,26 +947,36 @@
     return result;
   }
 
+  /** 纯数字代码：去非数字后 pad / 截断至固定长度 */
+  function normalizeDigitCode(raw, len, { stripSuffix, fromEnd = false } = {}) {
+    let s = String(raw || "").trim();
+    if (stripSuffix) s = s.toUpperCase().replace(stripSuffix, "");
+    const digits = s.replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.length <= len) return digits.padStart(len, "0");
+    return fromEnd ? digits.slice(-len) : digits.slice(0, len);
+  }
+
   /** 港股代码：纯数字，左侧补零至 5 位 */
   function normalizeHkCode(raw) {
-    const digits = String(raw || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\.HK$/i, "")
-      .replace(/\D/g, "");
-    if (!digits) return "";
-    if (digits.length <= 5) return digits.padStart(5, "0");
-    return digits.slice(-5);
+    return normalizeDigitCode(raw, 5, { stripSuffix: /\.HK$/i, fromEnd: true });
   }
 
   /** 韩股代码：纯数字，左侧补零至 6 位 */
   function normalizeKrCode(raw) {
-    const digits = String(raw || "")
-      .trim()
-      .replace(/\D/g, "");
-    if (!digits) return "";
-    if (digits.length <= 6) return digits.padStart(6, "0");
-    return digits.slice(0, 6);
+    return normalizeDigitCode(raw, 6);
+  }
+
+  /** 用报价接口解析名称；按 markets 顺序尝试 */
+  async function resolveFromQuotes(code, markets, ratio, notFoundMsg) {
+    for (const market of markets) {
+      const quotes = await loadQuotes([{ code, market }]);
+      const quote = quotes[quoteKey(code)] || quotes[code];
+      if (quote && quote.name) {
+        return { name: quote.name, code, market, ratio };
+      }
+    }
+    throw new Error(notFoundMsg);
   }
 
   /**
@@ -981,16 +993,12 @@
       if (!/^\d{6}$/.test(code)) {
         throw new Error("A股代码应为 6 位数字，如 002245、600519、920001");
       }
-
-      const candidates = inferCnMarketCandidates(code);
-      for (const market of candidates) {
-        const quotes = await loadQuotes([{ code, market }]);
-        const quote = quotes[quoteKey(code)] || quotes[code];
-        if (quote && quote.name) {
-          return { name: quote.name, code, market, ratio: 1 };
-        }
-      }
-      throw new Error("未找到该股票，请确认是上交所 / 深交所 / 北交所代码");
+      return resolveFromQuotes(
+        code,
+        inferCnMarketCandidates(code),
+        1,
+        "未找到该股票，请确认是上交所 / 深交所 / 北交所代码"
+      );
     }
 
     if (marketType === "HK") {
@@ -998,12 +1006,7 @@
       if (!/^\d{5}$/.test(code)) {
         throw new Error("港股代码应为数字，如 00700、9988");
       }
-      const quotes = await loadQuotes([{ code, market: 116 }]);
-      const quote = quotes[quoteKey(code)] || quotes[code];
-      if (quote && quote.name) {
-        return { name: quote.name, code, market: 116, ratio: 1 };
-      }
-      throw new Error("未找到该港股，请检查代码");
+      return resolveFromQuotes(code, [116], 1, "未找到该港股，请检查代码");
     }
 
     if (marketType === "KR") {
@@ -1011,28 +1014,14 @@
       if (!/^\d{6}$/.test(code)) {
         throw new Error("韩股代码应为 6 位数字，如 005930");
       }
-      const quotes = await loadQuotes([{ code, market: 177 }]);
-      const quote = quotes[quoteKey(code)] || quotes[code];
-      if (quote && quote.name) {
-        return { name: quote.name, code, market: 177, ratio: 1 };
-      }
-      throw new Error("未找到该韩股，请检查代码");
+      return resolveFromQuotes(code, [177], 1, "未找到该韩股，请检查代码");
     }
 
     const code = String(rawCode || "").trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9._\-]{0,9}$/.test(code)) {
       throw new Error("美股代码格式不正确");
     }
-
-    for (const market of [105, 106]) {
-      const holding = { code, market };
-      const quotes = await loadQuotes([holding]);
-      const quote = quotes[quoteKey(code)] || quotes[code];
-      if (quote && quote.name) {
-        return { name: quote.name, code, market, ratio: 5 };
-      }
-    }
-    throw new Error("未找到该美股，请检查代码");
+    return resolveFromQuotes(code, [105, 106], 5, "未找到该美股，请检查代码");
   }
 
   /**
@@ -1052,19 +1041,6 @@
     }
     return klines.slice(startIdx);
   }
-
-  /**
-   * A 股行业板块涨跌幅列表（东方财富）
-   * GET {push2|push2delay}/api/qt/clist/get
-   * fs=m:90+t:2+f:!50
-   *
-   * 注意：东财 fs 分隔符须用 +（空格经 encode 后会匹配错数据）；单页最多约 100 条，需分页。
-   *
-   * 字段：f12 代码, f14 名称, f3 涨跌幅, f104 上涨家数, f105 下跌家数,
-   *       f128 领涨股, f136 领涨股涨跌幅
-   *
-   * @returns {Promise<Array<{code,name,change,upCount,downCount,leader,leaderChange,childCodes?,childCount?}>>}
-   */
 
   /**
    * 行业板块归类规则（按顺序匹配，越靠前越优先）
@@ -1207,6 +1183,13 @@
       .sort((a, b) => b.change - a.change);
   }
 
+  /**
+   * A 股行业板块涨跌幅列表（东方财富）
+   * GET {push2|push2delay}/api/qt/clist/get  fs=m:90+t:2+f:!50
+   * 注意：东财 fs 分隔符须用 +；单页最多约 100 条，需分页。
+   *
+   * @returns {Promise<Array<{code,name,change,upCount,downCount,leader,leaderChange,childCodes?,childCount?}>>}
+   */
   async function loadCnSectorBoards() {
     const fs = "m:90+t:2+f:!50";
     const fields = "f12,f14,f3,f20,f104,f105,f128,f136";
@@ -1320,6 +1303,56 @@
   }
 
   /**
+   * 按 defs 批量拉指数报价（ulist）
+   * @param {Array<{code:string, market:number, name?:string, label?:string}>} defs
+   * @param {{ fields?: string, upperCode?: boolean, withBreadth?: boolean }} [opts]
+   */
+  async function loadIndicesByDefs(defs, opts = {}) {
+    const {
+      fields = "f2,f3,f12,f14",
+      upperCode = false,
+      withBreadth = false
+    } = opts;
+    const json = await fetchEastUlist(
+      defs.map((d) => d.market + "." + d.code).join(","),
+      fields
+    );
+    const byCode = new Map();
+    normalizeEastDiff(json).forEach((item) => {
+      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
+      const change = Number(item.f3);
+      const price = Number(item.f2);
+      if (Number.isNaN(change)) return;
+      let code = String(item.f12);
+      if (upperCode) code = code.toUpperCase();
+      const entry = {
+        code,
+        price: Number.isNaN(price) ? null : price,
+        change: round2(change)
+      };
+      if (withBreadth) {
+        entry.name = String(item.f14 || item.f12);
+        entry.upCount = Number(item.f104) || 0;
+        entry.downCount = Number(item.f105) || 0;
+        entry.flatCount = Number(item.f106) || 0;
+      }
+      byCode.set(code, entry);
+    });
+
+    return defs
+      .map((d) => {
+        const key = upperCode ? String(d.code).toUpperCase() : d.code;
+        const q = byCode.get(key);
+        if (!q) return null;
+        const out = { ...q, market: d.market };
+        if (d.name != null) out.name = d.name;
+        if (d.label != null) out.label = d.label;
+        return out;
+      })
+      .filter(Boolean);
+  }
+
+  /**
    * A 股主要市场指数（上交所 / 深交所 / 创业板 / 科创板 / 北交所）
    * GET {push2}/api/qt/ulist.np/get
    * f104 上涨家数, f105 下跌家数, f106 平盘家数
@@ -1327,43 +1360,19 @@
    * @returns {Promise<Array<{code,name,label,market,price,change,upCount,downCount,flatCount}>>}
    */
   async function loadCnIndices() {
-    const defs = [
-      { code: "000001", market: 1, label: "上交所" },
-      { code: "399001", market: 0, label: "深交所" },
-      { code: "399006", market: 0, label: "创业板" },
-      { code: "000688", market: 1, label: "科创板" },
-      { code: "899050", market: 0, label: "北交所" }
-    ];
-    const secids = defs.map((d) => d.market + "." + d.code).join(",");
-    const json = await fetchEastUlist(secids, "f2,f3,f12,f14,f104,f105,f106");
-    const byCode = new Map();
-    normalizeEastDiff(json).forEach((item) => {
-      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
-      const change = Number(item.f3);
-      const price = Number(item.f2);
-      if (Number.isNaN(change)) return;
-      byCode.set(String(item.f12), {
-        code: String(item.f12),
-        name: String(item.f14 || item.f12),
-        price: Number.isNaN(price) ? null : price,
-        change: round2(change),
-        upCount: Number(item.f104) || 0,
-        downCount: Number(item.f105) || 0,
-        flatCount: Number(item.f106) || 0
-      });
-    });
-
-    return defs
-      .map((d) => {
-        const q = byCode.get(d.code);
-        if (!q) return null;
-        return {
-          ...q,
-          market: d.market,
-          label: d.label
-        };
-      })
-      .filter(Boolean);
+    return loadIndicesByDefs(
+      [
+        { code: "000001", market: 1, label: "上交所" },
+        { code: "399001", market: 0, label: "深交所" },
+        { code: "399006", market: 0, label: "创业板" },
+        { code: "000688", market: 1, label: "科创板" },
+        { code: "899050", market: 0, label: "北交所" }
+      ],
+      {
+        fields: "f2,f3,f12,f14,f104,f105,f106",
+        withBreadth: true
+      }
+    );
   }
 
   /**
@@ -1457,143 +1466,52 @@
     return { up, down, flat, total };
   }
 
-  /**
-   * 美股三大指数：道琼斯 / 纳斯达克 / 标普500
-   * GET {push2}/api/qt/ulist.np/get  secids=100.DJIA,100.NDX,100.SPX
-   */
+  /** 美股三大指数：道琼斯 / 纳斯达克 / 标普500 */
   async function loadUsIndices() {
-    const defs = [
-      { code: "DJIA", market: 100, name: "道琼斯" },
-      { code: "NDX", market: 100, name: "纳斯达克" },
-      { code: "SPX", market: 100, name: "标普500" }
-    ];
-    const json = await fetchEastUlist(
-      defs.map((d) => d.market + "." + d.code).join(","),
-      "f2,f3,f12,f14"
+    return loadIndicesByDefs(
+      [
+        { code: "DJIA", market: 100, name: "道琼斯" },
+        { code: "NDX", market: 100, name: "纳斯达克" },
+        { code: "SPX", market: 100, name: "标普500" }
+      ],
+      { upperCode: true }
     );
-    const byCode = new Map();
-    normalizeEastDiff(json).forEach((item) => {
-      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
-      const change = Number(item.f3);
-      const price = Number(item.f2);
-      if (Number.isNaN(change)) return;
-      byCode.set(String(item.f12).toUpperCase(), {
-        code: String(item.f12).toUpperCase(),
-        price: Number.isNaN(price) ? null : price,
-        change: round2(change)
-      });
-    });
-
-    return defs
-      .map((d) => {
-        const q = byCode.get(d.code);
-        if (!q) return null;
-        return {
-          ...q,
-          market: d.market,
-          name: d.name
-        };
-      })
-      .filter(Boolean);
   }
 
-  /**
-   * 美股全市场涨跌家数（纳斯达克 + 纽交所 + 美交所）
-   */
+  /** 美股全市场涨跌家数（纳斯达克 + 纽交所 + 美交所） */
   async function loadUsMarketBreadth() {
     return loadMarketBreadth("m:105,m:106,m:107");
   }
 
-  /**
-   * 韩股主要指数：KOSPI / KOSPI200
-   * GET {push2}/api/qt/ulist.np/get  secids=100.KS11,100.KOSPI200
-   */
+  /** 韩股主要指数：KOSPI / KOSPI200 */
   async function loadKrIndices() {
-    const defs = [
-      { code: "KS11", market: 100, name: "韩国KOSPI" },
-      { code: "KOSPI200", market: 100, name: "韩国KOSPI200" }
-    ];
-    const json = await fetchEastUlist(
-      defs.map((d) => d.market + "." + d.code).join(","),
-      "f2,f3,f12,f14"
+    return loadIndicesByDefs(
+      [
+        { code: "KS11", market: 100, name: "韩国KOSPI" },
+        { code: "KOSPI200", market: 100, name: "韩国KOSPI200" }
+      ],
+      { upperCode: true }
     );
-    const byCode = new Map();
-    normalizeEastDiff(json).forEach((item) => {
-      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
-      const change = Number(item.f3);
-      const price = Number(item.f2);
-      if (Number.isNaN(change)) return;
-      byCode.set(String(item.f12).toUpperCase(), {
-        code: String(item.f12).toUpperCase(),
-        price: Number.isNaN(price) ? null : price,
-        change: round2(change)
-      });
-    });
-
-    return defs
-      .map((d) => {
-        const q = byCode.get(d.code.toUpperCase());
-        if (!q) return null;
-        return {
-          ...q,
-          market: d.market,
-          name: d.name
-        };
-      })
-      .filter(Boolean);
   }
 
-  /**
-   * 韩股全市场涨跌家数
-   */
+  /** 韩股全市场涨跌家数 */
   async function loadKrMarketBreadth() {
     return loadMarketBreadth("m:177");
   }
 
-  /**
-   * 港股主要指数：恒生 / 国企 / 恒生科技
-   * GET {push2}/api/qt/ulist.np/get
-   * secids=100.HSI,100.HSCEI,124.HSTECH
-   */
+  /** 港股主要指数：恒生 / 国企 / 恒生科技 */
   async function loadHkIndices() {
-    const defs = [
-      { code: "HSI", market: 100, name: "恒生指数" },
-      { code: "HSCEI", market: 100, name: "恒生国企" },
-      { code: "HSTECH", market: 124, name: "恒生科技" }
-    ];
-    const json = await fetchEastUlist(
-      defs.map((d) => d.market + "." + d.code).join(","),
-      "f2,f3,f12,f14"
+    return loadIndicesByDefs(
+      [
+        { code: "HSI", market: 100, name: "恒生指数" },
+        { code: "HSCEI", market: 100, name: "恒生国企" },
+        { code: "HSTECH", market: 124, name: "恒生科技" }
+      ],
+      { upperCode: true }
     );
-    const byCode = new Map();
-    normalizeEastDiff(json).forEach((item) => {
-      if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
-      const change = Number(item.f3);
-      const price = Number(item.f2);
-      if (Number.isNaN(change)) return;
-      byCode.set(String(item.f12).toUpperCase(), {
-        code: String(item.f12).toUpperCase(),
-        price: Number.isNaN(price) ? null : price,
-        change: round2(change)
-      });
-    });
-
-    return defs
-      .map((d) => {
-        const q = byCode.get(d.code.toUpperCase());
-        if (!q) return null;
-        return {
-          ...q,
-          market: d.market,
-          name: d.name
-        };
-      })
-      .filter(Boolean);
   }
 
-  /**
-   * 港股主板 + 创业板涨跌家数（排除涡轮等）
-   */
+  /** 港股主板 + 创业板涨跌家数（排除涡轮等） */
   async function loadHkMarketBreadth() {
     return loadMarketBreadth("m:116+t:3,m:116+t:4");
   }
@@ -1626,10 +1544,16 @@
   }
 
   /**
-   * 映射东财 A 股涨跌榜行；f3 为 "-" / 无效时丢弃
+   * 映射东财涨跌榜行；f3 为 "-" / 无效时丢弃
    * （push2delay 对 A 股常返回 f2/f3="-"，海外市场正常）
+   * @param {{ upperCode?: boolean, zeroPriceNull?: boolean, defaultMarket?: number|null }} [opts]
    */
-  function mapEastCnRankItems(list, take) {
+  function mapEastRankItems(list, take, opts = {}) {
+    const {
+      upperCode = false,
+      zeroPriceNull = true,
+      defaultMarket = null
+    } = opts;
     return (list || [])
       .map((item) => {
         if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
@@ -1638,17 +1562,52 @@
         const change = Number(item.f3);
         const price = Number(item.f2);
         if (Number.isNaN(change)) return null;
-        const market = item.f13 != null ? Number(item.f13) : null;
+        const market = item.f13 != null ? Number(item.f13) : defaultMarket;
+        let code = String(item.f12);
+        if (upperCode) code = code.toUpperCase();
         return {
-          code: String(item.f12),
+          code,
           name: String(item.f14 || item.f12),
-          price: Number.isNaN(price) || price === 0 ? null : price,
+          price:
+            Number.isNaN(price) || (zeroPriceNull && price === 0)
+              ? null
+              : price,
           change: round2(change),
-          market: Number.isNaN(market) ? null : market
+          market: Number.isNaN(market) ? defaultMarket : market
         };
       })
       .filter(Boolean)
       .slice(0, take);
+  }
+
+  /**
+   * 通用东财涨跌榜（clist + fid=f3）
+   * @param {string} fs
+   * @param {"gainers"|"losers"} kind
+   * @param {number} [limit]
+   * @param {number} [page]
+   * @param {Parameters<typeof mapEastRankItems>[2]} [mapOpts]
+   */
+  async function loadStockRankByFs(
+    fs,
+    kind = "gainers",
+    limit = 10,
+    page = 1,
+    mapOpts = {}
+  ) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
+    const pn = Math.max(1, Number(page) || 1);
+    const { list, total } = await fetchEastClist({
+      fs,
+      fields: "f12,f13,f14,f2,f3",
+      pn,
+      pz: take,
+      po: kind === "losers" ? 0 : 1
+    });
+    return {
+      list: mapEastRankItems(list, take, mapOpts),
+      total: Number(total) || 0
+    };
   }
 
   /**
@@ -1747,7 +1706,7 @@
         po: kind === "losers" ? 0 : 1,
         requireValidChange: true
       });
-      const mapped = mapEastCnRankItems(list, take);
+      const mapped = mapEastRankItems(list, take);
       if (mapped.length) {
         return { list: mapped, total: Number(total) || 0 };
       }
@@ -1761,130 +1720,29 @@
   /**
    * 美股涨幅榜 / 跌幅榜（知名分类股，分页）
    * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
-   *
-   * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=10]
-   * @param {number} [page=1]
    */
   async function loadUsStockRank(kind = "gainers", limit = 10, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 10));
-    const pn = Math.max(1, Number(page) || 1);
-    const { list, total } = await fetchEastClist({
-      fs: "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
-      fields: "f12,f13,f14,f2,f3",
-      pn,
-      pz: take,
-      po: kind === "losers" ? 0 : 1
-    });
-
-    return {
-      list: list
-        .map((item) => {
-          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-            return null;
-          }
-          const change = Number(item.f3);
-          const price = Number(item.f2);
-          if (Number.isNaN(change)) return null;
-          const market = item.f13 != null ? Number(item.f13) : null;
-          return {
-            code: String(item.f12).toUpperCase(),
-            name: String(item.f14 || item.f12),
-            price: Number.isNaN(price) ? null : price,
-            change: round2(change),
-            market: Number.isNaN(market) ? 105 : market
-          };
-        })
-        .filter(Boolean)
-        .slice(0, take),
-      total: Number(total) || 0
-    };
+    return loadStockRankByFs(
+      "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
+      kind,
+      limit,
+      page,
+      { upperCode: true, zeroPriceNull: false, defaultMarket: 105 }
+    );
   }
 
-  /**
-   * 韩股涨幅榜 / 跌幅榜（东财 market=177，分页）
-   * GET {push2}/api/qt/clist/get  fs=m:177  fid=f3
-   *
-   * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=10]
-   * @param {number} [page=1]
-   */
+  /** 韩股涨幅榜 / 跌幅榜（东财 market=177，分页） */
   async function loadKrStockRank(kind = "gainers", limit = 10, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 10));
-    const pn = Math.max(1, Number(page) || 1);
-    const { list, total } = await fetchEastClist({
-      fs: "m:177",
-      fields: "f12,f13,f14,f2,f3",
-      pn,
-      pz: take,
-      po: kind === "losers" ? 0 : 1
+    return loadStockRankByFs("m:177", kind, limit, page, {
+      defaultMarket: 177
     });
-
-    return {
-      list: list
-        .map((item) => {
-          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-            return null;
-          }
-          const change = Number(item.f3);
-          const price = Number(item.f2);
-          if (Number.isNaN(change)) return null;
-          const market = item.f13 != null ? Number(item.f13) : 177;
-          return {
-            code: String(item.f12),
-            name: String(item.f14 || item.f12),
-            price: Number.isNaN(price) || price === 0 ? null : price,
-            change: round2(change),
-            market: Number.isNaN(market) ? 177 : market
-          };
-        })
-        .filter(Boolean)
-        .slice(0, take),
-      total: Number(total) || 0
-    };
   }
 
-  /**
-   * 港股涨幅榜 / 跌幅榜（主板 + 创业板，分页）
-   * GET {push2}/api/qt/clist/get  fs=m:116+t:3,m:116+t:4  fid=f3
-   *
-   * @param {"gainers"|"losers"} kind
-   * @param {number} [limit=10]
-   * @param {number} [page=1]
-   */
+  /** 港股涨幅榜 / 跌幅榜（主板 + 创业板，分页） */
   async function loadHkStockRank(kind = "gainers", limit = 10, page = 1) {
-    const take = Math.max(1, Math.min(100, Number(limit) || 10));
-    const pn = Math.max(1, Number(page) || 1);
-    const { list, total } = await fetchEastClist({
-      fs: "m:116+t:3,m:116+t:4",
-      fields: "f12,f13,f14,f2,f3",
-      pn,
-      pz: take,
-      po: kind === "losers" ? 0 : 1
+    return loadStockRankByFs("m:116+t:3,m:116+t:4", kind, limit, page, {
+      defaultMarket: 116
     });
-
-    return {
-      list: list
-        .map((item) => {
-          if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-            return null;
-          }
-          const change = Number(item.f3);
-          const price = Number(item.f2);
-          if (Number.isNaN(change)) return null;
-          const market = item.f13 != null ? Number(item.f13) : 116;
-          return {
-            code: String(item.f12),
-            name: String(item.f14 || item.f12),
-            price: Number.isNaN(price) || price === 0 ? null : price,
-            change: round2(change),
-            market: Number.isNaN(market) ? 116 : market
-          };
-        })
-        .filter(Boolean)
-        .slice(0, take),
-      total: Number(total) || 0
-    };
   }
 
   global.MarketAPI = {

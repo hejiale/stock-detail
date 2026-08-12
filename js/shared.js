@@ -19,7 +19,10 @@
       loadHkMarketBreadth,
       calcPeriodReturns,
       sliceKlinesForRange,
-      resolveStock,
+      resolveStock
+    } = window.MarketAPI;
+
+    const {
       addWatchStock,
       listWatchStocks,
       removeWatchStock,
@@ -33,7 +36,7 @@
       clearAuthUser,
       loginUser,
       registerUser
-    } = window.MarketAPI;
+    } = window.WatchlistAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
     const CUSTOM_STOCKS_KEY = "custom_semi_stocks_v1";

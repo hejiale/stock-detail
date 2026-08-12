@@ -100,12 +100,19 @@
               : formatPct(item.dayChange) + chgArrowHtml(item.dayChange);
           const navText =
             item.nav == null ? "--" : Number(item.nav).toFixed(4);
+          const safeName = String(item.name || item.code || "").replace(
+            /"/g,
+            "&quot;"
+          );
           return `
-            <div class="board-row kr-stock-row fund-rank-row">
+            <button class="board-row kr-stock-row fund-rank-row fund-rank-row-btn" type="button" data-fund-detail="${item.code}" data-fund-detail-name="${safeName}" title="查看 ${safeName} 详情">
               <div class="board-info rank-board-info">
                 <div class="rank-board-text">
                   <div class="board-name-row">
                     <div class="board-name">${item.name}</div>
+                    <svg class="board-name-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
+                    </svg>
                   </div>
                   <div class="board-meta">${i + 1} · ${item.code}${
                     item.date ? ` · ${item.date}` : ""
@@ -115,7 +122,7 @@
               <div class="board-chg ${dayTone}">${dayText}</div>
               <div class="board-price">${navText}</div>
               <div class="board-chg ${tone}">${chgText}</div>
-            </div>`;
+            </button>`;
         })
         .join("");
     }

@@ -2317,8 +2317,11 @@
   }
 
   /**
-   * 开放式基金阶段涨幅排行（天天基金 FundMNRank，CORS 可用）
+   * 开放式基金阶段涨幅排行
    * period: month=近1月, 3m=近3月, 6m=近6月, 1y=近1年
+   *
+   * 优先走本地 serve.mjs 代理 /api/fund-rank（避开天天基金 App 接口浏览器风控），
+   * 失败时再尝试 FundMNRank。
    */
   const FUND_RANK_PERIOD = {
     month: { sort: "SYL_Y", field: "SYL_Y", label: "近1月" },
@@ -2333,42 +2336,28 @@
     return Number.isNaN(n) ? null : round2(n);
   }
 
-  async function loadOpenFundRank(period = "month", limit = 20) {
-    const meta = FUND_RANK_PERIOD[period] || FUND_RANK_PERIOD.month;
-    const take = Math.max(1, Math.min(50, Number(limit) || 20));
-    const resolvedPeriod = period in FUND_RANK_PERIOD ? period : "month";
-
-    const url =
-      "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNRank?" +
-      buildQuery({
-        FundType: "0",
-        SortColumn: meta.sort,
-        Sort: "desc",
-        pageIndex: "1",
-        pageSize: String(take),
-        plat: "Android",
-        product: "EFund",
-        version: "6.5.5",
-        deviceid: "browser",
-        MobileKey: "browser",
-        UserId: "uid",
-        passportid: "0",
-        OSVersion: "10",
-        AppVersion: "6.5.5",
-        _: String(Date.now())
-      });
-
-    const resp = await fetch(url, {
-      headers: { Accept: "application/json" }
-    });
-    if (!resp.ok) throw new Error("基金排行请求失败（" + resp.status + "）");
-    const json = await resp.json();
-    if (json?.Success === false || (json?.ErrCode && json.ErrCode !== 0)) {
-      throw new Error(json?.ErrMsg || json?.ErrorMessage || "基金排行暂不可用");
+  function fundRankDeviceId() {
+    const key = "fund_rank_device_v1";
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && saved.length >= 8) return saved;
+    } catch {
+      /* ignore */
     }
+    const id =
+      "web-" +
+      Math.random().toString(16).slice(2) +
+      Date.now().toString(16);
+    try {
+      localStorage.setItem(key, id);
+    } catch {
+      /* ignore */
+    }
+    return id;
+  }
 
-    const rows = Array.isArray(json?.Datas) ? json.Datas : [];
-    const list = rows
+  function mapFundMobRankRows(rows, meta, period, take) {
+    return (Array.isArray(rows) ? rows : [])
       .map((row) => {
         if (!row?.FCODE) return null;
         const change = parseFundRankPct(row[meta.field]);
@@ -2381,19 +2370,137 @@
           nav: Number.isNaN(nav) ? null : nav,
           dayChange: parseFundRankPct(row.RZDF),
           change,
-          period: resolvedPeriod,
+          period,
           periodLabel: meta.label
         };
       })
       .filter(Boolean)
       .slice(0, take);
+  }
 
+  async function loadOpenFundRankFromLocalProxy(period, take, meta) {
+    const url =
+      "/api/fund-rank?" +
+      buildQuery({
+        period,
+        limit: String(take),
+        _: String(Date.now())
+      });
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!resp.ok) throw new Error("本地基金排行代理不可用（" + resp.status + "）");
+    const json = await resp.json();
+    if (json?.error) throw new Error(json.error);
+    const list = Array.isArray(json?.list) ? json.list : [];
+    if (!list.length) throw new Error("暂无基金排行数据");
+    return {
+      list: list.slice(0, take),
+      total: Number(json.total) || list.length,
+      period,
+      periodLabel: meta.label
+    };
+  }
+
+  async function loadOpenFundRankFromMobApi(period, take, meta) {
+    const deviceid = fundRankDeviceId();
+    const url =
+      "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNRank?" +
+      buildQuery({
+        FundType: "0",
+        SortColumn: meta.sort,
+        Sort: "desc",
+        pageIndex: "1",
+        pageSize: String(take),
+        plat: "Iphone",
+        product: "EFund",
+        version: "6.5.5",
+        deviceid,
+        MobileKey: deviceid,
+        passportid: "0",
+        OSVersion: "14.3",
+        AppVersion: "6.5.5",
+        userId: "",
+        _: String(Date.now())
+      });
+
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" }
+    });
+    if (!resp.ok) throw new Error("基金排行请求失败（" + resp.status + "）");
+    const json = await resp.json();
+    if (json?.Success === false || (json?.ErrCode && Number(json.ErrCode) !== 0)) {
+      throw new Error(json?.ErrMsg || json?.ErrorMessage || "基金排行暂不可用");
+    }
+    const list = mapFundMobRankRows(json?.Datas, meta, period, take);
+    if (!list.length) throw new Error("暂无基金排行数据");
     return {
       list,
       total: Number(json?.TotalCount) || list.length,
-      period: resolvedPeriod,
+      period,
       periodLabel: meta.label
     };
+  }
+
+  async function loadOpenFundRank(period = "month", limit = 20) {
+    const meta = FUND_RANK_PERIOD[period] || FUND_RANK_PERIOD.month;
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const resolvedPeriod = period in FUND_RANK_PERIOD ? period : "month";
+
+    const errors = [];
+
+    // 1) 本地 node serve.mjs 代理（推荐，稳定）
+    try {
+      return await loadOpenFundRankFromLocalProxy(resolvedPeriod, take, meta);
+    } catch (err) {
+      errors.push(err?.message || String(err));
+    }
+
+    // 2) 天天基金 App 接口（浏览器侧偶发风控）
+    try {
+      return await loadOpenFundRankFromMobApi(resolvedPeriod, take, meta);
+    } catch (err) {
+      errors.push(err?.message || String(err));
+    }
+
+    throw new Error(
+      errors.filter(Boolean).slice(-1)[0] ||
+        "基金排行加载失败，请用 node serve.mjs 打开本页后重试"
+    );
+  }
+
+  /**
+   * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
+   * 依赖本地 serve.mjs：GET /api/fund-detail?code=xxxxxx
+   */
+  async function loadFundDetail(code) {
+    const raw = String(code || "").trim().replace(/\D/g, "");
+    if (!raw) throw new Error("缺少基金代码");
+    const fundCode = raw.padStart(6, "0").slice(-6);
+    const url =
+      "/api/fund-detail?" +
+      buildQuery({
+        code: fundCode,
+        navPages: "3",
+        _: String(Date.now())
+      });
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!resp.ok) {
+      let tip = "基金详情加载失败（" + resp.status + "）";
+      try {
+        const errJson = await resp.json();
+        if (errJson?.error) tip = errJson.error;
+      } catch {
+        /* ignore */
+      }
+      if (resp.status === 404) {
+        tip =
+          "未找到详情接口，请用 node serve.mjs 打开本页后再试";
+      }
+      throw new Error(tip);
+    }
+    const json = await resp.json();
+    if (json?.error) throw new Error(json.error);
+    if (!json?.basic) throw new Error("暂无该基金详情");
+    return json;
   }
 
   global.MarketAPI = {
@@ -2443,6 +2550,7 @@
     loadHkStockRank,
     loadHkMarketBreadth,
     loadOpenFundRank,
+    loadFundDetail,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

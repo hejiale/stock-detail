@@ -1,0 +1,80 @@
+<div class="board-modal fund-detail-modal" id="fundDetailModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-fund-detail-close></div>
+    <div class="board-modal-panel fund-detail-panel" role="dialog" aria-modal="true" aria-labelledby="fundDetailName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="fundDetailName">--</div>
+          <div class="sub" id="fundDetailSub">基金详情</div>
+        </div>
+        <button class="board-modal-close" type="button" data-fund-detail-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="fund-detail-quote" id="fundDetailQuote">
+        <div class="fund-detail-nav">
+          <span class="price flat" id="fundDetailNav">--</span>
+          <span class="fund-detail-chg-wrap">
+            <span class="chg flat" id="fundDetailDayChg">--</span>
+            <span class="chg-arrow-host" id="fundDetailDayChgArrow" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="fund-detail-meta" id="fundDetailMeta"></div>
+      </div>
+
+      <div class="board-tabs fund-detail-tabs">
+        <button class="board-tab active" type="button" data-fund-detail-tab="overview">概况</button>
+        <button class="board-tab" type="button" data-fund-detail-tab="holdings">持仓</button>
+        <button class="board-tab" type="button" data-fund-detail-tab="history">净值</button>
+      </div>
+
+      <div class="board-modal-body fund-detail-body">
+        <div class="fund-detail-pane active" data-fund-detail-pane="overview">
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-title">阶段涨幅</div>
+            <div class="fund-period-grid" id="fundDetailPeriods"></div>
+          </div>
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-title">净值走势</div>
+            <div class="fund-nav-chart-wrap">
+              <canvas id="fundDetailChart" aria-hidden="true"></canvas>
+              <div class="fund-nav-chart-tip" id="fundDetailChartTip">加载中…</div>
+            </div>
+          </div>
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-title">基本信息</div>
+            <div class="fund-basic-grid" id="fundDetailBasic"></div>
+          </div>
+        </div>
+
+        <div class="fund-detail-pane" data-fund-detail-pane="holdings">
+          <div class="fund-detail-section-head">
+            <div class="fund-detail-section-title">重仓持股</div>
+            <div class="fund-detail-section-sub" id="fundDetailHoldAsOf"></div>
+          </div>
+          <div class="fund-hold-head">
+            <div>股票</div>
+            <div style="text-align:right">占比%</div>
+            <div style="text-align:center">涨跌幅%</div>
+            <div style="text-align:right">较上期</div>
+          </div>
+          <div id="fundDetailHoldings"></div>
+        </div>
+
+        <div class="fund-detail-pane" data-fund-detail-pane="history">
+          <div class="fund-detail-section-title">历史净值</div>
+          <div class="fund-nav-head">
+            <div>日期</div>
+            <div style="text-align:right">单位净值</div>
+            <div style="text-align:right">累计净值</div>
+            <div style="text-align:right">日涨幅%</div>
+          </div>
+          <div id="fundDetailHistory"></div>
+        </div>
+
+        <div class="board-status show" id="fundDetailStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

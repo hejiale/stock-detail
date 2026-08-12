@@ -383,6 +383,26 @@
         return;
       }
 
+      if (e.target.closest("[data-fund-detail-close]")) {
+        closeFundDetailModal();
+        return;
+      }
+
+      const fundDetailTab = e.target.closest("[data-fund-detail-tab]");
+      if (fundDetailTab) {
+        setFundDetailTab(fundDetailTab.dataset.fundDetailTab);
+        return;
+      }
+
+      const fundDetailBtn = e.target.closest("[data-fund-detail]");
+      if (fundDetailBtn) {
+        openFundDetailModal(
+          fundDetailBtn.dataset.fundDetail,
+          fundDetailBtn.dataset.fundDetailName
+        );
+        return;
+      }
+
       const watchTypeBtn = e.target.closest("[data-watch-type]");
       if (watchTypeBtn) {
         loadWatchlist(Number(watchTypeBtn.dataset.watchType), { force: true });

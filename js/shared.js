@@ -30,6 +30,7 @@
       loadHkIndices,
       loadHkMarketBreadth,
       loadOpenFundRank,
+      loadFundDetail,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock
@@ -97,6 +98,7 @@
     const MODAL_IDS = [
       "chartModal",
       "profileModal",
+      "fundDetailModal",
       "boardModal",
       "boardStocksModal",
       "indexStocksModal",

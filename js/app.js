@@ -52,6 +52,7 @@
     }
 
     async function addFundToFocusList(rawCode, { refreshList = false, btn = null } = {}) {
+      if (!ensureLoggedIn()) return null;
       const raw = String(rawCode || "").trim();
       if (!raw) {
         showToast("请输入基金代码");
@@ -197,6 +198,7 @@
     async function removeFocusListFund(code) {
       const raw = String(code || "").trim();
       if (!raw) return;
+      if (!ensureLoggedIn()) return;
       try {
         await removeFocusFund(raw);
         showToast("已移除自选基金");

@@ -204,9 +204,12 @@
     return raw.padStart(6, "0").slice(-6);
   }
 
-  /** GET /api/focus-list */
+  /** GET /api/focus-list?userId= */
   async function listFocusFunds() {
-    const json = await watchlistFetch("/api/focus-list");
+    const userId = requireUserId();
+    const json = await watchlistFetch(
+      "/api/focus-list?userId=" + encodeURIComponent(userId)
+    );
     const rows = Array.isArray(json.data) ? json.data : [];
     const seen = new Set();
     return rows
@@ -222,25 +225,31 @@
       .filter(Boolean);
   }
 
-  /** POST /api/focus-list  { code } */
+  /** POST /api/focus-list  { code, userId } */
   async function addFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("基金代码无效");
+    const userId = requireUserId();
     const json = await watchlistFetch("/api/focus-list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: fundCode })
+      body: JSON.stringify({ code: fundCode, userId })
     });
-    return { ...(json.data || {}), code: fundCode };
+    return { ...(json.data || {}), code: fundCode, userId };
   }
 
-  /** DELETE /api/focus-list/:code */
+  /** DELETE /api/focus-list/:code?userId= */
   async function removeFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("缺少基金代码");
-    await watchlistFetch("/api/focus-list/" + encodeURIComponent(fundCode), {
-      method: "DELETE"
-    });
+    const userId = requireUserId();
+    await watchlistFetch(
+      "/api/focus-list/" +
+        encodeURIComponent(fundCode) +
+        "?userId=" +
+        encodeURIComponent(userId),
+      { method: "DELETE" }
+    );
     return true;
   }
 

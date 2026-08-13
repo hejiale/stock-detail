@@ -38,6 +38,23 @@
       return panel;
     }
 
+    function renderFocusFundLoginGate() {
+      const wrap = document.getElementById("focusFundList");
+      const subEl = document.getElementById("focusFundSub");
+      if (wrap) {
+        wrap.innerHTML = `
+          <div class="watch-login-gate">
+            <div class="watch-login-title">登录后查看自选</div>
+            <div class="watch-login-desc">自选基金需登录后同步到云端，登录后可新增、删除和查询自选。</div>
+            <div class="watch-login-actions">
+              <button class="btn btn-primary" type="button" data-open-login>登录</button>
+            </div>
+          </div>`;
+      }
+      if (subEl) subEl.textContent = "未登录";
+      setStatus("focusFundStatus", "");
+    }
+
     function renderFocusFundList(list) {
       const wrap = document.getElementById("focusFundList");
       if (!wrap) return;
@@ -90,6 +107,12 @@
     }
 
     async function loadFocusFunds({ force = false } = {}) {
+      if (!isLoggedIn()) {
+        focusFundsState.list = [];
+        renderFocusFundLoginGate();
+        return;
+      }
+
       if (!force && focusFundsState.list?.length) {
         renderFocusFundList(focusFundsState.list);
         const subEl = document.getElementById("focusFundSub");

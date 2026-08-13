@@ -2425,38 +2425,489 @@
 
   /**
    * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
-   * 依赖本地 serve.mjs：GET /api/fund-detail?code=xxxxxx
+   * 浏览器直连：
+   *   1) 东财数据中心 RPT_FUND_RANK + pingzhongdata.js（稳，不依赖本地代理）
+   *   2) 可选增强：fundmobapi 持仓 / 历史净值（有 CORS，偶发风控则跳过）
    */
+  const FUND_DETAIL_PERIODS = [
+    { key: "Z", title: "近1周", field: "CHANGE_7DAYS" },
+    { key: "Y", title: "近1月", field: "CHANGE_MONTH" },
+    { key: "3Y", title: "近3月", field: "CHANGE_3MONTHS" },
+    { key: "6Y", title: "近6月", field: "CHANGE_6MONTHS" },
+    { key: "1N", title: "近1年", field: "CHANGE_YEAR" },
+    { key: "2Y", title: "近2年", field: "CHANGE_2YEARS" },
+    { key: "3N", title: "近3年", field: "CHANGE_3YEARS" },
+    { key: "5N", title: "近5年", field: "CHANGE_5YEARS" },
+    { key: "JN", title: "今年来", field: "CHANGE_YIELD" },
+    { key: "LN", title: "成立来", field: "CHANGE_FOUNDLD" }
+  ];
+
+  function fmtFundDateMs(ms) {
+    const n = Number(ms);
+    if (!Number.isFinite(n)) return "";
+    // 东财净值点多为北京时间零点的 UTC 毫秒
+    return new Date(n + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+
+  function fundDetailDeviceId() {
+    const key = "fund_detail_device_v1";
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && saved.length >= 8) return saved;
+    } catch {
+      /* ignore */
+    }
+    const id =
+      "web-" +
+      Math.random().toString(16).slice(2) +
+      Date.now().toString(16);
+    try {
+      localStorage.setItem(key, id);
+    } catch {
+      /* ignore */
+    }
+    return id;
+  }
+
+  async function fetchFundDcDetailRow(fundCode) {
+    const params = {
+      reportName: "RPT_FUND_RANK",
+      columns: "ALL",
+      filter: `(SECURITY_CODE="${fundCode}")(FUND_TYPE<>"全部")`,
+      pageNumber: "1",
+      pageSize: "5",
+      source: "WEB",
+      client: "WEB",
+      _: String(Date.now())
+    };
+    const qs = buildQuery(params);
+    let lastError = null;
+    for (let i = 0; i < FUND_RANK_DC_HOSTS.length; i++) {
+      try {
+        const resp = await fetch(FUND_RANK_DC_HOSTS[i] + "?" + qs, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("基金概况请求失败（" + resp.status + "）");
+          continue;
+        }
+        const json = await resp.json();
+        if (!json?.success) {
+          lastError = new Error(json?.message || "基金概况暂不可用");
+          continue;
+        }
+        const rows = Array.isArray(json?.result?.data) ? json.result.data : [];
+        const row =
+          rows.find((x) => x && x.OPERATE_MODE) ||
+          rows.find((x) => x && x.SECURITY_CODE) ||
+          null;
+        if (!row) {
+          lastError = new Error("暂无该基金概况");
+          continue;
+        }
+        return row;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("基金概况加载失败");
+  }
+
+  let pingzhongChain = Promise.resolve();
+
+  function loadFundPingzhongPack(fundCode, timeoutMs = 12000) {
+    const run = () =>
+      new Promise((resolve, reject) => {
+        const keys = [
+          "fS_name",
+          "fS_code",
+          "syl_1y",
+          "syl_3y",
+          "syl_6y",
+          "syl_1n",
+          "Data_netWorthTrend",
+          "stockCodesNew",
+          "Data_currentFundManager"
+        ];
+        const saved = {};
+        keys.forEach((k) => {
+          saved[k] = global[k];
+          try {
+            delete global[k];
+          } catch {
+            global[k] = undefined;
+          }
+        });
+
+        const script = document.createElement("script");
+        script.charset = "utf-8";
+        script.src =
+          "https://fund.eastmoney.com/pingzhongdata/" +
+          fundCode +
+          ".js?_=" +
+          Date.now();
+
+        const timer = setTimeout(() => {
+          cleanup(true);
+          reject(new Error("净值走势加载超时"));
+        }, timeoutMs);
+
+        function restore() {
+          keys.forEach((k) => {
+            if (saved[k] === undefined) {
+              try {
+                delete global[k];
+              } catch {
+                global[k] = undefined;
+              }
+            } else {
+              global[k] = saved[k];
+            }
+          });
+        }
+
+        function cleanup(failed) {
+          clearTimeout(timer);
+          script.onload = null;
+          script.onerror = null;
+          script.remove();
+          if (failed) restore();
+        }
+
+        script.onload = () => {
+          try {
+            const pack = {
+              name: global.fS_name != null ? String(global.fS_name) : "",
+              code: global.fS_code != null ? String(global.fS_code) : fundCode,
+              syl_1y: global.syl_1y,
+              syl_3y: global.syl_3y,
+              syl_6y: global.syl_6y,
+              syl_1n: global.syl_1n,
+              trend: Array.isArray(global.Data_netWorthTrend)
+                ? global.Data_netWorthTrend.slice()
+                : [],
+              stockCodesNew: Array.isArray(global.stockCodesNew)
+                ? global.stockCodesNew.slice()
+                : [],
+              managers: Array.isArray(global.Data_currentFundManager)
+                ? global.Data_currentFundManager.slice()
+                : []
+            };
+            restore();
+            cleanup(false);
+            resolve(pack);
+          } catch (err) {
+            cleanup(true);
+            reject(err);
+          }
+        };
+
+        script.onerror = () => {
+          cleanup(true);
+          reject(new Error("净值走势脚本加载失败"));
+        };
+
+        document.head.appendChild(script);
+      });
+
+    const next = pingzhongChain.then(run, run);
+    pingzhongChain = next.then(
+      () => {},
+      () => {}
+    );
+    return next;
+  }
+
+  function mapFundDetailFromDcRow(row, fundCode) {
+    const nav = Number(row?.PER_NAV);
+    const scaleRaw = Number(row?.FUND_SCALE);
+    return {
+      code: String(row?.SECURITY_CODE || fundCode),
+      name: String(row?.FUND_NAME || fundCode),
+      type: row?.FUND_TYPE || "",
+      company: row?.ORG_NAME || "",
+      theme: "",
+      establishDate: String(row?.START_DATE || "").slice(0, 10),
+      navDate: String(row?.NAV_DATE || "").slice(0, 10),
+      nav: Number.isNaN(nav) ? null : nav,
+      accNav: null,
+      dayChange: parseFundRankPct(row?.CHANGE),
+      buyStatus: "",
+      redeemStatus: "",
+      riskLevel: row?.RISK_LEVE || "",
+      bench: "",
+      scale:
+        Number.isNaN(scaleRaw) || scaleRaw <= 0
+          ? null
+          : round2(scaleRaw / 1e8),
+      scaleDate: "",
+      comment: ""
+    };
+  }
+
+  function mapFundDetailPeriodsFromDc(row) {
+    return FUND_DETAIL_PERIODS.map((meta) => ({
+      key: meta.key,
+      title: meta.title,
+      change: parseFundRankPct(row?.[meta.field]),
+      avg: null,
+      hs300: null,
+      rank: ""
+    })).filter((x) => x.change != null);
+  }
+
+  function mapFundDetailFromPingzhong(pack, fundCode) {
+    const last = pack?.trend?.length
+      ? pack.trend[pack.trend.length - 1]
+      : null;
+    const nav = last != null ? Number(last.y) : null;
+    return {
+      code: String(pack?.code || fundCode),
+      name: String(pack?.name || fundCode),
+      type: "",
+      company: "",
+      theme: "",
+      establishDate: "",
+      navDate: last ? fmtFundDateMs(last.x) : "",
+      nav: Number.isNaN(nav) ? null : nav,
+      accNav: null,
+      dayChange: parseFundRankPct(last?.equityReturn),
+      buyStatus: "",
+      redeemStatus: "",
+      riskLevel: "",
+      bench: "",
+      scale: null,
+      scaleDate: "",
+      comment: ""
+    };
+  }
+
+  function mapFundDetailPeriodsFromPingzhong(pack) {
+    const pairs = [
+      { key: "Y", title: "近1月", raw: pack?.syl_1y },
+      { key: "3Y", title: "近3月", raw: pack?.syl_3y },
+      { key: "6Y", title: "近6月", raw: pack?.syl_6y },
+      { key: "1N", title: "近1年", raw: pack?.syl_1n }
+    ];
+    return pairs
+      .map((x) => ({
+        key: x.key,
+        title: x.title,
+        change: parseFundRankPct(x.raw),
+        avg: null,
+        hs300: null,
+        rank: ""
+      }))
+      .filter((x) => x.change != null);
+  }
+
+  function mapFundNavFromPingzhong(trend) {
+    return (Array.isArray(trend) ? trend : [])
+      .map((row) => {
+        const nav = Number(row?.y);
+        return {
+          date: fmtFundDateMs(row?.x),
+          nav: Number.isNaN(nav) ? null : nav,
+          accNav: null,
+          dayChange: parseFundRankPct(row?.equityReturn)
+        };
+      })
+      .filter((x) => x.date && x.nav != null);
+  }
+
+  function mapFundHoldingsFromPingzhong(stockCodesNew) {
+    const list = (Array.isArray(stockCodesNew) ? stockCodesNew : [])
+      .map((sec, i) => {
+        const raw = String(sec || "");
+        const m = raw.match(/^(\d+)\.(\d{6})$/);
+        if (!m) return null;
+        return {
+          rank: i + 1,
+          code: m[2],
+          name: m[2],
+          ratio: null,
+          changeType: "",
+          change: null,
+          market: Number(m[1]),
+          sector: ""
+        };
+      })
+      .filter(Boolean);
+    return { asOf: "", list };
+  }
+
+  function mapFundMobHoldings(pack) {
+    const stocks = pack?.Datas?.fundStocks || pack?.fundStocks || [];
+    const asOf = pack?.Expansion || "";
+    const list = (Array.isArray(stocks) ? stocks : [])
+      .map((row, i) => {
+        const ratio = Number(row.JZBL);
+        const mkt = Number(row.NEWTEXCH);
+        return {
+          rank: i + 1,
+          code: String(row.GPDM || ""),
+          name: String(row.GPJC || row.GPDM || ""),
+          ratio: Number.isNaN(ratio) ? null : round2(ratio),
+          changeType: row.PCTNVCHGTYPE || "",
+          change: parseFundRankPct(row.PCTNVCHG),
+          market: Number.isNaN(mkt) ? null : mkt,
+          sector: row.INDEXNAME || ""
+        };
+      })
+      .filter((x) => x.code);
+    return { asOf: typeof asOf === "string" ? asOf : "", list };
+  }
+
+  function mapFundMobNavHistory(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const nav = Number(row.DWJZ);
+        const accNav = Number(row.LJJZ);
+        return {
+          date: row.FSRQ || "",
+          nav: Number.isNaN(nav) ? null : nav,
+          accNav: Number.isNaN(accNav) ? null : accNav,
+          dayChange: parseFundRankPct(row.JZZZL)
+        };
+      })
+      .filter((x) => x.date && x.nav != null);
+  }
+
+  async function fetchFundMobJson(apiPath, extra) {
+    const deviceid = fundDetailDeviceId();
+    const url =
+      "https://fundmobapi.eastmoney.com/FundMNewApi/" +
+      apiPath +
+      "?" +
+      buildQuery({
+        plat: "Iphone",
+        product: "EFund",
+        version: "6.5.5",
+        AppVersion: "6.5.5",
+        deviceid,
+        MobileKey: deviceid,
+        passportid: "0",
+        OSVersion: "14.3",
+        appType: "ttjj",
+        userId: "",
+        ...extra,
+        _: String(Date.now())
+      });
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!resp.ok) throw new Error(apiPath + " 请求失败（" + resp.status + "）");
+    const json = await resp.json();
+    if (
+      json?.Success === false ||
+      (json?.ErrCode && Number(json.ErrCode) !== 0)
+    ) {
+      throw new Error(
+        json?.ErrMsg || json?.ErrorMessage || apiPath + " 暂不可用"
+      );
+    }
+    return json;
+  }
+
   async function loadFundDetail(code) {
     const raw = String(code || "").trim().replace(/\D/g, "");
     if (!raw) throw new Error("缺少基金代码");
     const fundCode = raw.padStart(6, "0").slice(-6);
-    const url =
-      "/api/fund-detail?" +
-      buildQuery({
-        code: fundCode,
-        navPages: "3",
-        _: String(Date.now())
-      });
-    const resp = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!resp.ok) {
-      let tip = "基金详情加载失败（" + resp.status + "）";
-      try {
-        const errJson = await resp.json();
-        if (errJson?.error) tip = errJson.error;
-      } catch {
-        /* ignore */
-      }
-      if (resp.status === 404) {
-        tip =
-          "未找到详情接口，请用 node serve.mjs 打开本页后再试";
-      }
-      throw new Error(tip);
+    const warnings = [];
+
+    const [dcSettled, pzSettled, holdSettled, ...navSettled] =
+      await Promise.allSettled([
+        fetchFundDcDetailRow(fundCode),
+        loadFundPingzhongPack(fundCode),
+        fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
+        fetchFundMobJson("FundMNHisNetList", {
+          FCODE: fundCode,
+          pageIndex: "1",
+          pageSize: "40"
+        }),
+        fetchFundMobJson("FundMNHisNetList", {
+          FCODE: fundCode,
+          pageIndex: "2",
+          pageSize: "40"
+        }),
+        fetchFundMobJson("FundMNHisNetList", {
+          FCODE: fundCode,
+          pageIndex: "3",
+          pageSize: "40"
+        })
+      ]);
+
+    if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
+      throw new Error(
+        dcSettled.reason?.message ||
+          pzSettled.reason?.message ||
+          "基金详情加载失败"
+      );
     }
-    const json = await resp.json();
-    if (json?.error) throw new Error(json.error);
-    if (!json?.basic) throw new Error("暂无该基金详情");
-    return json;
+
+    const dcRow =
+      dcSettled.status === "fulfilled" ? dcSettled.value : null;
+    const pz =
+      pzSettled.status === "fulfilled" ? pzSettled.value : null;
+
+    const basic = dcRow
+      ? mapFundDetailFromDcRow(dcRow, fundCode)
+      : mapFundDetailFromPingzhong(pz, fundCode);
+    if (pz?.name && (!basic.name || basic.name === fundCode)) {
+      basic.name = pz.name;
+    }
+
+    let periods = dcRow
+      ? mapFundDetailPeriodsFromDc(dcRow)
+      : mapFundDetailPeriodsFromPingzhong(pz);
+    if (!periods.length && pz) {
+      periods = mapFundDetailPeriodsFromPingzhong(pz);
+    }
+
+    let holdings =
+      holdSettled.status === "fulfilled"
+        ? mapFundMobHoldings(holdSettled.value)
+        : mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
+    if (holdSettled.status !== "fulfilled" && !holdings.list.length) {
+      warnings.push("持仓暂不可用");
+    } else if (holdSettled.status !== "fulfilled") {
+      warnings.push("持仓比例暂不可用（接口繁忙）");
+    }
+
+    const navRows = [];
+    for (const settled of navSettled) {
+      if (settled.status !== "fulfilled") continue;
+      navRows.push(...(settled.value?.Datas || []));
+    }
+    let history = mapFundMobNavHistory(navRows);
+    let chart = history.slice().reverse();
+
+    if (!history.length && pz?.trend?.length) {
+      const fromPz = mapFundNavFromPingzhong(pz.trend);
+      chart = fromPz;
+      history = fromPz.slice().reverse().slice(0, 30);
+    } else if (!history.length) {
+      warnings.push("历史净值加载失败");
+    }
+
+    if (dcSettled.status !== "fulfilled") {
+      warnings.push("部分概况改用净值页数据");
+    }
+    if (pzSettled.status !== "fulfilled" && !chart.length) {
+      warnings.push("净值走势加载失败");
+    }
+
+    if (!basic?.name && !basic?.nav) {
+      throw new Error("暂无该基金详情");
+    }
+
+    return {
+      code: fundCode,
+      basic,
+      periods,
+      holdings,
+      history: history.slice(0, 30),
+      chart,
+      warnings: warnings.filter(Boolean)
+    };
   }
 
   global.MarketAPI = {

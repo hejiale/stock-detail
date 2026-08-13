@@ -153,6 +153,7 @@
               ? null
               : Number(q.change);
           if (q?.price != null) item.price = q.price;
+          if (q?.name) item.name = q.name;
         });
         if (openFundDetailModal._detail?.holdings) {
           openFundDetailModal._detail.holdings.list = list;

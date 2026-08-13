@@ -78,9 +78,15 @@
       const wrap = document.getElementById("fundDetailHoldings");
       const asOfEl = document.getElementById("fundDetailHoldAsOf");
       if (asOfEl) {
-        asOfEl.textContent = holdings?.asOf
-          ? `截至 ${holdings.asOf}`
-          : "重仓股披露";
+        const list = holdings?.list || [];
+        const hasRatio = list.some((x) => x.ratio != null);
+        if (holdings?.asOf) {
+          asOfEl.textContent = `截至 ${holdings.asOf}`;
+        } else if (list.length && !hasRatio) {
+          asOfEl.textContent = "占比暂缺（接口繁忙）";
+        } else {
+          asOfEl.textContent = "重仓股披露";
+        }
       }
       if (!wrap) return;
       const list = holdings?.list || [];
@@ -344,10 +350,11 @@
         requestAnimationFrame(() =>
           drawFundDetailChart(openFundDetailModal._chart)
         );
-        const warn = detail.warnings?.length
-          ? detail.warnings.join("；")
-          : "";
-        setStatus("fundDetailStatus", warn);
+        // 有数据后必须关掉全屏 status，否则会盖住三个 Tab 内容
+        setStatus("fundDetailStatus", "");
+        if (detail.warnings?.length && typeof showToast === "function") {
+          showToast(detail.warnings.join("；"));
+        }
         fillFundHoldingDayChanges(
           detail.holdings || { asOf: "", list: [] },
           requestId

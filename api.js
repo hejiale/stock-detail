@@ -2718,22 +2718,47 @@
   function mapFundHoldingsFromPingzhong(stockCodesNew) {
     const list = (Array.isArray(stockCodesNew) ? stockCodesNew : [])
       .map((sec, i) => {
-        const raw = String(sec || "");
-        const m = raw.match(/^(\d+)\.(\d{6})$/);
+        const raw = String(sec || "").trim();
+        const m = raw.match(/^(\d+)\.(\d{1,6})$/);
         if (!m) return null;
+        const market = Number(m[1]);
+        let code = m[2];
+        // A 股补齐 6 位；港股等保持原位数（如 03939）
+        if ((market === 0 || market === 1) && code.length < 6) {
+          code = code.padStart(6, "0");
+        }
         return {
           rank: i + 1,
-          code: m[2],
-          name: m[2],
+          code,
+          name: code,
           ratio: null,
           changeType: "",
           change: null,
-          market: Number(m[1]),
+          market,
           sector: ""
         };
       })
       .filter(Boolean);
     return { asOf: "", list };
+  }
+
+  function withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error((label || "请求") + "超时")),
+        ms
+      );
+      Promise.resolve(promise).then(
+        (v) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
   }
 
   function mapFundMobHoldings(pack) {
@@ -2813,27 +2838,11 @@
     const fundCode = raw.padStart(6, "0").slice(-6);
     const warnings = [];
 
-    const [dcSettled, pzSettled, holdSettled, ...navSettled] =
-      await Promise.allSettled([
-        fetchFundDcDetailRow(fundCode),
-        loadFundPingzhongPack(fundCode),
-        fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
-        fetchFundMobJson("FundMNHisNetList", {
-          FCODE: fundCode,
-          pageIndex: "1",
-          pageSize: "40"
-        }),
-        fetchFundMobJson("FundMNHisNetList", {
-          FCODE: fundCode,
-          pageIndex: "2",
-          pageSize: "40"
-        }),
-        fetchFundMobJson("FundMNHisNetList", {
-          FCODE: fundCode,
-          pageIndex: "3",
-          pageSize: "40"
-        })
-      ]);
+    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码
+    const [dcSettled, pzSettled] = await Promise.allSettled([
+      fetchFundDcDetailRow(fundCode),
+      loadFundPingzhongPack(fundCode)
+    ]);
 
     if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
       throw new Error(
@@ -2862,40 +2871,96 @@
       periods = mapFundDetailPeriodsFromPingzhong(pz);
     }
 
-    let holdings =
-      holdSettled.status === "fulfilled"
-        ? mapFundMobHoldings(holdSettled.value)
-        : mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
-    if (holdSettled.status !== "fulfilled" && !holdings.list.length) {
-      warnings.push("持仓暂不可用");
-    } else if (holdSettled.status !== "fulfilled") {
-      warnings.push("持仓比例暂不可用（接口繁忙）");
-    }
-
-    const navRows = [];
-    for (const settled of navSettled) {
-      if (settled.status !== "fulfilled") continue;
-      navRows.push(...(settled.value?.Datas || []));
-    }
-    let history = mapFundMobNavHistory(navRows);
-    let chart = history.slice().reverse();
-
-    if (!history.length && pz?.trend?.length) {
+    // 净值优先用 pingzhong（不走 App 风控）
+    let chart = [];
+    let history = [];
+    if (pz?.trend?.length) {
       const fromPz = mapFundNavFromPingzhong(pz.trend);
       chart = fromPz;
       history = fromPz.slice().reverse().slice(0, 30);
-    } else if (!history.length) {
-      warnings.push("历史净值加载失败");
     }
 
-    if (dcSettled.status !== "fulfilled") {
-      warnings.push("部分概况改用净值页数据");
+    let holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
+
+    // 2) 短超时尝试 App 接口增强持仓比例 / 累计净值（失败不影响主流程）
+    const mobBoost = await Promise.allSettled([
+      withTimeout(
+        fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
+        4500,
+        "持仓"
+      ),
+      withTimeout(
+        fetchFundMobJson("FundMNHisNetList", {
+          FCODE: fundCode,
+          pageIndex: "1",
+          pageSize: "40"
+        }),
+        4500,
+        "净值"
+      ),
+      withTimeout(
+        fetchFundMobJson("FundMNPeriodIncrease", { FCODE: fundCode }),
+        4500,
+        "阶段涨幅"
+      )
+    ]);
+
+    if (mobBoost[0].status === "fulfilled") {
+      const rich = mapFundMobHoldings(mobBoost[0].value);
+      if (rich.list.length) holdings = rich;
+    } else if (!holdings.list.length) {
+      warnings.push("持仓暂不可用");
     }
+
+    if (mobBoost[1].status === "fulfilled") {
+      const mobHist = mapFundMobNavHistory(mobBoost[1].value?.Datas || []);
+      if (mobHist.length) {
+        // App 净值含累计净值，列表优先用它；走势图仍用 pingzhong 全量更平滑
+        history = mobHist.slice(0, 30);
+        if (!chart.length) chart = mobHist.slice().reverse();
+      }
+    }
+
+    if (mobBoost[2].status === "fulfilled") {
+      const rows = Array.isArray(mobBoost[2].value?.Datas)
+        ? mobBoost[2].value.Datas
+        : [];
+      const titles = {
+        Z: "近1周",
+        Y: "近1月",
+        "3Y": "近3月",
+        "6Y": "近6月",
+        "1N": "近1年",
+        "2Y": "近2年",
+        "3N": "近3年",
+        "5N": "近5年",
+        JN: "今年来",
+        LN: "成立来"
+      };
+      const richPeriods = rows
+        .map((row) => {
+          const key = row.title || "";
+          const title = titles[key] || key;
+          if (!title) return null;
+          return {
+            key,
+            title,
+            change: parseFundRankPct(row.syl),
+            avg: parseFundRankPct(row.avg),
+            hs300: parseFundRankPct(row.hs300),
+            rank: row.rank && row.sc ? `${row.rank}/${row.sc}` : ""
+          };
+        })
+        .filter((x) => x && x.change != null);
+      if (richPeriods.length) periods = richPeriods;
+    }
+
+    if (!history.length) warnings.push("历史净值加载失败");
     if (pzSettled.status !== "fulfilled" && !chart.length) {
       warnings.push("净值走势加载失败");
     }
 
-    if (!basic?.name && !basic?.nav) {
+    if (!basic?.name && basic?.nav == null) {
       throw new Error("暂无该基金详情");
     }
 

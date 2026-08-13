@@ -1309,6 +1309,24 @@ header p {
   font-weight: 700;
 }
 
+.fund-detail-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fund-detail-name-row .name {
+  min-width: 0;
+}
+
+.fund-detail-name-row .btn-add-watch {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
 .board-modal-title .sub {
   margin-top: 4px;
   font-size: 12px;
@@ -2216,6 +2234,10 @@ header p {
   padding: 0 4px;
 }
 
+.fund-rank-card .fund-rank-tabs {
+  padding-top: 8px;
+}
+
 .kr-rank-body {
   position: relative;
   min-height: 220px;
@@ -2256,6 +2278,25 @@ header p {
   grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 0.85fr));
 }
 
+.fund-rank-list .fund-rank-row:hover {
+  background: rgba(22, 119, 255, 0.04);
+}
+
+.watch-fund-head {
+  grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(0, 0.9fr));
+}
+
+.watch-fund-list .watch-fund-row {
+  grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(0, 0.9fr));
+}
+
+.watch-fund-list .watch-fund-row .btn-remove-stock {
+  flex-shrink: 0;
+  margin: 0;
+  width: 22px;
+  height: 22px;
+}
+
 .kr-stock-list .board-price {
   text-align: center;
   justify-self: center;
@@ -2290,19 +2331,22 @@ header p {
   width: 100%;
 }
 
-.kr-stock-list .board-name[data-chart-fund] {
+.kr-stock-list .board-name[data-chart-fund],
+.kr-stock-list .board-name[data-fund-detail] {
   cursor: pointer;
   color: var(--accent);
   transition: opacity 0.15s ease;
 }
 
-.kr-stock-list .board-name[data-chart-fund]:hover {
+.kr-stock-list .board-name[data-chart-fund]:hover,
+.kr-stock-list .board-name[data-fund-detail]:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
   opacity: 0.8;
 }
 
 .kr-stock-list .board-name[data-chart-fund]:focus-visible,
+.kr-stock-list .board-name[data-fund-detail]:focus-visible,
 .kr-stock-list .kr-spark-wrap[data-chart-fund]:focus-visible {
   outline: 2px solid rgba(22, 119, 255, 0.35);
   outline-offset: 2px;

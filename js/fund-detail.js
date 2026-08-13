@@ -238,6 +238,33 @@
       }
     }
 
+    function syncFundDetailAddWatch(code, name) {
+      const btn = document.getElementById("fundDetailAddWatch");
+      if (!btn) return;
+      const fundCode = String(code || "").trim();
+      const labelName = String(name || fundCode || "").trim();
+      btn.setAttribute("data-watch-code", fundCode);
+      btn.dataset.watchCode = fundCode;
+      if (labelName) {
+        btn.setAttribute("data-watch-name", labelName);
+      }
+      const already = !!(
+        fundCode &&
+        typeof focusFundsState !== "undefined" &&
+        focusFundsState.list?.some((item) => item.code === fundCode)
+      );
+      btn.hidden = !fundCode;
+      btn.disabled = false;
+      btn.classList.toggle("is-added", already);
+      btn.title = already ? "已加入自选" : "加入自选";
+      btn.setAttribute(
+        "aria-label",
+        already
+          ? `已加入自选 ${labelName}`
+          : `加入自选 ${labelName}`
+      );
+    }
+
     function fillFundDetailHeader(basic) {
       const nameEl = document.getElementById("fundDetailName");
       const subEl = document.getElementById("fundDetailSub");
@@ -246,6 +273,9 @@
       const dayArrowEl = document.getElementById("fundDetailDayChgArrow");
       const metaEl = document.getElementById("fundDetailMeta");
       if (nameEl) nameEl.textContent = basic?.name || basic?.code || "--";
+      if (basic?.code || basic?.name) {
+        syncFundDetailAddWatch(basic.code, basic.name || basic.code);
+      }
       if (subEl) {
         subEl.textContent = basic?.code
           ? `${basic.code}${basic.type ? " · " + basic.type : ""}`
@@ -278,6 +308,7 @@
 
     function resetFundDetailModal() {
       fillFundDetailHeader(null);
+      syncFundDetailAddWatch("", "");
       renderFundDetailPeriods([]);
       renderFundDetailBasic(null);
       renderFundDetailHoldings({ asOf: "", list: [] });
@@ -303,6 +334,7 @@
       }
       const subEl = document.getElementById("fundDetailSub");
       if (subEl) subEl.textContent = fundCode;
+      syncFundDetailAddWatch(fundCode, presetName || fundCode);
       showModal("fundDetailModal");
       setStatus("fundDetailStatus", "加载基金详情…");
 

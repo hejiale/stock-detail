@@ -1,5 +1,5 @@
 /**
- * 自选个股 / 用户登录（自有后端）
+ * 自选个股 / 自选基金 / 用户登录（自有后端）
  *
  * 引用方式：
  *   <script src="api.js"></script>
@@ -198,6 +198,52 @@
       .filter(Boolean);
   }
 
+  function normalizeFocusFundCode(code) {
+    const raw = String(code || "").trim().replace(/\D/g, "");
+    if (!raw) return "";
+    return raw.padStart(6, "0").slice(-6);
+  }
+
+  /** GET /api/focus-list */
+  async function listFocusFunds() {
+    const json = await watchlistFetch("/api/focus-list");
+    const rows = Array.isArray(json.data) ? json.data : [];
+    const seen = new Set();
+    return rows
+      .map((row) => {
+        const code = normalizeFocusFundCode(row?.code);
+        if (!code || seen.has(code)) return null;
+        seen.add(code);
+        return {
+          code,
+          createdAt: row.created_at || row.createdAt || null
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /** POST /api/focus-list  { code } */
+  async function addFocusFund(code) {
+    const fundCode = normalizeFocusFundCode(code);
+    if (!fundCode) throw new Error("基金代码无效");
+    const json = await watchlistFetch("/api/focus-list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: fundCode })
+    });
+    return { ...(json.data || {}), code: fundCode };
+  }
+
+  /** DELETE /api/focus-list/:code */
+  async function removeFocusFund(code) {
+    const fundCode = normalizeFocusFundCode(code);
+    if (!fundCode) throw new Error("缺少基金代码");
+    await watchlistFetch("/api/focus-list/" + encodeURIComponent(fundCode), {
+      method: "DELETE"
+    });
+    return true;
+  }
+
   /** DELETE /api/stock/deleteStock/:code?userId= */
   async function removeWatchStock(code) {
     const raw = String(code || "").trim();
@@ -303,6 +349,9 @@
     addWatchStock,
     listWatchStocks,
     removeWatchStock,
-    loadWatchQuotes
+    loadWatchQuotes,
+    listFocusFunds,
+    addFocusFund,
+    removeFocusFund
   };
 })(window);

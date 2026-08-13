@@ -31,6 +31,9 @@
       loadHkMarketBreadth,
       loadOpenFundRank,
       loadFundDetail,
+      normalizeFundCode,
+      loadFundQuotes,
+      resolveFund,
       calcPeriodReturns,
       sliceKlinesForRange,
       resolveStock
@@ -41,6 +44,9 @@
       listWatchStocks,
       removeWatchStock,
       loadWatchQuotes,
+      listFocusFunds,
+      addFocusFund,
+      removeFocusFund,
       normalizeWatchType,
       holdingFromWatchType,
       VALID_WATCH_TYPES,
@@ -76,6 +82,7 @@
       { type: 4, label: "韩股", market: "KR", pricePrefix: "₩" }
     ];
     const watchlistState = { type: 1, list: [], trends: null };
+    const focusFundsState = { list: [] };
     const MAIN_TABS = [
       { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
       { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
@@ -86,7 +93,6 @@
       { id: "watchStocks", name: "自选个股", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
     ];
-    const WATCH_FUND_IDS = ["dongfang", "caitong", "huaxia", "guangfa", "jianxin", "huabao", "fuguo"];
     const PAGE_SIZE = 10;
     /** 涨跌榜：默认 10 条，上拉再加载 10，最多 100 */
     const RANK_PAGE_SIZE = 10;
@@ -94,7 +100,6 @@
     const rankLoadMoreObservers = new Map();
     const pageState = {};
     let activeMainTab = "cnSemi";
-    let activeWatchFundId = "dongfang";
     const MODAL_IDS = [
       "chartModal",
       "profileModal",
@@ -201,12 +206,8 @@
       rankLoadMoreObservers.set(id, observer);
     }
 
-    function isWatchFund(fundId) {
-      return WATCH_FUND_IDS.includes(fundId);
-    }
-
     function getActiveFundId() {
-      if (activeMainTab === "funds") return activeWatchFundId;
+      if (activeMainTab === "funds") return "funds";
       if (activeMainTab === "usSemi") return "usSemi";
       if (activeMainTab === "hkStocks") return "hkStocks";
       if (activeMainTab === "jpStocks") return "jpStocks";
@@ -242,6 +243,10 @@
 
     function isWatchTab(id) {
       return id === "watchStocks";
+    }
+
+    function isFocusFundsTab(id) {
+      return id === "funds";
     }
 
     function watchTypeOfFund(fundId) {

@@ -2513,6 +2513,128 @@
     throw lastError || new Error("基金概况加载失败");
   }
 
+  function normalizeFundCode(code) {
+    const raw = String(code || "").trim().replace(/\D/g, "");
+    if (!raw) return "";
+    return raw.padStart(6, "0").slice(-6);
+  }
+
+  function mapFundQuoteFromDcRow(row, fallbackCode) {
+    const code = String(row?.SECURITY_CODE || fallbackCode || "").trim();
+    const nav = Number(row?.PER_NAV);
+    const dateRaw = String(row?.NAV_DATE || "");
+    return {
+      code,
+      name: String(row?.FUND_NAME || code),
+      nav: Number.isNaN(nav) ? null : nav,
+      dayChange: parseFundRankPct(row?.CHANGE),
+      date: dateRaw.slice(0, 10)
+    };
+  }
+
+  async function fetchFundDcRowsByCodes(codes) {
+    const unique = [...new Set((codes || []).map(String).filter(Boolean))];
+    if (!unique.length) return [];
+    const orFilter = unique.map((c) => `SECURITY_CODE="${c}"`).join(" or ");
+    const params = {
+      reportName: "RPT_FUND_RANK",
+      columns:
+        "SECURITY_CODE,FUND_NAME,PER_NAV,CHANGE,NAV_DATE,FUND_TYPE,OPERATE_MODE",
+      filter: `(${orFilter})(FUND_TYPE<>"全部")`,
+      pageNumber: "1",
+      pageSize: String(Math.min(100, Math.max(unique.length * 3, unique.length))),
+      source: "WEB",
+      client: "WEB",
+      _: String(Date.now())
+    };
+    const qs = buildQuery(params);
+    let lastError = null;
+    for (let i = 0; i < FUND_RANK_DC_HOSTS.length; i++) {
+      try {
+        const resp = await fetch(FUND_RANK_DC_HOSTS[i] + "?" + qs, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("基金行情请求失败（" + resp.status + "）");
+          continue;
+        }
+        const json = await resp.json();
+        if (!json?.success) {
+          lastError = new Error(json?.message || "基金行情暂不可用");
+          continue;
+        }
+        return Array.isArray(json?.result?.data) ? json.result.data : [];
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("基金行情加载失败");
+  }
+
+  async function loadFundQuotes(codes) {
+    const list = [
+      ...new Set(
+        (codes || [])
+          .map(normalizeFundCode)
+          .filter((c) => /^\d{6}$/.test(c))
+      )
+    ];
+    const quotes = {};
+    if (!list.length) return quotes;
+
+    const chunkSize = 20;
+    for (let i = 0; i < list.length; i += chunkSize) {
+      const chunk = list.slice(i, i + chunkSize);
+      try {
+        const rows = await fetchFundDcRowsByCodes(chunk);
+        const seen = new Set();
+        rows.forEach((row) => {
+          const q = mapFundQuoteFromDcRow(row);
+          if (!q.code || seen.has(q.code)) return;
+          seen.add(q.code);
+          quotes[q.code] = q;
+        });
+      } catch {
+        await Promise.all(
+          chunk.map(async (code) => {
+            try {
+              const row = await fetchFundDcDetailRow(code);
+              quotes[code] = mapFundQuoteFromDcRow(row, code);
+            } catch {
+              quotes[code] = {
+                code,
+                name: code,
+                nav: null,
+                dayChange: null,
+                date: ""
+              };
+            }
+          })
+        );
+      }
+    }
+
+    list.forEach((code) => {
+      if (!quotes[code]) {
+        quotes[code] = {
+          code,
+          name: code,
+          nav: null,
+          dayChange: null,
+          date: ""
+        };
+      }
+    });
+    return quotes;
+  }
+
+  async function resolveFund(code) {
+    const fundCode = normalizeFundCode(code);
+    if (!/^\d{6}$/.test(fundCode)) throw new Error("请输入 6 位基金代码");
+    const row = await fetchFundDcDetailRow(fundCode);
+    return mapFundQuoteFromDcRow(row, fundCode);
+  }
+
   let pingzhongChain = Promise.resolve();
 
   function loadFundPingzhongPack(fundCode, timeoutMs = 12000) {
@@ -2719,14 +2841,46 @@
     const list = (Array.isArray(stockCodesNew) ? stockCodesNew : [])
       .map((sec, i) => {
         const raw = String(sec || "").trim();
-        const m = raw.match(/^(\d+)\.(\d{1,6})$/);
-        if (!m) return null;
-        const market = Number(m[1]);
-        let code = m[2];
-        // A 股补齐 6 位；港股等保持原位数（如 03939）
-        if ((market === 0 || market === 1) && code.length < 6) {
-          code = code.padStart(6, "0");
+        if (!raw) return null;
+
+        let market = null;
+        let code = "";
+        const dotted = raw.match(/^(\d+)\.([A-Za-z0-9]+)$/);
+        if (dotted) {
+          market = Number(dotted[1]);
+          code = dotted[2];
+        } else if (/^\d{6}$/.test(raw)) {
+          // 东财韩股常不带 177. 前缀，如 000660 / 005930
+          market = 177;
+          code = raw;
+        } else if (/^\d{1,4}$/.test(raw) || /^\d{2,4}[A-Za-z][0-9A-Za-z]*$/.test(raw)) {
+          // 东财日股常不带 176. 前缀，如 7203 / 285A
+          market = 176;
+          code = raw;
+        } else if (/^[A-Za-z][A-Za-z0-9._\-]{0,9}$/.test(raw)) {
+          market = 105;
+          code = raw;
+        } else {
+          return null;
         }
+
+        if (market === 105 || market === 106) {
+          code = code.toUpperCase();
+        } else if (market === 176) {
+          code = normalizeJpCode(code);
+        } else if (market === 177) {
+          code = normalizeKrCode(code);
+        } else if (
+          (market === 0 || market === 1) &&
+          /^\d+$/.test(code) &&
+          code.length < 6
+        ) {
+          code = code.padStart(6, "0");
+        } else if (market === 116 && /^\d+$/.test(code) && code.length < 5) {
+          code = code.padStart(5, "0");
+        }
+        if (!code) return null;
+
         return {
           rank: i + 1,
           code,
@@ -2986,6 +3140,9 @@
     loadHkMarketBreadth,
     loadOpenFundRank,
     loadFundDetail,
+    normalizeFundCode,
+    loadFundQuotes,
+    resolveFund,
     resolveStock,
     // 区间计算
     calcPeriodReturns,

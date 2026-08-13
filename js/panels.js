@@ -9,6 +9,10 @@
         await loadFundRankPeriod(fundRankState.period || "month", { force: true });
         return;
       }
+      if (isFocusFundsTab(fundId)) {
+        await loadFocusFunds({ force: true });
+        return;
+      }
       if (isCnTab(fundId)) {
         await loadCnRankKind(cnRankState.kind || "gainers", { force: true });
         return;
@@ -304,13 +308,7 @@
       renderFundPicker();
       const panels = document.getElementById("panels");
       panels.innerHTML = "";
-      const funds = Object.values(window.FUND_HOLDINGS);
       const activeFundId = getActiveFundId();
-      funds.forEach((fund) => {
-        setCurrentPage(fund.id, getCurrentPage(fund.id));
-        panels.appendChild(buildPanelElement(fund, fund.id === activeFundId));
-        updatePagerUI(fund.id);
-      });
       panels.appendChild(buildCnPanelElement(activeFundId === "cnSemi"));
       panels.appendChild(buildUsPanelElement(activeFundId === "usSemi"));
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
@@ -318,5 +316,6 @@
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
+      panels.appendChild(buildFocusFundsPanelElement(activeFundId === "funds"));
       applyAllChangeColors();
     }

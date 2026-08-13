@@ -51,6 +51,36 @@
       detailEl.textContent = parts.join(" ");
     }
 
+    async function addFundToFocusList(rawCode, { refreshList = false, btn = null } = {}) {
+      const raw = String(rawCode || "").trim();
+      if (!raw) {
+        showToast("请输入基金代码");
+        return null;
+      }
+      const fund = await resolveFund(raw);
+      await addFocusFund(fund.code);
+      showToast(`加入成功：${fund.name}（${fund.code}）`);
+      if (refreshList || activeMainTab === "funds") {
+        await loadFocusFunds({ force: true });
+      }
+      if (btn) {
+        btn.classList.add("is-added");
+        btn.title = "已加入自选";
+        btn.setAttribute("aria-label", `已加入自选 ${fund.name || fund.code}`);
+      }
+      document
+        .querySelectorAll(
+          `[data-add-watch="fundRank"][data-watch-code="${fund.code}"]`
+        )
+        .forEach((el) => {
+          if (el === btn) return;
+          el.classList.add("is-added");
+          el.title = "已加入自选";
+          el.setAttribute("aria-label", `已加入自选 ${fund.name || fund.code}`);
+        });
+      return fund;
+    }
+
     async function addStockToWatchlist(rawCode, type, { refreshWatch = false } = {}) {
       if (!ensureLoggedIn()) return null;
       const t = normalizeWatchType(type);
@@ -66,6 +96,39 @@
 
     async function addCustomStock(fundId) {
       if (fundId === "watchStocks") return;
+      if (fundId === "fundRank" || fundId === "funds") {
+        const input = document.querySelector(`[data-add-code="${fundId}"]`);
+        const btn = document.querySelector(`[data-add-stock="${fundId}"]`);
+        const raw = (input?.value || "").trim();
+        if (!raw) {
+          showToast("请输入基金代码");
+          input?.focus();
+          return;
+        }
+        if (btn) {
+          btn.classList.add("is-loading");
+          btn.disabled = true;
+        }
+        try {
+          const fund = await addFundToFocusList(raw, {
+            refreshList: activeMainTab === "funds"
+          });
+          if (!fund) return;
+          if (input) input.value = "";
+        } catch (err) {
+          const msg = String(err?.message || "添加失败");
+          showToast(
+            /已在关注|已在自选|409/.test(msg) ? "该基金已在自选中" : msg
+          );
+        } finally {
+          if (btn) {
+            btn.classList.remove("is-loading");
+            btn.disabled = false;
+          }
+        }
+        return;
+      }
+
       const type = watchTypeOfFund(fundId);
       if (!type || !ADDABLE_FUNDS.has(fundId)) return;
 
@@ -131,12 +194,51 @@
       }
     }
 
+    async function removeFocusListFund(code) {
+      const raw = String(code || "").trim();
+      if (!raw) return;
+      try {
+        await removeFocusFund(raw);
+        showToast("已移除自选基金");
+        await loadFocusFunds({ force: true });
+      } catch (err) {
+        showToast(err.message || "删除失败");
+      }
+    }
+
     async function addWatchFromRow(triggerBtn) {
       const btn = triggerBtn;
       const fundId = btn?.getAttribute("data-add-watch") || "";
       const code = String(
         btn?.getAttribute("data-watch-code") || btn?.dataset?.watchCode || ""
       ).trim();
+
+      if (fundId === "fundRank") {
+        if (!code) {
+          showToast("缺少基金代码，无法加入自选");
+          return;
+        }
+        if (btn?.classList.contains("is-added") || btn?.disabled) return;
+        if (btn) btn.disabled = true;
+        try {
+          const fund = await addFundToFocusList(code, { btn });
+          if (!fund && btn) btn.disabled = false;
+        } catch (err) {
+          const msg = String(err?.message || "添加失败");
+          const dup = /已在关注|已在自选|409/.test(msg);
+          showToast(dup ? "该基金已在自选中" : msg);
+          if (btn) {
+            if (dup) {
+              btn.classList.add("is-added");
+              btn.title = "已加入自选";
+            } else {
+              btn.disabled = false;
+            }
+          }
+        }
+        return;
+      }
+
       const type =
         Number(btn?.getAttribute("data-watch-type") || btn?.dataset?.watchType) ||
         watchTypeOfFund(fundId);
@@ -194,15 +296,7 @@
     function switchTab(tabOrFundId, { forceSync = false } = {}) {
       const prevFundId = getActiveFundId();
 
-      if (isWatchFund(tabOrFundId)) {
-        activeMainTab = "funds";
-        activeWatchFundId = tabOrFundId;
-      } else if (tabOrFundId === "funds") {
-        activeMainTab = "funds";
-        if (!isWatchFund(activeWatchFundId)) {
-          activeWatchFundId = WATCH_FUND_IDS[0];
-        }
-      } else if (tabOrFundId === "usSemi") {
+      if (tabOrFundId === "usSemi") {
         activeMainTab = "usSemi";
       } else if (tabOrFundId === "cnSemi") {
         activeMainTab = "cnSemi";
@@ -216,6 +310,8 @@
         activeMainTab = "fundRank";
       } else if (tabOrFundId === "watchStocks") {
         activeMainTab = "watchStocks";
+      } else if (tabOrFundId === "funds") {
+        activeMainTab = "funds";
       } else {
         activeMainTab = "cnSemi";
       }
@@ -395,7 +491,10 @@
       }
 
       const fundDetailBtn = e.target.closest("[data-fund-detail]");
-      if (fundDetailBtn) {
+      if (
+        fundDetailBtn &&
+        !e.target.closest("[data-add-watch], .btn-add-watch, [data-remove-focus-fund]")
+      ) {
         openFundDetailModal(
           fundDetailBtn.dataset.fundDetail,
           fundDetailBtn.dataset.fundDetailName
@@ -411,6 +510,17 @@
 
       if (e.target.closest("[data-watch-refresh]")) {
         loadWatchlist(watchlistState.type || 1, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-focus-fund-refresh]")) {
+        loadFocusFunds({ force: true });
+        return;
+      }
+
+      const removeFocusFundBtn = e.target.closest("[data-remove-focus-fund]");
+      if (removeFocusFundBtn) {
+        removeFocusListFund(removeFocusFundBtn.dataset.removeFocusFund);
         return;
       }
 
@@ -640,6 +750,16 @@
       if (e.key === "Enter" && e.target.matches?.("[data-add-code]")) {
         e.preventDefault();
         addCustomStock(e.target.dataset.addCode);
+        return;
+      }
+
+      const fundDetailName = e.target.closest?.("[data-fund-detail]");
+      if (fundDetailName && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        openFundDetailModal(
+          fundDetailName.dataset.fundDetail,
+          fundDetailName.dataset.fundDetailName
+        );
         return;
       }
 

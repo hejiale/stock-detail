@@ -61,6 +61,21 @@
                 </button>
               </div>
             </div>
+            <div class="add-stock">
+              <div class="add-stock-field">
+                <input
+                  type="text"
+                  class="add-stock-input"
+                  data-add-code="fundRank"
+                  placeholder="输入基金代码，如 017811"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="btn btn-add" type="button" data-add-stock="fundRank" aria-label="添加自选基金" title="添加自选基金">
+                  <img src="assets/add_zixuan.png" alt="添加" />
+                </button>
+              </div>
+            </div>
             <div class="board-tabs kr-rank-tabs fund-rank-tabs">
               ${periodTabs}
             </div>

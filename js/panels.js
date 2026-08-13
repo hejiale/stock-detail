@@ -302,9 +302,8 @@
       if (!tabsEl) return;
       const activeGroup = getMainGroupId(activeMainTab);
       tabsEl.innerHTML = MAIN_TABS.map((tab) => {
-        const iconClass = ["tab-icon", tab.iconClass].filter(Boolean).join(" ");
         const icon = tab.icon
-          ? `<img class="${iconClass}" src="${tab.icon}" alt="" aria-hidden="true" />`
+          ? `<img class="tab-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
           : "";
         return `<button class="tab${
           tab.id === activeGroup ? " active" : ""

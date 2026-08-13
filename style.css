@@ -159,11 +159,6 @@ header p {
   flex-shrink: 0;
 }
 
-.tab-icon-sm {
-  width: 14px;
-  height: 14px;
-}
-
 .tab.active {
   background: var(--card);
   color: var(--accent);

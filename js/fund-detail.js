@@ -11,18 +11,81 @@
       }
     }
 
-    function renderFundDetailPeriods(list) {
+    function pickDefaultFundRange(list) {
+      const keys = (list || []).map((item) => item.key).filter(Boolean);
+      if (keys.includes("LN")) return "LN";
+      return keys[keys.length - 1] || "LN";
+    }
+
+    function fundPeriodStartDate(lastDateStr, key) {
+      const last = String(lastDateStr || "").slice(0, 10);
+      if (!last || key === "LN") return null;
+      const parts = last.split("-").map(Number);
+      if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return null;
+      if (key === "JN") return `${parts[0]}-01-01`;
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (key === "Z") {
+        d.setDate(d.getDate() - 7);
+      } else {
+        const months = { Y: 1, "3Y": 3, "6Y": 6, "1N": 12, "2Y": 24, "3N": 36, "5N": 60 }[key];
+        if (months == null) return null;
+        d.setMonth(d.getMonth() - months);
+      }
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function sliceFundChartPoints(points, key) {
+      const list = Array.isArray(points)
+        ? points.filter((p) => p?.nav != null && p.date)
+        : [];
+      if (!list.length) return [];
+      const target = fundPeriodStartDate(list[list.length - 1].date, key);
+      if (!target) return list.slice();
+      let startIdx = 0;
+      for (let i = 0; i < list.length; i++) {
+        if (String(list[i].date).slice(0, 10) <= target) startIdx = i;
+        else break;
+      }
+      return list.slice(startIdx);
+    }
+
+    function setFundChartRange(range) {
+      const periods = openFundDetailModal._detail?.periods || [];
+      const keys = periods.map((item) => item.key);
+      const next = keys.includes(range) ? range : pickDefaultFundRange(periods);
+      openFundDetailModal._range = next;
+      document.querySelectorAll("[data-fund-range]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.fundRange === next);
+      });
+      const points = sliceFundChartPoints(
+        openFundDetailModal._detail?.chart || [],
+        next
+      );
+      openFundDetailModal._chart = points;
+      requestAnimationFrame(() => drawFundDetailChart(points));
+    }
+
+    function renderFundDetailPeriods(list, activeRange) {
       const wrap = document.getElementById("fundDetailPeriods");
       if (!wrap) return;
       if (!list?.length) {
         wrap.innerHTML = '<div class="fund-detail-empty">暂无阶段涨幅</div>';
         return;
       }
+      const current = activeRange || openFundDetailModal._range || pickDefaultFundRange(list);
       wrap.innerHTML = list
         .map((item) => {
           const tone = toneClass(item.change);
+          const active = item.key === current ? " active" : "";
           return `
-            <div class="fund-period-card">
+            <button
+              class="fund-period-card${active}"
+              type="button"
+              data-fund-range="${item.key}"
+            >
               <div class="fund-period-label">${item.title}</div>
               <div class="fund-period-value ${tone}">${
                 item.change == null ? "--" : formatPctWithArrow(item.change)
@@ -30,7 +93,7 @@
               <div class="fund-period-sub">${
                 item.rank ? `同类 ${item.rank}` : item.hs300 == null ? "" : `沪深300 ${formatPct(item.hs300)}`
               }</div>
-            </div>`;
+            </button>`;
         })
         .join("");
     }
@@ -309,6 +372,7 @@
       renderFundDetailHoldings({ asOf: "", list: [] });
       renderFundDetailHistory([]);
       openFundDetailModal._chart = [];
+      openFundDetailModal._range = "LN";
       drawFundDetailChart([]);
       setFundDetailTab("overview");
     }
@@ -337,9 +401,12 @@
         const detail = await loadFundDetail(fundCode);
         if (requestId !== openFundDetailModal._req) return;
         openFundDetailModal._detail = detail;
-        openFundDetailModal._chart = detail.chart || [];
+        const periods = detail.periods || [];
+        const range = pickDefaultFundRange(periods);
+        openFundDetailModal._range = range;
+        openFundDetailModal._chart = sliceFundChartPoints(detail.chart || [], range);
         fillFundDetailHeader(detail.basic);
-        renderFundDetailPeriods(detail.periods || []);
+        renderFundDetailPeriods(periods, range);
         renderFundDetailBasic(detail.basic);
         renderFundDetailHoldings(detail.holdings || { asOf: "", list: [] });
         renderFundDetailHistory(detail.history || []);

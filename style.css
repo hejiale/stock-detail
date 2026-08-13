@@ -2923,6 +2923,26 @@ header p {
   text-align: center;
 }
 
+button.fund-period-card {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+button.fund-period-card:hover {
+  border-color: #c7d7f5;
+}
+
+.fund-period-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+}
+
 .fund-period-label {
   font-size: 11px;
   color: var(--muted);

@@ -522,6 +522,12 @@
         return;
       }
 
+      const fundRangeBtn = e.target.closest("[data-fund-range]");
+      if (fundRangeBtn) {
+        setFundChartRange(fundRangeBtn.dataset.fundRange);
+        return;
+      }
+
       const fundDetailBtn = e.target.closest("[data-fund-detail]");
       if (
         fundDetailBtn &&

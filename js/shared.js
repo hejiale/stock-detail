@@ -97,16 +97,16 @@
     ];
     const MAIN_TABS = [
       { id: "markets", name: "全球股市", icon: "assets/gupiao.png", children: MARKET_SUB_TABS },
-      { id: "metals", name: "贵金属", icon: "assets/gupiao.png" },
       { id: "fundRank", name: "基金", icon: "assets/jijin.png", iconClass: "tab-icon-sm" },
+      { id: "metals", name: "贵金属", icon: "assets/gupiao.png" },
       { id: "watch", name: "自选", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm", children: WATCH_SUB_TABS }
     ];
     const MARKET_TAB_IDS = MARKET_SUB_TABS.map((t) => t.id);
     const WATCH_TAB_IDS = WATCH_SUB_TABS.map((t) => t.id);
     const PANEL_IDS = new Set([
       ...MARKET_TAB_IDS,
-      "metals",
       "fundRank",
+      "metals",
       ...WATCH_TAB_IDS
     ]);
     const PAGE_SIZE = 10;

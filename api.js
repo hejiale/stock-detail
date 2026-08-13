@@ -2427,8 +2427,8 @@
    * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
    * 浏览器直连：
    *   1) 东财数据中心 RPT_FUND_RANK + pingzhongdata.js（稳，不依赖本地代理）
-   *   2) F10 FundArchivesDatas 重仓占比（script 直连，不走 App 风控）
-   *   3) 可选增强：fundmobapi 较上期/累计净值（有 CORS，偶发风控则跳过）
+   *   2) 数据中心 RPT_MAIN_ORGHOLDDETAIL 重仓占比（CORS *，不走 App / F10 风控）
+   *   3) 可选增强：fundmobapi 累计净值（有 CORS，偶发风控则跳过）
    */
   const FUND_DETAIL_PERIODS = [
     { key: "Z", title: "近1周", field: "CHANGE_7DAYS" },
@@ -2749,160 +2749,109 @@
     );
   }
 
-  function decodeFundHtml(s) {
-    return String(s || "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .trim();
+  function marketFromFundSecuCode(secu) {
+    const s = String(secu || "").toUpperCase();
+    if (s.endsWith(".SH")) return 1;
+    if (s.endsWith(".SZ") || s.endsWith(".BJ")) return 0;
+    if (s.endsWith(".HK")) return 116;
+    return null;
   }
 
-  function parseFundJjccStockTable(tbodyHtml) {
-    const re =
-      /<tr>\s*<td>(\d+)<\/td>\s*<td><a href=['"][^'"]*?(\d+)\.([^'"/]+)['"][^>]*>([^<]+)<\/a><\/td>\s*<td class=['"]tol['"]><a[^>]*>([^<]+)<\/a><\/td>[\s\S]*?<td class=['"]tor['"]>\s*([\d.]+)%/g;
-    const list = [];
-    const matches = String(tbodyHtml || "").matchAll(re);
-    for (const m of matches) {
-      const ratio = Number(m[6]);
-      const code = decodeFundHtml(m[4] || m[3]);
-      if (!code) continue;
-      list.push({
-        rank: Number(m[1]),
-        market: Number(m[2]),
-        code,
-        name: decodeFundHtml(m[5]) || code,
-        ratio: Number.isNaN(ratio) ? null : round2(ratio)
+  function mapFundHoldingsFromOrgHold(rows) {
+    const dated = (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        date: String(row?.REPORT_DATE || "").slice(0, 10),
+        code: String(row?.SECURITY_CODE || "").trim(),
+        name: String(row?.SECURITY_NAME_ABBR || row?.SECURITY_CODE || ""),
+        ratio: parseFundRankPct(row?.NETVALUE_RATIO),
+        market: marketFromFundSecuCode(row?.SECUCODE)
+      }))
+      .filter((x) => x.date && x.code);
+    if (!dated.length) return { asOf: "", list: [] };
+
+    const dates = [];
+    dated.forEach((x) => {
+      if (dates.indexOf(x.date) < 0) dates.push(x.date);
+    });
+    dates.sort();
+    const latest = dates[dates.length - 1];
+    const prev = dates.length > 1 ? dates[dates.length - 2] : "";
+    const prevMap = {};
+    if (prev) {
+      dated.forEach((x) => {
+        if (x.date === prev && x.ratio != null) prevMap[x.code] = x.ratio;
       });
     }
-    return list;
-  }
 
-  function mapFundHoldingsFromJjcc(pack) {
-    const html = String(pack?.content || "");
-    const asOf =
-      (html.match(/截止至：<font class=['"]px12['"]>([^<]+)<\/font>/) ||
-        [])[1] || "";
-    const tbodies = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/g)].map(
-      (x) => x[1]
-    );
-    const current = parseFundJjccStockTable(tbodies[0] || "");
-    const prev = parseFundJjccStockTable(tbodies[1] || "");
-    const prevMap = {};
-    prev.forEach((row) => {
-      if (row.code && row.ratio != null) prevMap[row.code] = row.ratio;
-    });
-    const list = current.map((row) => {
-      const prevRatio = prevMap[row.code];
-      let change = null;
-      let changeType = "";
-      if (row.ratio != null && prevRatio == null && prev.length) {
-        change = row.ratio;
-        changeType = "新增";
-      } else if (row.ratio != null && prevRatio != null) {
-        change = round2(row.ratio - prevRatio);
-        changeType = change > 0 ? "增持" : change < 0 ? "减持" : "";
-      }
-      return {
-        rank: row.rank,
-        code: row.code,
-        name: row.name,
-        ratio: row.ratio,
-        changeType,
-        change,
-        market: Number.isNaN(row.market) ? null : row.market,
-        sector: ""
-      };
-    });
-    return { asOf: String(asOf || "").trim(), list };
-  }
-
-  let jjccChain = Promise.resolve();
-
-  function loadFundJjccPack(fundCode, timeoutMs = 12000) {
-    const run = () =>
-      new Promise((resolve, reject) => {
-        const keys = ["apidata"];
-        const saved = {};
-        keys.forEach((k) => {
-          saved[k] = global[k];
-          try {
-            delete global[k];
-          } catch {
-            global[k] = undefined;
-          }
-        });
-
-        const script = document.createElement("script");
-        script.charset = "utf-8";
-        script.src =
-          "https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code=" +
-          fundCode +
-          "&topline=10&year=&month=&rt=" +
-          Date.now();
-
-        const timer = setTimeout(() => {
-          cleanup(true);
-          reject(new Error("持仓披露加载超时"));
-        }, timeoutMs);
-
-        function restore() {
-          keys.forEach((k) => {
-            if (saved[k] === undefined) {
-              try {
-                delete global[k];
-              } catch {
-                global[k] = undefined;
-              }
-            } else {
-              global[k] = saved[k];
-            }
-          });
+    const list = dated
+      .filter((x) => x.date === latest)
+      .sort((a, b) => (b.ratio || 0) - (a.ratio || 0))
+      .map((row, i) => {
+        const prevRatio = prevMap[row.code];
+        let change = null;
+        let changeType = "";
+        if (row.ratio != null && prev && prevRatio == null) {
+          change = row.ratio;
+          changeType = "新增";
+        } else if (row.ratio != null && prevRatio != null) {
+          change = round2(row.ratio - prevRatio);
+          changeType = change > 0 ? "增持" : change < 0 ? "减持" : "";
         }
-
-        function cleanup(failed) {
-          clearTimeout(timer);
-          script.onload = null;
-          script.onerror = null;
-          script.remove();
-          if (failed) restore();
-        }
-
-        script.onload = () => {
-          try {
-            const raw = global.apidata;
-            if (!raw || raw.content == null) {
-              throw new Error("持仓披露为空");
-            }
-            const pack = {
-              content: String(raw.content || ""),
-              arryear: Array.isArray(raw.arryear) ? raw.arryear.slice() : [],
-              curyear: raw.curyear
-            };
-            restore();
-            cleanup(false);
-            resolve(pack);
-          } catch (err) {
-            cleanup(true);
-            reject(err);
-          }
+        return {
+          rank: i + 1,
+          code: row.code,
+          name: row.name || row.code,
+          ratio: row.ratio,
+          changeType,
+          change,
+          market: row.market,
+          sector: ""
         };
-
-        script.onerror = () => {
-          cleanup(true);
-          reject(new Error("持仓披露脚本加载失败"));
-        };
-
-        document.head.appendChild(script);
       });
+    return { asOf: latest, list };
+  }
 
-    const next = jjccChain.then(run, run);
-    jjccChain = next.then(
-      () => {},
-      () => {}
-    );
-    return next;
+  async function loadFundHoldingsFromDataCenter(fundCode) {
+    const params = {
+      reportName: "RPT_MAIN_ORGHOLDDETAIL",
+      columns:
+        "SECURITY_CODE,SECURITY_NAME_ABBR,SECUCODE,REPORT_DATE,NETVALUE_RATIO,FUND_CODE,HOLDER_CODE",
+      filter: `(FUND_CODE="${fundCode}")`,
+      pageNumber: "1",
+      pageSize: "100",
+      sortColumns: "REPORT_DATE,NETVALUE_RATIO",
+      sortTypes: "-1,-1",
+      source: "WEB",
+      client: "WEB",
+      _: String(Date.now())
+    };
+    const qs = buildQuery(params);
+    let lastError = null;
+    for (let i = 0; i < FUND_RANK_DC_HOSTS.length; i++) {
+      try {
+        const resp = await fetch(FUND_RANK_DC_HOSTS[i] + "?" + qs, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("持仓占比请求失败（" + resp.status + "）");
+          continue;
+        }
+        const json = await resp.json();
+        if (!json?.success) {
+          lastError = new Error(json?.message || "持仓占比暂不可用");
+          continue;
+        }
+        const mapped = mapFundHoldingsFromOrgHold(json?.result?.data);
+        if (!holdingsHasRatio(mapped)) {
+          lastError = new Error("暂无持仓占比");
+          continue;
+        }
+        return mapped;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("持仓占比加载失败");
   }
 
   function withTimeout(promise, ms, label) {
@@ -3001,11 +2950,11 @@
     const fundCode = raw.padStart(6, "0").slice(-6);
     const warnings = [];
 
-    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码 + F10 重仓占比
-    const [dcSettled, pzSettled, jjccSettled] = await Promise.allSettled([
+    // 1) 先直连稳妥源：数据中心概况/持仓占比 + pingzhong 净值
+    const [dcSettled, pzSettled, holdSettled] = await Promise.allSettled([
       fetchFundDcDetailRow(fundCode),
       loadFundPingzhongPack(fundCode),
-      loadFundJjccPack(fundCode)
+      loadFundHoldingsFromDataCenter(fundCode)
     ]);
 
     if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
@@ -3045,9 +2994,8 @@
     }
 
     let holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
-    if (jjccSettled.status === "fulfilled") {
-      const fromJjcc = mapFundHoldingsFromJjcc(jjccSettled.value);
-      if (holdingsHasRatio(fromJjcc)) holdings = fromJjcc;
+    if (holdSettled.status === "fulfilled" && holdingsHasRatio(holdSettled.value)) {
+      holdings = holdSettled.value;
     }
 
     // 2) 短超时直连 App 接口增强较上期 / 累计净值（失败不影响主流程）

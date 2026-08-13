@@ -29,6 +29,7 @@
       loadHkStockRank,
       loadHkIndices,
       loadHkMarketBreadth,
+      loadMetalsQuotes,
       loadOpenFundRank,
       loadFundDetail,
       normalizeFundCode,
@@ -89,6 +90,7 @@
       { id: "hkStocks", name: "港股", icon: "assets/gupiao.png" },
       { id: "jpStocks", name: "日股", icon: "assets/gupiao.png" },
       { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
+      { id: "metals", name: "贵金属", icon: "assets/gupiao.png" },
       { id: "fundRank", name: "基金", icon: "assets/jijin.png", iconClass: "tab-icon-sm" },
       { id: "watchStocks", name: "自选个股", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm" },
       { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
@@ -212,6 +214,7 @@
       if (activeMainTab === "hkStocks") return "hkStocks";
       if (activeMainTab === "jpStocks") return "jpStocks";
       if (activeMainTab === "krStocks") return "krStocks";
+      if (activeMainTab === "metals") return "metals";
       if (activeMainTab === "fundRank") return "fundRank";
       if (activeMainTab === "watchStocks") return "watchStocks";
       return "cnSemi";
@@ -235,6 +238,10 @@
 
     function isHkTab(id) {
       return id === "hkStocks";
+    }
+
+    function isMetalsTab(id) {
+      return id === "metals";
     }
 
     function isFundRankTab(id) {
@@ -415,6 +422,19 @@
       if (abs >= 1000) return n.toFixed(0);
       if (abs >= 100) return n.toFixed(1);
       return n.toFixed(2);
+    }
+
+    /** 贵金属等需要更多小数位的价格 */
+    function formatPrecisePrice(n) {
+      if (n == null || Number.isNaN(Number(n))) return "--";
+      const x = Number(n);
+      const abs = Math.abs(x);
+      if (abs >= 100000) return x.toFixed(0);
+      if (abs >= 10000) return x.toFixed(2);
+      if (abs >= 1000) return x.toFixed(1);
+      if (abs >= 100) return x.toFixed(2);
+      if (abs >= 1) return x.toFixed(3);
+      return x.toFixed(4);
     }
 
     /** 成交量（手）格式化为 万 / 亿 */

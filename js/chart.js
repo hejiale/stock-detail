@@ -14,6 +14,9 @@
       const chgEl = document.getElementById("chartModalChg");
       const arrowEl = document.getElementById("chartModalChgArrow");
       const gridEl = document.getElementById("chartQuoteGrid");
+      const quantEl = document.getElementById("chartQuantBar");
+      const legendEl = document.getElementById("chartLegend");
+      const codeEl = document.getElementById("chartModalCode");
       if (priceEl) {
         priceEl.textContent = "--";
         priceEl.className = "price flat";
@@ -31,6 +34,31 @@
         gridEl.innerHTML = "";
         gridEl.hidden = true;
       }
+      if (quantEl) {
+        quantEl.innerHTML = "";
+        quantEl.hidden = true;
+      }
+      if (legendEl) {
+        legendEl.innerHTML = "";
+        legendEl.hidden = true;
+      }
+      if (codeEl) {
+        codeEl.textContent = "";
+        codeEl.hidden = true;
+      }
+    }
+
+    function isMetalChart(holding) {
+      if (!holding) return false;
+      if (openChartModal._state?.fundId === "metals") return true;
+      return typeof getMarketKind === "function" && getMarketKind(holding) === "METAL";
+    }
+
+    function chartPriceText(n, holding) {
+      if (isMetalChart(holding) && typeof formatPrecisePrice === "function") {
+        return formatPrecisePrice(n);
+      }
+      return formatPrice(n);
     }
 
     function quoteToneVsBase(value, base) {
@@ -62,13 +90,28 @@
       }
 
       const base = quote.preClose;
+      const holding = openChartModal._state?.holding;
       const kind =
         typeof getMarketKind === "function"
-          ? getMarketKind({ code: quote.code, market: openChartModal._state?.holding?.market })
+          ? getMarketKind({ code: quote.code, market: holding?.market })
           : "CN";
+      const metal = kind === "METAL";
       const showLimit = kind === "CN";
+      const px = (v) => chartPriceText(v, holding);
 
-      const cells = [
+      const cells = metal
+        ? [
+            { label: "今开", text: px(quote.open), tone: quoteToneVsBase(quote.open, base) },
+            { label: "最高", text: px(quote.high), tone: quoteToneVsBase(quote.high, base) },
+            { label: "最低", text: px(quote.low), tone: quoteToneVsBase(quote.low, base) },
+            { label: "昨结", text: px(quote.preClose), tone: "flat" },
+            { label: "成交量", text: formatVolume(quote.volume), tone: "flat" },
+            { label: "成交额", text: formatMarketCap(quote.amount), tone: "flat" },
+            { label: "买入", text: px(quote.bid), tone: "flat" },
+            { label: "卖出", text: px(quote.ask), tone: "flat" },
+            { label: "持仓", text: formatVolume(quote.openInterest), tone: "flat" }
+          ].filter((c) => c.text && c.text !== "--" && c.text !== "0")
+        : [
         {
           label: "今开",
           text: formatPrice(quote.open),
@@ -163,7 +206,7 @@
       const arrowEl = document.getElementById("chartModalChgArrow");
 
       if (priceEl) {
-        priceEl.textContent = formatPrice(quote.price);
+        priceEl.textContent = chartPriceText(quote.price, openChartModal._state?.holding);
         priceEl.className = "price " + tone;
       }
       if (chgAmtEl) {
@@ -171,7 +214,14 @@
           chgAmtEl.textContent = "--";
           chgAmtEl.className = "chg-amt flat";
         } else {
-          chgAmtEl.textContent = formatPrice(quote.changeAmt);
+          const holding = openChartModal._state?.holding;
+          if (isMetalChart(holding)) {
+            const absText = chartPriceText(Math.abs(quote.changeAmt), holding);
+            chgAmtEl.textContent =
+              quote.changeAmt > 0 ? "+" + absText : quote.changeAmt < 0 ? "-" + absText : absText;
+          } else {
+            chgAmtEl.textContent = formatPrice(quote.changeAmt);
+          }
           chgAmtEl.className = "chg-amt " + tone;
         }
       }
@@ -204,6 +254,15 @@
       });
     }
 
+    function computeMovingAverage(points, window) {
+      return points.map((_, i) => {
+        if (i < window - 1) return null;
+        let sum = 0;
+        for (let j = i - window + 1; j <= i; j++) sum += points[j].price;
+        return sum / window;
+      });
+    }
+
     function buildRangeSeries(range, state) {
       if (range === "day") {
         if (!state.trend) return null;
@@ -217,7 +276,8 @@
             avg: p.avg,
             volume: p.volume
           })),
-          showAvg: true
+          showAvg: true,
+          maLines: []
         };
       }
 
@@ -233,17 +293,27 @@
         "1y": "近1年"
       };
 
+      const points = sliced.map((k) => ({
+        label: k.date.slice(5),
+        price: k.close,
+        avg: null,
+        volume: k.volume
+      }));
+      const maLines = isMetalChart(state.holding)
+        ? [
+            { key: "MA5", color: "#f59e0b", values: computeMovingAverage(points, 5) },
+            { key: "MA10", color: "#1677ff", values: computeMovingAverage(points, 10) },
+            { key: "MA20", color: "#7c3aed", values: computeMovingAverage(points, 20) }
+          ]
+        : [];
+
       return {
         title: labels[range] || "走势",
         baseline: sliced[0].close,
         baselineLabel: "起点",
-        points: sliced.map((k) => ({
-          label: k.date.slice(5),
-          price: k.close,
-          avg: null,
-          volume: k.volume
-        })),
-        showAvg: false
+        points,
+        showAvg: false,
+        maLines
       };
     }
 
@@ -252,12 +322,12 @@
       dragging: false
     };
 
-    function getChartPlotMetrics(cssW, cssH) {
-      const volH = 48;
-      const volGap = 8;
+    function getChartPlotMetrics(cssW, cssH, { hasVolume = true } = {}) {
+      const volH = hasVolume ? 48 : 0;
+      const volGap = hasVolume ? 8 : 0;
       const timeGap = 4;
       const timeLabelH = 14;
-      const bottomPad = 60;
+      const bottomPad = hasVolume ? 60 : 28;
       const pad = {
         top: 16,
         right: 52,
@@ -268,7 +338,7 @@
       const plotH = cssH - pad.top - pad.bottom - volH - volGap;
       const volTop = pad.top + plotH + volGap;
       const timeY = volTop + volH + timeGap;
-      return { pad, plotW, plotH, volH, volGap, volTop, timeY };
+      return { pad, plotW, plotH, volH, volGap, volTop, timeY, hasVolume };
     }
 
     function clearChartScrub(restoreMeta = true) {
@@ -287,7 +357,8 @@
       const rect = canvas.getBoundingClientRect();
       const cssW = canvas.clientWidth || rect.width || 320;
       const cssH = canvas.clientHeight || rect.height || 280;
-      const { pad, plotW } = getChartPlotMetrics(cssW, cssH);
+      const hasVolume = points.some((p) => (p.volume || 0) > 0);
+      const { pad, plotW } = getChartPlotMetrics(cssW, cssH, { hasVolume });
       const x = clientX - rect.left;
       if (pointsLen === 1) return 0;
       const t = (x - pad.left) / plotW;
@@ -304,7 +375,10 @@
           : null;
       const tone = chg == null ? "flat" : toneClass(chg);
       tip.querySelector(".t-time").textContent = point.label || "--";
-      tip.querySelector(".t-price").textContent = formatPrice(point.price);
+      tip.querySelector(".t-price").textContent = chartPriceText(
+        point.price,
+        openChartModal._state?.holding
+      );
       const pctEl = tip.querySelector(".t-pct");
       pctEl.textContent = chg == null ? "--" : formatPct(chg);
       pctEl.className = "t-pct " + tone;
@@ -394,7 +468,10 @@
 
       bindChartPointer(canvas);
 
-      const { pad, plotW, plotH, volH, volTop, timeY } = getChartPlotMetrics(cssW, cssH);
+      const hasVolume = points.some((p) => (p.volume || 0) > 0);
+      const { pad, plotW, plotH, volH, volTop, timeY } = getChartPlotMetrics(cssW, cssH, {
+        hasVolume
+      });
 
       const prices = points.map((p) => p.price);
       let minP = Math.min(...prices);
@@ -501,19 +578,43 @@
         }
       }
 
-      const barW = Math.max(1, plotW / points.length - 0.5);
-      points.forEach((p, i) => {
-        const h = ((p.volume || 0) / maxVol) * volH;
-        const x = xAt(i) - barW / 2;
-        const y = volTop + volH - h;
-        const up =
-          i === 0
-            ? base == null || p.price >= base
-            : p.price >= points[i - 1].price;
-        ctx.fillStyle = up ? "rgba(230, 69, 69, 0.35)" : "rgba(18, 161, 80, 0.35)";
-        ctx.fillRect(x, y, barW, h);
+      (series.maLines || []).forEach((line) => {
+        let started = false;
+        ctx.beginPath();
+        (line.values || []).forEach((v, i) => {
+          if (v == null) return;
+          const x = xAt(i);
+          const y = yAt(v);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        if (started) {
+          ctx.strokeStyle = line.color;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
       });
 
+      if (hasVolume) {
+        const barW = Math.max(1, plotW / points.length - 0.5);
+        points.forEach((p, i) => {
+          const h = ((p.volume || 0) / maxVol) * volH;
+          const x = xAt(i) - barW / 2;
+          const y = volTop + volH - h;
+          const up =
+            i === 0
+              ? base == null || p.price >= base
+              : p.price >= points[i - 1].price;
+          ctx.fillStyle = up ? "rgba(230, 69, 69, 0.35)" : "rgba(18, 161, 80, 0.35)";
+          ctx.fillRect(x, y, barW, h);
+        });
+      }
+
+      const holding = openChartModal._state?.holding;
       ctx.font = '11px "PingFang SC", "Microsoft YaHei", sans-serif';
       ctx.textBaseline = "middle";
       for (let i = 0; i <= 4; i++) {
@@ -521,7 +622,7 @@
         const y = pad.top + (plotH * i) / 4;
         ctx.fillStyle = "#8a8f98";
         ctx.textAlign = "right";
-        ctx.fillText(formatPrice(price), pad.left - 8, y);
+        ctx.fillText(chartPriceText(price, holding), pad.left - 8, y);
 
         if (base != null) {
           const pct = ((price - base) / base) * 100;
@@ -540,8 +641,10 @@
         ctx.fillText(points[i].label, xAt(i), timeY);
       });
 
-      ctx.textAlign = "left";
-      ctx.fillText("成交量", pad.left, volTop - 2);
+      if (hasVolume) {
+        ctx.textAlign = "left";
+        ctx.fillText("成交量", pad.left, volTop - 2);
+      }
 
       if (activeIndex == null || activeIndex < 0 || activeIndex >= points.length) {
         const tip = document.getElementById("chartCrosshairTip");
@@ -594,14 +697,21 @@
         const chgAmtEl = document.getElementById("chartModalChgAmt");
         const chgEl = document.getElementById("chartModalChg");
         const arrowEl = document.getElementById("chartModalChgArrow");
-        priceEl.textContent = formatPrice(last.price);
+        priceEl.textContent = chartPriceText(last.price, state.holding);
         priceEl.className = "price " + tone;
         if (chgAmtEl) {
           if (chg == null || base == null) {
             chgAmtEl.textContent = "--";
             chgAmtEl.className = "chg-amt flat";
           } else {
-            chgAmtEl.textContent = formatPrice(last.price - base);
+            const delta = last.price - base;
+            if (isMetalChart(state.holding)) {
+              const absText = chartPriceText(Math.abs(delta), state.holding);
+              chgAmtEl.textContent =
+                delta > 0 ? "+" + absText : delta < 0 ? "-" + absText : absText;
+            } else {
+              chgAmtEl.textContent = formatPrice(delta);
+            }
             chgAmtEl.className = "chg-amt " + tone;
           }
         }
@@ -623,6 +733,86 @@
       document.getElementById("chartModalName").textContent = name || "--";
     }
 
+    function renderChartQuantBar(series, state) {
+      const el = document.getElementById("chartQuantBar");
+      if (!el) return;
+      if (!series?.points?.length) {
+        el.innerHTML = "";
+        el.hidden = true;
+        return;
+      }
+      const holding = state?.holding;
+      const prices = series.points.map((p) => p.price);
+      const high = Math.max(...prices);
+      const low = Math.min(...prices);
+      const last = prices[prices.length - 1];
+      const base = series.baseline;
+      const amp =
+        base != null && base !== 0
+          ? ((high - low) / Math.abs(base)) * 100
+          : low !== 0
+            ? ((high - low) / Math.abs(low)) * 100
+            : null;
+      const avg = prices.reduce((s, v) => s + v, 0) / prices.length;
+      const chg =
+        base != null && base !== 0 ? ((last - base) / base) * 100 : null;
+      const items = [
+        { label: "区间高", text: chartPriceText(high, holding), tone: "up" },
+        { label: "区间低", text: chartPriceText(low, holding), tone: "down" },
+        { label: "均价", text: chartPriceText(avg, holding), tone: "flat" },
+        {
+          label: "振幅",
+          text: amp == null ? "--" : formatPct(amp).replace("+", ""),
+          tone: "flat"
+        },
+        {
+          label: series.baselineLabel || "基准涨跌",
+          text: chg == null ? "--" : formatPct(chg),
+          tone: chg == null ? "flat" : toneClass(chg)
+        }
+      ];
+      el.innerHTML = items
+        .map(
+          (c) =>
+            `<span class="q-item"><em>${c.label}</em><b class="${c.tone}">${c.text}</b></span>`
+        )
+        .join("");
+      el.hidden = false;
+    }
+
+    function renderChartLegend(series) {
+      const el = document.getElementById("chartLegend");
+      if (!el) return;
+      const parts = [];
+      if (series?.showAvg) {
+        parts.push(`<span><i style="background:#f59e0b"></i>均价</span>`);
+      }
+      (series?.maLines || []).forEach((line) => {
+        parts.push(`<span><i style="background:${line.color}"></i>${line.key}</span>`);
+      });
+      if (!parts.length) {
+        el.innerHTML = "";
+        el.hidden = true;
+        return;
+      }
+      el.innerHTML = parts.join("");
+      el.hidden = false;
+    }
+
+    function setChartProfileMode(enabled) {
+      const btn = document.getElementById("chartModalNameBtn");
+      if (!btn) return;
+      btn.classList.toggle("is-static", !enabled);
+      btn.disabled = !enabled;
+      if (enabled) {
+        btn.setAttribute("data-open-profile", "");
+        btn.title = "查看个股资料";
+      } else {
+        btn.removeAttribute("data-open-profile");
+        btn.title = "";
+      }
+    }
+
     function renderActiveChart() {
       const state = openChartModal._state;
       if (!state) return;
@@ -634,12 +824,16 @@
       const canvas = document.getElementById("chartCanvas");
       if (!series) {
         openChartModal._lastSeries = null;
+        renderChartQuantBar(null, state);
+        renderChartLegend(null);
         setStatus("chartStatus", state.range === "day" ? "暂无当日分时数据" : "暂无该区间行情");
         return;
       }
       openChartModal._lastSeries = series;
       setStatus("chartStatus", "");
       updateChartMeta(series, state);
+      renderChartQuantBar(series, state);
+      renderChartLegend(series);
       drawIntradayChart(canvas, series, null);
     }
 
@@ -671,6 +865,9 @@
       if (fundId === "krStocks" && typeof getKrRankHolding === "function") {
         return getKrRankHolding(index);
       }
+      if (fundId === "metals" && typeof getMetalsHolding === "function") {
+        return getMetalsHolding(index);
+      }
       if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
         return getWatchHolding(index);
       }
@@ -689,18 +886,29 @@
         holding.name;
       resetChartQuoteUi();
       resetPeriodValues();
+      setChartProfileMode(fundId !== "metals");
+      const codeEl = document.getElementById("chartModalCode");
+      if (codeEl) {
+        codeEl.textContent = holding.code || "";
+        codeEl.hidden = !holding.code;
+      }
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
 
       openChartModal._state = {
         range: "day",
         trend: null,
         history: null,
-        quote: null,
+        quote: holding.quote || null,
         returns: null,
         holding,
         fundId
       };
       openChartModal._lastSeries = null;
+
+      if (holding.quote) {
+        renderQuoteGrid(holding.quote);
+        updateQuoteSummary(holding.quote);
+      }
 
       showModal("chartModal");
       setStatus("chartStatus", "加载分时与区间涨跌幅…");
@@ -713,8 +921,17 @@
 
       if (reqId !== chartRequestId) return;
 
-      const quote =
+      const fetched =
         quoteResult.status === "fulfilled" ? quoteResult.value : null;
+      const quote = fetched
+        ? {
+            ...holding.quote,
+            ...fetched,
+            bid: holding.quote?.bid ?? fetched.bid,
+            ask: holding.quote?.ask ?? fetched.ask,
+            openInterest: holding.quote?.openInterest ?? fetched.openInterest
+          }
+        : holding.quote || null;
 
       const state = {
         range: "day",

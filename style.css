@@ -1155,6 +1155,73 @@ header p {
 .chart-period .value.up { color: var(--up); }
 .chart-period .value.down { color: var(--down); }
 
+.chart-name-btn.is-static {
+  cursor: default;
+  pointer-events: none;
+}
+
+.chart-name-btn.is-static .chart-name-arrow {
+  display: none;
+}
+
+.chart-name-code {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-quant-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 0 4px 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.chart-quant-bar .q-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-quant-bar em {
+  font-style: normal;
+  color: #94a3b8;
+}
+
+.chart-quant-bar b {
+  font-weight: 650;
+  color: #334155;
+}
+
+.chart-quant-bar b.up { color: var(--up); }
+.chart-quant-bar b.down { color: var(--down); }
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 0 4px 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chart-legend i {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  display: inline-block;
+}
+
 .chart-modal-body {
   position: relative;
   padding: 12px 12px 16px;
@@ -2891,5 +2958,78 @@ header p {
   display: block;
   object-fit: contain;
   flex-shrink: 0;
+}
+
+/* 贵金属行情 */
+.metals-tabs .board-tab {
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.metals-list-head {
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 0.88fr));
+}
+
+.metals-list .metals-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  grid-template-columns: unset;
+  padding: 10px 8px 8px;
+}
+
+.metals-row-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.metals-row-btn:hover {
+  background: rgba(22, 119, 255, 0.06);
+}
+
+.metals-row-btn:hover .board-name,
+.metals-row-btn:hover .board-name-arrow {
+  color: #1677ff;
+}
+
+.metals-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 0.88fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.metals-list .metals-row .board-chg {
+  min-width: 0;
+  height: 26px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.metals-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 2px 2px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.metals-stats span {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metals-stats em {
+  font-style: normal;
+  margin-right: 4px;
+  color: #94a3b8;
 }
 

@@ -33,6 +33,10 @@
         await loadHkRankKind(hkRankState.kind || "gainers", { force: true });
         return;
       }
+      if (isMetalsTab(fundId)) {
+        await loadMetalsKind(metalsState.kind || "spotIntl", { force: true });
+        return;
+      }
 
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
       if (!btn) return;
@@ -314,6 +318,7 @@
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
       panels.appendChild(buildJpPanelElement(activeFundId === "jpStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
+      panels.appendChild(buildMetalsPanelElement(activeFundId === "metals"));
       panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
       panels.appendChild(buildFocusFundsPanelElement(activeFundId === "funds"));

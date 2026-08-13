@@ -16,7 +16,8 @@
  *   { name, code, market?, ratio? }
  *   market 为东方财富 secid 前缀：
  *     0=深交所 / 北交所, 1=上交所, 105=纳斯达克, 106=纽交所,
- *     116=港股, 176=日股, 177=韩股
+ *     116=港股, 176=日股, 177=韩股,
+ *     101=国际期货, 113=上期所, 118=上金所, 122=国际现货/货币贵金属
  */
 (function (global) {
   "use strict";
@@ -242,25 +243,25 @@
     return (ex === "sh" ? "1" : "0") + "." + holding.code;
   }
 
-  /** 市场归类：CN / US / HK / JP / KR */
+  /** 市场归类：CN / US / HK / JP / KR / METAL */
   function getMarketKind(holding) {
     const m = Number(holding.market);
     if (m === 105 || m === 106) return "US";
     if (m === 116) return "HK";
     if (m === 176) return "JP";
     if (m === 177) return "KR";
+    if (m === 101 || m === 113 || m === 118 || m === 122) return "METAL";
     if (m === 0 || m === 1) return "CN";
     if (/[A-Za-z]/.test(String(holding.code || ""))) return "US";
     return "CN";
   }
 
-  /** 是否按美股逻辑处理（含字母代码） */
+  /** 是否按美股逻辑处理（含字母代码）；已标明其它市场时不按美股 */
   function isUsHolding(holding) {
-    return (
-      holding.market === 105 ||
-      holding.market === 106 ||
-      /[A-Za-z]/.test(holding.code)
-    );
+    const m = Number(holding.market);
+    if (m === 105 || m === 106) return true;
+    if (holding.market != null && Number.isFinite(m)) return false;
+    return /[A-Za-z]/.test(String(holding.code || ""));
   }
 
   /** 报价 map 的统一 key（美股代码大小写不一致时用） */
@@ -2317,6 +2318,195 @@
   }
 
   /**
+   * 贵金属实时行情（对齐东财黄金页）
+   * kind:
+   *   spotIntl    国际现货 / 货币贵金属（m:122 黄金、白银兑各货币）
+   *   futuresIntl 国际贵金属期货（COMEX 黄金/白银等）
+   *   sge         上海黄金交易所现货
+   *   shfe        上期所沪金 / 沪银
+   */
+  const METAL_QUOTE_FIELDS =
+    "f2,f3,f4,f5,f6,f12,f13,f14,f15,f16,f17,f18,f31,f32,f34";
+
+  const METAL_KIND_META = {
+    spotIntl: {
+      label: "国际现货",
+      sub: "伦敦金/银及货币贵金属 · 盎司计价",
+      fs: "m:122",
+      pz: 50
+    },
+    futuresIntl: {
+      label: "国际期货",
+      sub: "COMEX 黄金/白银 · 美元/盎司",
+      fs: "m:101",
+      pz: 120
+    },
+    sge: {
+      label: "上金所",
+      sub: "上海黄金交易所现货 · 金元/克 · 银元/千克",
+      fs: "m:118",
+      pz: 40
+    },
+    shfe: {
+      label: "沪金沪银",
+      sub: "上期所黄金/白银期货 · 金元/克 · 银元/千克",
+      fs: "m:113",
+      pz: 300
+    }
+  };
+
+  function mapMetalQuoteRow(item) {
+    const code = String(item?.f12 || "").trim();
+    if (!code) return null;
+    return {
+      code,
+      name: String(item.f14 || code),
+      market: item.f13 != null ? Number(item.f13) : null,
+      price: eastNum(item.f2),
+      change: eastNum(item.f3),
+      changeAmt: eastNum(item.f4),
+      high: eastNum(item.f15),
+      low: eastNum(item.f16),
+      open: eastNum(item.f17),
+      preClose: eastNum(item.f18),
+      volume: eastNum(item.f5),
+      amount: eastNum(item.f6),
+      bid: eastNum(item.f31),
+      ask: eastNum(item.f32),
+      openInterest: eastNum(item.f34)
+    };
+  }
+
+  function isIntlMetalFuture(row) {
+    return /^(GC|SI|QO|QI|MGC|PL|PA)/i.test(row.code || "");
+  }
+
+  function isShfePreciousMetal(row) {
+    return /^(au|ag)/i.test(row.code || "");
+  }
+
+  function isSgePreciousMetal(row) {
+    return /金|银|铂|钯/.test(row.name || "");
+  }
+
+  function metalVolumeOf(row) {
+    return row.volume > 0 ? row.volume : 0;
+  }
+
+  function sortMetalRows(kind, list) {
+    const rows = list.slice();
+    if (kind === "spotIntl") {
+      rows.sort((a, b) => {
+        const rank = (row) => {
+          const c = String(row.code || "").toUpperCase();
+          if (c === "XAU") return 0;
+          if (c === "XAG") return 1;
+          if (c.endsWith("XAU")) return 2;
+          if (c.endsWith("XAG")) return 3;
+          return 4;
+        };
+        const d = rank(a) - rank(b);
+        if (d) return d;
+        return (b.change || 0) - (a.change || 0);
+      });
+      return rows;
+    }
+    if (kind === "futuresIntl") {
+      rows.sort((a, b) => {
+        const cont = (row) => (/00Y$/i.test(row.code) ? 0 : 1);
+        const d = cont(a) - cont(b);
+        if (d) return d;
+        return metalVolumeOf(b) - metalVolumeOf(a);
+      });
+      return rows;
+    }
+    if (kind === "shfe") {
+      rows.sort((a, b) => {
+        const rank = (row) => {
+          const c = String(row.code || "").toLowerCase();
+          if (c === "aum" || c === "agm") return 0;
+          if (c === "aus" || c === "ags") return 1;
+          return 2;
+        };
+        const d = rank(a) - rank(b);
+        if (d) return d;
+        return metalVolumeOf(b) - metalVolumeOf(a);
+      });
+      return rows;
+    }
+    rows.sort((a, b) => {
+      const live = (row) => (row.price != null ? 0 : 1);
+      const d = live(a) - live(b);
+      if (d) return d;
+      return metalVolumeOf(b) - metalVolumeOf(a);
+    });
+    return rows;
+  }
+
+  function filterMetalRows(kind, list) {
+    if (kind === "futuresIntl") {
+      return list.filter(
+        (row) => isIntlMetalFuture(row) && (row.price != null || /00Y$/i.test(row.code))
+      );
+    }
+    if (kind === "shfe") {
+      return list.filter(
+        (row) => isShfePreciousMetal(row) && row.price != null
+      );
+    }
+    if (kind === "sge") {
+      return list.filter(isSgePreciousMetal);
+    }
+    return list.filter((row) => row.price != null || row.change != null);
+  }
+
+  const METAL_FALLBACK_SECIDS = {
+    spotIntl: "122.XAU,122.XAG",
+    futuresIntl: "101.GC00Y,101.SI00Y,101.QO00Y,101.QI00Y,101.MGC00Y",
+    shfe: "113.aum,113.agm,113.aus,113.ags",
+    sge: "118.AUTD,118.AGTD,118.AU9999,118.SHAU,118.SHAG"
+  };
+
+  async function loadMetalsQuotesFallback(kind) {
+    const secids = METAL_FALLBACK_SECIDS[kind];
+    if (!secids) return [];
+    const json = await fetchEastUlist(secids, METAL_QUOTE_FIELDS);
+    return sortMetalRows(
+      kind,
+      normalizeEastDiff(json).map(mapMetalQuoteRow).filter(Boolean)
+    );
+  }
+
+  async function loadMetalsQuotes(kind = "spotIntl") {
+    const next = METAL_KIND_META[kind] ? kind : "spotIntl";
+    const meta = METAL_KIND_META[next];
+    const { list, total } = await fetchEastClist({
+      fs: meta.fs,
+      fields: METAL_QUOTE_FIELDS,
+      pn: 1,
+      pz: meta.pz,
+      po: 1,
+      fid: "f3"
+    });
+    const mapped = (list || []).map(mapMetalQuoteRow).filter(Boolean);
+    let rows = sortMetalRows(next, filterMetalRows(next, mapped));
+    if (!rows.length) {
+      try {
+        rows = await loadMetalsQuotesFallback(next);
+      } catch (_) {
+        rows = [];
+      }
+    }
+    return {
+      kind: next,
+      label: meta.label,
+      sub: meta.sub,
+      list: rows,
+      total: total || rows.length
+    };
+  }
+
+  /**
    * 开放式基金阶段涨幅排行
    * period: month=近1月, 3m=近3月, 6m=近6月, 1y=近1年
    *
@@ -3138,6 +3328,7 @@
     loadHkIndices,
     loadHkStockRank,
     loadHkMarketBreadth,
+    loadMetalsQuotes,
     loadOpenFundRank,
     loadFundDetail,
     normalizeFundCode,

@@ -308,6 +308,8 @@
         activeMainTab = "jpStocks";
       } else if (tabOrFundId === "krStocks") {
         activeMainTab = "krStocks";
+      } else if (tabOrFundId === "metals") {
+        activeMainTab = "metals";
       } else if (tabOrFundId === "fundRank") {
         activeMainTab = "fundRank";
       } else if (tabOrFundId === "watchStocks") {
@@ -445,6 +447,17 @@
 
       if (e.target.closest("[data-hk-refresh]")) {
         loadHkRankKind(hkRankState.kind || "gainers", { force: true });
+        return;
+      }
+
+      const metalsKindBtn = e.target.closest("[data-metals-kind]");
+      if (metalsKindBtn) {
+        loadMetalsKind(metalsKindBtn.dataset.metalsKind, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-metals-refresh]")) {
+        loadMetalsKind(metalsState.kind || "spotIntl", { force: true });
         return;
       }
 

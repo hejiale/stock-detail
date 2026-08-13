@@ -87,11 +87,11 @@
     const watchlistState = { type: 1, list: [], trends: null };
     const focusFundsState = { list: [] };
     const MARKET_SUB_TABS = [
-      { id: "cnSemi", name: "A股" },
-      { id: "usSemi", name: "美股" },
-      { id: "hkStocks", name: "港股" },
-      { id: "jpStocks", name: "日股" },
-      { id: "krStocks", name: "韩股" }
+      { id: "cnSemi", name: "A股 CN" },
+      { id: "usSemi", name: "美股 US" },
+      { id: "hkStocks", name: "港股 HK" },
+      { id: "jpStocks", name: "日股 JP" },
+      { id: "krStocks", name: "韩股 KR" }
     ];
     const WATCH_SUB_TABS = [
       { id: "watchStocks", name: "个股", icon: "assets/add_zixuan.png" },

@@ -778,199 +778,15 @@
     return { date: latest, list };
   }
 
-  const EAST_NOTICE_API = "https://np-anotice-stock.eastmoney.com/api/security/ann";
-  const EAST_RESEARCH_API = "https://reportapi.eastmoney.com/report/list";
-
-  let eastJsonpSeq = 0;
-
   /**
-   * 研报/公告接口对非 localhost 的 Origin、Referer 会直接 567，
-   * 浏览器 fetch 表现为 Failed to fetch。用 JSONP 且不带 Referer。
-   */
-  function fetchEastJsonp(url, failMsg, timeoutMs = 12000) {
-    return new Promise((resolve, reject) => {
-      const cbName = "emcb" + Date.now() + "_" + (++eastJsonpSeq);
-      const script = document.createElement("script");
-      const sep = url.indexOf("?") >= 0 ? "&" : "?";
-      let settled = false;
-
-      function finish(err, data) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        script.onload = null;
-        script.onerror = null;
-        script.remove();
-        try {
-          delete global[cbName];
-        } catch {
-          global[cbName] = undefined;
-        }
-        if (err) reject(err);
-        else resolve(data);
-      }
-
-      global[cbName] = function (data) {
-        finish(null, data);
-      };
-
-      const timer = setTimeout(() => {
-        finish(new Error(failMsg || "请求超时"));
-      }, timeoutMs);
-
-      script.charset = "utf-8";
-      script.referrerPolicy = "no-referrer";
-      script.src =
-        url + sep + "cb=" + encodeURIComponent(cbName) + "&_=" + Date.now();
-      script.onerror = () => {
-        finish(new Error(failMsg || "请求失败"));
-      };
-      document.head.appendChild(script);
-    });
-  }
-
-  function researchCodeOf(holding, marketKind) {
-    if (marketKind === "HK") {
-      const digits = String(holding.code || "").replace(/\D/g, "");
-      return digits ? digits.padStart(5, "0") : "";
-    }
-    return String(holding.code || "").toUpperCase();
-  }
-
-  function noticeStockListOf(holding, marketKind) {
-    return researchCodeOf(holding, marketKind);
-  }
-
-  function noticeAnnTypeOf(marketKind) {
-    if (marketKind === "HK") return "H";
-    if (marketKind === "US") return "U";
-    if (marketKind === "CN") return "A";
-    return "";
-  }
-
-  /**
-   * 个股研报（东方财富研报中心，近 3 年）
-   * @returns {Promise<{ total: number, list: Array }>}
-   */
-  async function loadStockResearchReports(holding) {
-    const marketKind = getMarketKind(holding);
-    const code = researchCodeOf(holding, marketKind);
-    if (!code) throw new Error("暂无研报数据");
-
-    const year = new Date().getFullYear();
-    const json = await fetchEastJsonp(
-      EAST_RESEARCH_API +
-        "?" +
-        buildQuery({
-          industryCode: "*",
-          pageSize: "20",
-          industry: "*",
-          rating: "*",
-          ratingChange: "*",
-          beginTime: year - 3 + "-01-01",
-          endTime: year + 1 + "-01-01",
-          pageNo: "1",
-          qType: "0",
-          orgCode: "",
-          code,
-          rcode: "",
-          p: "1",
-          pageNum: "1",
-          pageNumber: "1"
-        }),
-      "研报数据请求失败"
-    );
-
-    const rows = Array.isArray(json?.data) ? json.data : [];
-    const list = rows.map((row) => {
-      const infoCode = String(row.infoCode || "");
-      const encodeUrl = String(row.encodeUrl || "");
-      const url = encodeUrl
-        ? "https://data.eastmoney.com/report/zw_stock.jshtml?encodeUrl=" +
-          encodeURIComponent(encodeUrl)
-        : infoCode
-          ? "https://pdf.dfcfw.com/pdf/H3_" + infoCode + "_1.pdf"
-          : "";
-      return {
-        date: normalizeReportDate(row.publishDate),
-        title: String(row.title || "--"),
-        org: String(row.orgSName || row.orgName || "--"),
-        researcher: String(row.researcher || ""),
-        rating: String(row.emRatingName || row.sRatingName || ""),
-        url
-      };
-    });
-
-    if (!list.length) throw new Error("暂无研报数据");
-    return { total: Number(json.hits) || list.length, list };
-  }
-
-  /**
-   * 公司公告（东方财富公告中心，A/H/美股）
-   * @returns {Promise<{ total: number, list: Array }>}
-   */
-  async function loadStockAnnouncements(holding) {
-    const marketKind = getMarketKind(holding);
-    const annType = noticeAnnTypeOf(marketKind);
-    const stockList = noticeStockListOf(holding, marketKind);
-    if (!annType || !stockList) throw new Error("该市场暂无公告数据");
-
-    const json = await fetchEastJsonp(
-      EAST_NOTICE_API +
-        "?" +
-        buildQuery({
-          sr: "-1",
-          page_size: "20",
-          page_index: "1",
-          ann_type: annType,
-          client_source: "web",
-          stock_list: stockList,
-          f_node: "0",
-          s_node: "0"
-        }),
-      "公告数据请求失败"
-    );
-
-    if (json && json.success === 0) {
-      throw new Error(json.error || "暂无公告数据");
-    }
-
-    const rows = json?.data?.list || [];
-    const list = rows.map((row) => {
-      const artCode = String(row.art_code || "");
-      const title = String(row.title_ch || row.title || "--").trim() || "--";
-      const type = String(row.columns?.[0]?.column_name || "");
-      return {
-        date: normalizeReportDate(row.notice_date || row.display_time),
-        title,
-        type,
-        url: artCode
-          ? "https://data.eastmoney.com/notices/detail/" +
-            encodeURIComponent(stockList) +
-            "/" +
-            encodeURIComponent(artCode) +
-            ".html"
-          : ""
-      };
-    });
-
-    if (!list.length) throw new Error("暂无公告数据");
-    return { total: Number(json?.data?.total_hits) || list.length, list };
-  }
-
-  /**
-   * 个股资料：市值 + 近年营收/利润/负债率 + 十大股东 + 研报/公告
+   * 个股资料：市值 + 近年营收/利润/负债率 + 十大股东
    * @returns {Promise<{
    *   name, code, marketKind, currency, currencyLabel,
    *   marketCap: { total, float },
    *   reports: Array,
    *   holders: { date, list }|null,
-   *   research: { total, list }|null,
-   *   notices: { total, list }|null,
    *   holdersError?: string,
-   *   financeError?: string,
-   *   researchError?: string,
-   *   noticesError?: string
+   *   financeError?: string
    * }>}
    */
   async function loadStockProfile(holding) {
@@ -1007,18 +823,10 @@
         ? loadCnTopHolders(code)
         : Promise.reject(new Error("该市场暂无十大股东数据"));
 
-    const [
-      mcapResult,
-      financeResult,
-      holdersResult,
-      researchResult,
-      noticesResult
-    ] = await Promise.allSettled([
+    const [mcapResult, financeResult, holdersResult] = await Promise.allSettled([
       mcapPromise,
       financePromise,
-      holdersPromise,
-      loadStockResearchReports(holding),
-      loadStockAnnouncements(holding)
+      holdersPromise
     ]);
 
     const mcap =
@@ -1029,10 +837,6 @@
       financeResult.status === "fulfilled" ? financeResult.value : null;
     const holders =
       holdersResult.status === "fulfilled" ? holdersResult.value : null;
-    const research =
-      researchResult.status === "fulfilled" ? researchResult.value : null;
-    const notices =
-      noticesResult.status === "fulfilled" ? noticesResult.value : null;
 
     return {
       name: finance?.name || mcap.name || holding.name || code,
@@ -1048,8 +852,6 @@
       },
       reports: finance?.reports || [],
       holders,
-      research,
-      notices,
       holdersError:
         holdersResult.status === "rejected"
           ? holdersResult.reason?.message || "暂无股东数据"
@@ -1057,14 +859,6 @@
       financeError:
         financeResult.status === "rejected"
           ? financeResult.reason?.message || "暂无财务数据"
-          : null,
-      researchError:
-        researchResult.status === "rejected"
-          ? researchResult.reason?.message || "暂无研报数据"
-          : null,
-      noticesError:
-        noticesResult.status === "rejected"
-          ? noticesResult.reason?.message || "暂无公告数据"
           : null
     };
   }

@@ -30,7 +30,7 @@
     }
 
     function resetProfileSections() {
-      ["finance", "holders", "research", "notices"].forEach((key) => {
+      ["finance", "holders"].forEach((key) => {
         setProfileSectionExpanded(key, true);
       });
     }
@@ -153,76 +153,6 @@
         .join("");
     }
 
-    function researchRatingTone(name) {
-      const s = String(name || "");
-      if (/买入|增持|强烈|推荐|跑赢/.test(s)) return "up";
-      if (/卖出|减持|跑输/.test(s)) return "down";
-      return "flat";
-    }
-
-    function renderProfileNewsList(opts) {
-      const { listElId, emptyElId, items, error, emptyText } = opts;
-      const listEl = document.getElementById(listElId);
-      const emptyEl = document.getElementById(emptyElId);
-      if (!listEl || !emptyEl) return;
-
-      listEl.innerHTML = "";
-      emptyEl.textContent = "";
-
-      const list = items?.list || [];
-      if (!list.length) {
-        emptyEl.textContent = error || emptyText;
-        return;
-      }
-
-      listEl.innerHTML = list
-        .map((item) => {
-          const title = escapeHtml(item.title || "--");
-          const date = escapeHtml(item.date || "");
-          const extra = item.org
-            ? escapeHtml(item.org)
-            : item.type
-              ? escapeHtml(item.type)
-              : "";
-          const extraClass = item.org ? "news-org" : "news-type";
-          const rating = item.rating
-            ? `<span class="profile-rating ${researchRatingTone(item.rating)}">${escapeHtml(item.rating)}</span>`
-            : "";
-          const inner = `
-            <div class="profile-news-title">${title}</div>
-            <div class="profile-news-meta">
-              <span class="news-date">${date}</span>
-              ${extra ? `<span class="${extraClass}">${extra}</span>` : ""}
-              ${rating}
-            </div>`;
-          if (item.url) {
-            return `<a class="profile-news-row" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
-          }
-          return `<div class="profile-news-row">${inner}</div>`;
-        })
-        .join("");
-    }
-
-    function renderProfileResearch(research, researchError) {
-      renderProfileNewsList({
-        listElId: "profileResearch",
-        emptyElId: "profileResearchEmpty",
-        items: research,
-        error: researchError,
-        emptyText: "暂无研报数据"
-      });
-    }
-
-    function renderProfileNotices(notices, noticesError) {
-      renderProfileNewsList({
-        listElId: "profileNotices",
-        emptyElId: "profileNoticesEmpty",
-        items: notices,
-        error: noticesError,
-        emptyText: "暂无公告数据"
-      });
-    }
-
     let profileRequestId = 0;
 
     async function openProfileModal() {
@@ -242,8 +172,6 @@
       const financeHead = document.getElementById("profileListHead");
       if (financeHead) financeHead.hidden = true;
       renderProfileHolders(null, "");
-      renderProfileResearch(null, "加载中…");
-      renderProfileNotices(null, "加载中…");
       document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.profileKind === "all");
       });
@@ -272,8 +200,6 @@
               : "暂无财务数据";
         renderProfileList(profile.reports, "all", financeEmpty);
         renderProfileHolders(profile.holders, profile.holdersError);
-        renderProfileResearch(profile.research, profile.researchError);
-        renderProfileNotices(profile.notices, profile.noticesError);
         setStatus("profileStatus", "");
       } catch (err) {
         if (reqId !== profileRequestId) return;

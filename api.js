@@ -781,10 +781,52 @@
   const EAST_NOTICE_API = "https://np-anotice-stock.eastmoney.com/api/security/ann";
   const EAST_RESEARCH_API = "https://reportapi.eastmoney.com/report/list";
 
-  async function fetchPublicJson(url, failMsg) {
-    const resp = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!resp.ok) throw new Error(failMsg || "请求失败");
-    return resp.json();
+  let eastJsonpSeq = 0;
+
+  /**
+   * 研报/公告接口对非 localhost 的 Origin、Referer 会直接 567，
+   * 浏览器 fetch 表现为 Failed to fetch。用 JSONP 且不带 Referer。
+   */
+  function fetchEastJsonp(url, failMsg, timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      const cbName = "emcb" + Date.now() + "_" + (++eastJsonpSeq);
+      const script = document.createElement("script");
+      const sep = url.indexOf("?") >= 0 ? "&" : "?";
+      let settled = false;
+
+      function finish(err, data) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+        try {
+          delete global[cbName];
+        } catch {
+          global[cbName] = undefined;
+        }
+        if (err) reject(err);
+        else resolve(data);
+      }
+
+      global[cbName] = function (data) {
+        finish(null, data);
+      };
+
+      const timer = setTimeout(() => {
+        finish(new Error(failMsg || "请求超时"));
+      }, timeoutMs);
+
+      script.charset = "utf-8";
+      script.referrerPolicy = "no-referrer";
+      script.src =
+        url + sep + "cb=" + encodeURIComponent(cbName) + "&_=" + Date.now();
+      script.onerror = () => {
+        finish(new Error(failMsg || "请求失败"));
+      };
+      document.head.appendChild(script);
+    });
   }
 
   function researchCodeOf(holding, marketKind) {
@@ -816,7 +858,7 @@
     if (!code) throw new Error("暂无研报数据");
 
     const year = new Date().getFullYear();
-    const json = await fetchPublicJson(
+    const json = await fetchEastJsonp(
       EAST_RESEARCH_API +
         "?" +
         buildQuery({
@@ -873,7 +915,7 @@
     const stockList = noticeStockListOf(holding, marketKind);
     if (!annType || !stockList) throw new Error("该市场暂无公告数据");
 
-    const json = await fetchPublicJson(
+    const json = await fetchEastJsonp(
       EAST_NOTICE_API +
         "?" +
         buildQuery({

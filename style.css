@@ -910,10 +910,12 @@ header p {
 }
 
 .chart-modal-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px 16px 12px;
+  padding: 16px 16px 4px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
 }
@@ -1023,13 +1025,82 @@ header p {
   display: block;
 }
 
+.chart-quote-dock {
+  position: relative;
+  z-index: 6;
+  margin: 0 -16px -4px;
+}
+
+.chart-quote-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.chart-quote-toggle:hover {
+  color: #1677ff;
+}
+
+.chart-quote-toggle-text[data-expanded] {
+  display: none;
+}
+
+.chart-quote-dock.is-open .chart-quote-toggle-text[data-collapsed] {
+  display: none;
+}
+
+.chart-quote-dock.is-open .chart-quote-toggle-text[data-expanded] {
+  display: inline;
+}
+
+.chart-quote-toggle svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.chart-quote-dock.is-open .chart-quote-toggle svg {
+  transform: rotate(180deg);
+}
+
+.chart-quote-float {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 6;
+  padding: 10px 16px 14px;
+  background: #fff;
+  border-bottom: 1px solid #eef1f6;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
+  box-sizing: border-box;
+}
+
+.chart-quote-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgba(15, 23, 42, 0.16);
+}
+
 .chart-quote-grid {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px 8px;
-  padding-top: 10px;
-  border-top: 1px solid #eef1f6;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
 }

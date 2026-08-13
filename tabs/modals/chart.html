@@ -28,8 +28,27 @@
             </button>
           </div>
         </div>
-        <div class="chart-quote-grid" id="chartQuoteGrid" hidden></div>
+        <div class="chart-quote-dock" id="chartQuoteDock" hidden>
+          <button
+            class="chart-quote-toggle"
+            type="button"
+            id="chartQuoteToggle"
+            data-chart-quote-toggle
+            aria-expanded="false"
+            aria-controls="chartQuoteFloat"
+          >
+            <span class="chart-quote-toggle-text" data-collapsed>盘口详情</span>
+            <span class="chart-quote-toggle-text" data-expanded>收起</span>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.4 8 10.2l4.8-4.8 1.1 1.1L8 12.4 2.1 6.5z"/>
+            </svg>
+          </button>
+          <div class="chart-quote-float" id="chartQuoteFloat" hidden>
+            <div class="chart-quote-grid" id="chartQuoteGrid"></div>
+          </div>
+        </div>
       </div>
+      <div class="chart-quote-scrim" id="chartQuoteScrim" data-chart-quote-collapse hidden></div>
       <div class="chart-periods" id="chartPeriods">
         <button class="chart-period active" type="button" data-chart-range="day">
           <span class="label">当日</span>

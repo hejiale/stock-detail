@@ -30,10 +30,10 @@
         chgEl.className = "chg flat";
       }
       if (arrowEl) arrowEl.innerHTML = "";
-      if (gridEl) {
-        gridEl.innerHTML = "";
-        gridEl.hidden = true;
-      }
+      if (gridEl) gridEl.innerHTML = "";
+      setChartQuoteExpanded(false);
+      const dockEl = document.getElementById("chartQuoteDock");
+      if (dockEl) dockEl.hidden = true;
       if (quantEl) {
         quantEl.innerHTML = "";
         quantEl.hidden = true;
@@ -80,12 +80,35 @@
       return n.toFixed(2) + "%";
     }
 
+    function isChartQuoteExpanded() {
+      const btn = document.getElementById("chartQuoteToggle");
+      return btn?.getAttribute("aria-expanded") === "true";
+    }
+
+    function setChartQuoteExpanded(expanded) {
+      const dock = document.getElementById("chartQuoteDock");
+      const btn = document.getElementById("chartQuoteToggle");
+      const floatEl = document.getElementById("chartQuoteFloat");
+      const scrim = document.getElementById("chartQuoteScrim");
+      if (dock) dock.classList.toggle("is-open", !!expanded);
+      if (btn) btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+      if (floatEl) floatEl.hidden = !expanded;
+      if (scrim) scrim.hidden = !expanded;
+    }
+
+    function toggleChartQuoteFloat() {
+      if (document.getElementById("chartQuoteDock")?.hidden) return;
+      setChartQuoteExpanded(!isChartQuoteExpanded());
+    }
+
     function renderQuoteGrid(quote) {
       const gridEl = document.getElementById("chartQuoteGrid");
+      const dockEl = document.getElementById("chartQuoteDock");
       if (!gridEl) return;
       if (!quote) {
         gridEl.innerHTML = "";
-        gridEl.hidden = true;
+        setChartQuoteExpanded(false);
+        if (dockEl) dockEl.hidden = true;
         return;
       }
 
@@ -193,7 +216,7 @@
             </div>`
         )
         .join("");
-      gridEl.hidden = false;
+      if (dockEl) dockEl.hidden = false;
     }
 
     function updateQuoteSummary(quote) {

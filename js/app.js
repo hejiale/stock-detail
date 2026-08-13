@@ -609,6 +609,16 @@
         return;
       }
 
+      if (e.target.closest("[data-chart-quote-toggle]")) {
+        toggleChartQuoteFloat();
+        return;
+      }
+
+      if (e.target.closest("[data-chart-quote-collapse]")) {
+        setChartQuoteExpanded(false);
+        return;
+      }
+
       const rangeBtn = e.target.closest("[data-chart-range]");
       if (rangeBtn) {
         setChartRange(rangeBtn.dataset.chartRange);
@@ -739,7 +749,13 @@
           return;
         }
         const modal = document.getElementById("chartModal");
-        if (modal.classList.contains("show")) closeChartModal();
+        if (modal.classList.contains("show")) {
+          if (isChartQuoteExpanded()) {
+            setChartQuoteExpanded(false);
+            return;
+          }
+          closeChartModal();
+        }
         return;
       }
 

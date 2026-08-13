@@ -442,6 +442,17 @@
         return;
       }
 
+      const bondsKindBtn = e.target.closest("[data-bonds-kind]");
+      if (bondsKindBtn) {
+        loadBondsKind(bondsKindBtn.dataset.bondsKind, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-bonds-refresh]")) {
+        loadBondsKind(bondsState.kind || "treasury", { force: true });
+        return;
+      }
+
       if (e.target.closest("[data-crypto-refresh]")) {
         loadCryptoList({ force: true });
         return;

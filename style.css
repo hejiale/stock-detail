@@ -708,19 +708,20 @@ header p {
   pointer-events: none;
 }
 
-.change-icon img {
+.change-icon .chg-arrow {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain;
 }
 
 .change-field.up .change-icon.up-icon {
   display: block;
+  color: var(--up);
 }
 
 .change-field.down .change-icon.down-icon {
   display: block;
+  color: var(--down);
 }
 
 .pager {
@@ -3122,6 +3123,14 @@ header p {
   font-style: normal;
   margin-right: 4px;
   color: #94a3b8;
+}
+
+.metals-stats .up {
+  color: var(--up);
+}
+
+.metals-stats .down {
+  color: var(--down);
 }
 
 /* 虚拟币行情：复用贵金属列表 + 基金详情弹层 */

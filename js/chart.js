@@ -50,7 +50,8 @@
 
     function isMetalChart(holding) {
       if (!holding) return false;
-      if (openChartModal._state?.fundId === "metals") return true;
+      const fundId = openChartModal._state?.fundId;
+      if (fundId === "metals" || fundId === "bonds") return true;
       return typeof getMarketKind === "function" && getMarketKind(holding) === "METAL";
     }
 
@@ -892,6 +893,9 @@
       if (fundId === "metals" && typeof getMetalsHolding === "function") {
         return getMetalsHolding(index);
       }
+      if (fundId === "bonds" && typeof getBondsHolding === "function") {
+        return getBondsHolding(index);
+      }
       if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
         return getWatchHolding(index);
       }
@@ -910,7 +914,7 @@
         holding.name;
       resetChartQuoteUi();
       resetPeriodValues();
-      setChartProfileMode(fundId !== "metals");
+      setChartProfileMode(fundId !== "metals" && fundId !== "bonds");
       const codeEl = document.getElementById("chartModalCode");
       if (codeEl) {
         codeEl.textContent = holding.code || "";

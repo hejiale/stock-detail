@@ -20,6 +20,7 @@
  *     116=港股, 176=日股, 177=韩股,
  *     101=国际期货, 113=上期所, 118=上金所, 122=国际现货/货币贵金属
  *     CRYPTO=虚拟币（币安 USDT 交易对，code 为 BTC / ETH 等）
+ *     债券：沪/深债与可转债同样用 0/1 市场前缀（代码如 019xxx / 11xxxx / 12xxxx）
  */
 (function (global) {
   "use strict";
@@ -2475,6 +2476,177 @@
   }
 
   /**
+   * 债券 / 固定收益（对齐东财债券行情中心）
+   * kind:
+   *   treasury    国债（含国开/进出/农发等利率债）
+   *   local       地方债
+   *   credit      企业债 / 公司债
+   *   convertible 可转债
+   */
+  const BOND_QUOTE_FIELDS =
+    "f2,f3,f4,f5,f6,f8,f12,f13,f14,f15,f16,f17,f18,f227,f228,f229,f230,f232,f233,f234,f235,f236,f237,f238,f239,f240,f241,f242,f243";
+
+  const BOND_KIND_META = {
+    treasury: {
+      label: "国债",
+      sub: "国债及政策性金融债 · 利率债",
+      fs: ["m:1+b:MK0351,m:0+b:MK0351"],
+      pz: 80
+    },
+    local: {
+      label: "地方债",
+      sub: "地方政府债 · 相对稳健的固收品种",
+      fs: [
+        "m:1+b:MK0404,m:0+b:MK0404",
+        "m:1+b:MK0406,m:0+b:MK0406",
+        "m:1+t:8,m:0+t:8"
+      ],
+      pz: 80
+    },
+    credit: {
+      label: "企业债",
+      sub: "公司债 / 企业债 · 按成交额排序",
+      fs: ["m:1+b:MK0352,m:0+b:MK0352", "m:1+b:MK0353,m:0+b:MK0353"],
+      pz: 80
+    },
+    convertible: {
+      label: "可转债",
+      sub: "沪深可转债 · 含转股溢价与正股",
+      fs: ["b:MK0354"],
+      pz: 60
+    }
+  };
+
+  function formatEastYmd(v) {
+    const s = String(v || "").replace(/\D/g, "");
+    if (s.length !== 8) return null;
+    return s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8);
+  }
+
+  function mapBondQuoteRow(item, kind) {
+    const code = String(item?.f12 || "").trim();
+    if (!code) return null;
+    const name = String(item.f14 || code);
+    const row = {
+      code,
+      name,
+      kind,
+      market: item.f13 != null ? Number(item.f13) : null,
+      price: eastNum(item.f2),
+      change: eastNum(item.f3),
+      changeAmt: eastNum(item.f4),
+      volume: eastNum(item.f5),
+      amount: eastNum(item.f6),
+      turnover: eastNum(item.f8),
+      high: eastNum(item.f15),
+      low: eastNum(item.f16),
+      open: eastNum(item.f17),
+      preClose: eastNum(item.f18)
+    };
+    if (kind === "convertible") {
+      row.bondValue = eastNum(item.f227);
+      row.stockPrice = eastNum(item.f229);
+      row.stockChange = eastNum(item.f230);
+      row.stockCode = String(item.f232 || "").trim() || null;
+      row.stockMarket = item.f233 != null ? Number(item.f233) : null;
+      row.stockName = String(item.f234 || "").trim() || null;
+      row.convertPrice = eastNum(item.f235);
+      row.convertValue = eastNum(item.f236);
+      row.premium = eastNum(item.f237);
+      row.bondPremium = eastNum(item.f238);
+      row.putTrigger = eastNum(item.f239);
+      row.remainSize = eastNum(item.f240);
+      row.redeemPrice = eastNum(item.f241);
+      row.convertStart = formatEastYmd(item.f242);
+      row.listDate = formatEastYmd(item.f243);
+    }
+    return row;
+  }
+
+  function isBondRepoName(name) {
+    return /回购|逆回购|^GC|R-\d|深-\d|沪-\d/.test(String(name || ""));
+  }
+
+  function isPlausibleBondQuote(row, kind) {
+    if (!row || row.price == null) return false;
+    if (isBondRepoName(row.name)) return false;
+    if (kind === "convertible") {
+      return row.price > 0 && row.price < 400;
+    }
+    if (row.price < 50 || row.price > 160) return false;
+    if (row.change != null && Math.abs(row.change) > 12) return false;
+    if (kind === "local") {
+      const n = String(row.name || "");
+      if (/转债|可转|可交/.test(n)) return false;
+      return (
+        /地方债|政府债|专项债|一般债/.test(n) ||
+        /^\d{2}[\u4e00-\u9fa5]{2,8}\d{2,3}$/.test(n) ||
+        /^(13|18|19|20)\d{4}$/.test(row.code)
+      );
+    }
+    return true;
+  }
+
+  function sortBondRows(list) {
+    return list.slice().sort((a, b) => {
+      const live = (row) => (row.price != null ? 0 : 1);
+      const d = live(a) - live(b);
+      if (d) return d;
+      return (b.amount || 0) - (a.amount || 0);
+    });
+  }
+
+  async function fetchBondClistRows(fs, pz) {
+    const { list, total } = await fetchEastClist({
+      fs,
+      fields: BOND_QUOTE_FIELDS,
+      pn: 1,
+      pz,
+      po: 1,
+      fid: "f6"
+    });
+    return { list: list || [], total: total || 0 };
+  }
+
+  async function loadBondsQuotes(kind = "treasury") {
+    const next = BOND_KIND_META[kind] ? kind : "treasury";
+    const meta = BOND_KIND_META[next];
+    let mapped = [];
+    let total = 0;
+    let lastError = null;
+    const fsList = Array.isArray(meta.fs) ? meta.fs : [meta.fs];
+
+    for (let i = 0; i < fsList.length; i++) {
+      try {
+        const result = await fetchBondClistRows(fsList[i], meta.pz);
+        const rows = result.list
+          .map((item) => mapBondQuoteRow(item, next))
+          .filter((row) => isPlausibleBondQuote(row, next));
+        if (rows.length) {
+          mapped = rows;
+          total = result.total;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!mapped.length && lastError) {
+      throw lastError;
+    }
+
+    const rows = sortBondRows(mapped).slice(0, next === "convertible" ? 50 : 40);
+    return {
+      kind: next,
+      label: meta.label,
+      sub: meta.sub,
+      list: rows,
+      total: total || rows.length
+    };
+  }
+
+  /**
    * 主流虚拟币（币安 USDT 现货）
    * circulating / maxSupply 为近似流通量，用于估算市值
    */
@@ -3643,6 +3815,7 @@
     loadHkStockRank,
     loadHkMarketBreadth,
     loadMetalsQuotes,
+    loadBondsQuotes,
     loadCryptoQuotes,
     loadCryptoDetail,
     loadOpenFundRank,

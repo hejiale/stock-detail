@@ -120,10 +120,10 @@
 
     function chgArrowHtml(change) {
       if (change > 0) {
-        return '<img class="chg-arrow" src="assets/aesc.png" alt="" aria-hidden="true" />';
+        return '<svg class="chg-arrow" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 1.2 9.3 8.8H.7z"/></svg>';
       }
       if (change < 0) {
-        return '<img class="chg-arrow" src="assets/desc.png" alt="" aria-hidden="true" />';
+        return '<svg class="chg-arrow" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 8.8.7 1.2h8.6z"/></svg>';
       }
       return "";
     }

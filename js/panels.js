@@ -33,6 +33,10 @@
         await loadHkRankKind(hkRankState.kind || "gainers", { force: true });
         return;
       }
+      if (isBondsTab(fundId)) {
+        await loadBondsKind(bondsState.kind || "treasury", { force: true });
+        return;
+      }
       if (isMetalsTab(fundId)) {
         await loadMetalsKind(metalsState.kind || "spotIntl", { force: true });
         return;
@@ -216,12 +220,8 @@
                   data-index="${i}"
                   data-raw="${fundSaved[i] ?? ""}"
                 >${formatChangeDisplay(fundSaved[i])}</span>
-                <span class="change-icon up-icon" aria-hidden="true">
-                  <img src="assets/aesc.png" alt="" />
-                </span>
-                <span class="change-icon down-icon" aria-hidden="true">
-                  <img src="assets/desc.png" alt="" />
-                </span>
+                <span class="change-icon up-icon" aria-hidden="true">${chgArrowHtml(1)}</span>
+                <span class="change-icon down-icon" aria-hidden="true">${chgArrowHtml(-1)}</span>
               </div>
             </div>`;
         })
@@ -322,6 +322,7 @@
       panels.appendChild(buildHkPanelElement(activeFundId === "hkStocks"));
       panels.appendChild(buildJpPanelElement(activeFundId === "jpStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
+      panels.appendChild(buildBondsPanelElement(activeFundId === "bonds"));
       panels.appendChild(buildMetalsPanelElement(activeFundId === "metals"));
       panels.appendChild(buildCryptoPanelElement(activeFundId === "crypto"));
       panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));

@@ -895,7 +895,7 @@
       if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
         return getWatchHolding(index);
       }
-      return window.FUND_HOLDINGS[fundId]?.holdings?.[index] || null;
+      return window.FUND_HOLDINGS?.[fundId]?.holdings?.[index] || null;
     }
 
     async function openChartModal(fundId, index) {

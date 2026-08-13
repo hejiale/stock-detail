@@ -284,7 +284,7 @@
 
     /** 仅重建某个基金面板（自选增删用） */
     function renderFundPanel(fundId) {
-      const fund = window.FUND_HOLDINGS[fundId];
+      const fund = window.FUND_HOLDINGS?.[fundId];
       if (!fund) return;
       const panels = document.getElementById("panels");
       const old = document.querySelector(`[data-panel="${fundId}"]`);

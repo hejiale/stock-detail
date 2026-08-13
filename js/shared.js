@@ -15,7 +15,6 @@
       loadCnIndexMonthGainers,
       resolveCnIndexBoard,
       loadUsIndices,
-      listUsFamousSectors,
       loadUsFamousSectorStats,
       loadUsSectorStocks,
       loadUsStockRank,
@@ -34,7 +33,6 @@
       loadCryptoDetail,
       loadOpenFundRank,
       loadFundDetail,
-      normalizeFundCode,
       loadFundQuotes,
       resolveFund,
       calcPeriodReturns,
@@ -347,14 +345,19 @@
     }
 
     function setCurrentPage(fundId, page) {
-      const fund = window.FUND_HOLDINGS[fundId];
+      const fund = window.FUND_HOLDINGS?.[fundId];
+      if (!fund) {
+        pageState[fundId] = Math.max(1, page);
+        return;
+      }
       const total = getTotalPages(fund);
       pageState[fundId] = Math.min(Math.max(1, page), total);
     }
 
     /** 当前页持仓切片 */
     function getPageSlice(fundId) {
-      const fund = window.FUND_HOLDINGS[fundId];
+      const fund = window.FUND_HOLDINGS?.[fundId];
+      if (!fund) return { fund: null, page: 1, start: 0, holdings: [] };
       const page = getCurrentPage(fundId);
       const start = (page - 1) * PAGE_SIZE;
       const holdings = fund.holdings.slice(start, start + PAGE_SIZE);

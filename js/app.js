@@ -11,7 +11,7 @@
     }
 
     function calcFund(fundId) {
-      const fund = window.FUND_HOLDINGS[fundId];
+      const fund = window.FUND_HOLDINGS?.[fundId];
       if (!fund) return;
       persistFromDom();
       const saved = loadInputs()[fundId] || {};

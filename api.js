@@ -13,7 +13,7 @@
  *      及 Market_Center 涨跌榜（东财 delay 对 A 股 f3 常为 "-" 时的榜单兜底）
  *   3. 币安 data-api.binance.vision（虚拟币 USDT 行情 / 日 K；失败回退 api.binance.com）
  *
- * holding 约定（与 data.js 一致）：
+ * holding 约定：
  *   { name, code, market?, ratio? }
  *   market 为东方财富 secid 前缀：
  *     0=深交所 / 北交所, 1=上交所, 105=纳斯达克, 106=纽交所,
@@ -1909,33 +1909,6 @@
   }
 
   /**
-   * 美股主要行业板块（11 个大类）
-   * GET {push2}/api/qt/clist/get  fs=m:202+t:2
-   */
-  async function loadUsSectorBoards() {
-    const { list } = await fetchEastClist({
-      fs: "m:202+t:2",
-      fields: "f12,f14,f2,f3"
-    });
-
-    return list
-      .map((item) => {
-        if (!item || item.f14 == null || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const change = Number(item.f3);
-        if (Number.isNaN(change)) return null;
-        return {
-          code: String(item.f12 || ""),
-          name: String(item.f14),
-          change: round2(change)
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.change - a.change);
-  }
-
-  /**
    * 美股行业板块
    * - boards：全市场 GICS，用于外层涨跌家数 / 涨跌幅
    * - stockBoards：东财「知名美股」分类，用于弹框成分股榜（GICS 的 b:USx 无成分列表）
@@ -1972,15 +1945,6 @@
       stockBoards: ["MK0219"]
     }
   ];
-
-  function listUsFamousSectors() {
-    return US_FAMOUS_SECTORS.map((s) => ({
-      code: s.code,
-      name: s.name,
-      boards: s.boards.slice(),
-      stockBoards: (s.stockBoards || s.boards).slice()
-    }));
-  }
 
   function resolveUsFamousSector(codeOrName) {
     const raw = String(codeOrName || "").trim();
@@ -3644,23 +3608,15 @@
   }
 
   global.MarketAPI = {
-    // 工具
     quoteKey,
-    toEastSecId,
-    toSinaSymbol,
-    isUsHolding,
     normalizeCnCode,
     inferCnMarketCandidates,
     normalizeHkCode,
     normalizeJpCode,
     normalizeKrCode,
-    // 请求（东方财富 / 新浪等三方）
     loadQuotes,
-    loadEastMoneyQuotes,
-    loadSinaQuotes,
     loadIntradayTrends,
     loadDailyKlines,
-    loadStockMarketCap,
     loadStockQuoteDetail,
     loadStockProfile,
     getMarketKind,
@@ -3673,9 +3629,6 @@
     loadCnIndexMonthGainers,
     resolveCnIndexBoard,
     loadUsIndices,
-    loadUsSectorBoards,
-    listUsFamousSectors,
-    resolveUsFamousSector,
     loadUsFamousSectorStats,
     loadUsSectorStocks,
     loadUsStockRank,
@@ -3694,11 +3647,9 @@
     loadCryptoDetail,
     loadOpenFundRank,
     loadFundDetail,
-    normalizeFundCode,
     loadFundQuotes,
     resolveFund,
     resolveStock,
-    // 区间计算
     calcPeriodReturns,
     sliceKlinesForRange
   };

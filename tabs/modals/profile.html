@@ -12,33 +12,95 @@
           </svg>
         </button>
       </div>
-      <div class="board-tabs" id="profileTabs">
-        <button class="board-tab active" type="button" data-profile-kind="all">全部</button>
-        <button class="board-tab" type="button" data-profile-kind="annual">年度</button>
-        <button class="board-tab" type="button" data-profile-kind="quarter">季度</button>
-      </div>
-      <div class="profile-list-head">
-        <div>报告期</div>
-        <div style="text-align:right">营收</div>
-        <div style="text-align:right">净利润</div>
-        <div style="text-align:right">负债率</div>
-      </div>
       <div class="board-modal-body profile-body">
-        <div id="profileList"></div>
-        <div class="profile-section" id="profileHoldersSection">
-          <div class="profile-section-head">
-            <div class="profile-section-title">前十大股东</div>
-            <div class="profile-section-sub" id="profileHoldersDate"></div>
+        <div class="profile-section" data-profile-section="finance">
+          <button
+            class="profile-section-toggle"
+            type="button"
+            data-profile-section-toggle="finance"
+            aria-expanded="true"
+            aria-controls="profileFinanceBody"
+          >
+            <span class="profile-section-title">财报</span>
+            <svg class="profile-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="profile-section-body" id="profileFinanceBody">
+            <div class="board-tabs profile-inner-tabs" id="profileTabs">
+              <button class="board-tab active" type="button" data-profile-kind="all">全部</button>
+              <button class="board-tab" type="button" data-profile-kind="annual">年度</button>
+              <button class="board-tab" type="button" data-profile-kind="quarter">季度</button>
+            </div>
+            <div class="profile-list-head" id="profileListHead">
+              <div>报告期</div>
+              <div style="text-align:right">营收</div>
+              <div style="text-align:right">净利润</div>
+              <div style="text-align:right">负债率</div>
+            </div>
+            <div id="profileList"></div>
           </div>
-          <div class="profile-change-summary" id="profileChangeSummary" hidden></div>
-          <div class="profile-holders-head">
-            <div>#</div>
-            <div>股东名称</div>
-            <div style="text-align:right">持股%</div>
-            <div style="text-align:right">加减仓</div>
+        </div>
+        <div class="profile-section" data-profile-section="holders">
+          <button
+            class="profile-section-toggle"
+            type="button"
+            data-profile-section-toggle="holders"
+            aria-expanded="true"
+            aria-controls="profileHoldersBody"
+          >
+            <span class="profile-section-title">前十大股东</span>
+            <svg class="profile-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="profile-section-body" id="profileHoldersBody">
+            <div class="profile-change-summary" id="profileChangeSummary" hidden></div>
+            <div class="profile-holders-head">
+              <div>#</div>
+              <div>股东名称</div>
+              <div style="text-align:right">持股%</div>
+              <div style="text-align:right">加减仓</div>
+            </div>
+            <div id="profileHolders"></div>
+            <div class="profile-holders-empty" id="profileHoldersEmpty"></div>
           </div>
-          <div id="profileHolders"></div>
-          <div class="profile-holders-empty" id="profileHoldersEmpty"></div>
+        </div>
+        <div class="profile-section" data-profile-section="research">
+          <button
+            class="profile-section-toggle"
+            type="button"
+            data-profile-section-toggle="research"
+            aria-expanded="true"
+            aria-controls="profileResearchBody"
+          >
+            <span class="profile-section-title">公司研报</span>
+            <svg class="profile-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="profile-section-body" id="profileResearchBody">
+            <div id="profileResearch"></div>
+            <div class="profile-holders-empty" id="profileResearchEmpty"></div>
+          </div>
+        </div>
+        <div class="profile-section" data-profile-section="notices">
+          <button
+            class="profile-section-toggle"
+            type="button"
+            data-profile-section-toggle="notices"
+            aria-expanded="true"
+            aria-controls="profileNoticesBody"
+          >
+            <span class="profile-section-title">公司公告</span>
+            <svg class="profile-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="profile-section-body" id="profileNoticesBody">
+            <div id="profileNotices"></div>
+            <div class="profile-holders-empty" id="profileNoticesEmpty"></div>
+          </div>
         </div>
         <div class="board-status show" id="profileStatus">加载中…</div>
       </div>

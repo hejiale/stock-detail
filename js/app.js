@@ -593,6 +593,12 @@
         return;
       }
 
+      const profileSectionBtn = e.target.closest("[data-profile-section-toggle]");
+      if (profileSectionBtn) {
+        toggleProfileSection(profileSectionBtn.dataset.profileSectionToggle);
+        return;
+      }
+
       const profileKindBtn = e.target.closest("[data-profile-kind]");
       if (profileKindBtn) {
         setProfileKind(profileKindBtn.dataset.profileKind);

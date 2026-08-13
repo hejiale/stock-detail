@@ -375,7 +375,8 @@
       if (series && canvas) drawIntradayChart(canvas, series, null);
     }
 
-    function pointIndexFromClientX(canvas, clientX, pointsLen) {
+    function pointIndexFromClientX(canvas, clientX, points) {
+      const pointsLen = points?.length || 0;
       if (!pointsLen) return null;
       const rect = canvas.getBoundingClientRect();
       const cssW = canvas.clientWidth || rect.width || 320;
@@ -432,7 +433,7 @@
         // 鼠标悬停即可；触摸需按下后滑动
         if (e.pointerType !== "mouse" && !chartScrub.dragging) return;
         e.preventDefault();
-        const idx = pointIndexFromClientX(canvas, e.clientX, series.points.length);
+        const idx = pointIndexFromClientX(canvas, e.clientX, series.points);
         if (idx == null) return;
         applyChartScrub(idx);
       };
@@ -443,7 +444,7 @@
         chartScrub.dragging = true;
         canvas.setPointerCapture?.(e.pointerId);
         e.preventDefault();
-        const idx = pointIndexFromClientX(canvas, e.clientX, series.points.length);
+        const idx = pointIndexFromClientX(canvas, e.clientX, series.points);
         if (idx != null) applyChartScrub(idx);
       });
 

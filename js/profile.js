@@ -6,15 +6,50 @@
       });
     }
 
-    function renderProfileList(reports, kind) {
+    function escapeHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function setProfileSectionExpanded(key, expanded) {
+      const section = document.querySelector(`[data-profile-section="${key}"]`);
+      const btn = document.querySelector(`[data-profile-section-toggle="${key}"]`);
+      if (!section || !btn) return;
+      section.classList.toggle("is-collapsed", !expanded);
+      btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+
+    function toggleProfileSection(key) {
+      const btn = document.querySelector(`[data-profile-section-toggle="${key}"]`);
+      if (!btn) return;
+      const expanded = btn.getAttribute("aria-expanded") !== "false";
+      setProfileSectionExpanded(key, !expanded);
+    }
+
+    function resetProfileSections() {
+      ["finance", "holders", "research", "notices"].forEach((key) => {
+        setProfileSectionExpanded(key, true);
+      });
+    }
+
+    function renderProfileList(reports, kind, emptyMsg) {
       const wrap = document.getElementById("profileList");
+      const headEl = document.getElementById("profileListHead");
       if (!wrap) return;
       const list = filterReports(reports, kind);
 
       if (!list.length) {
-        wrap.innerHTML = "";
+        wrap.innerHTML = emptyMsg
+          ? `<div class="profile-holders-empty">${escapeHtml(emptyMsg)}</div>`
+          : "";
+        if (headEl) headEl.hidden = true;
         return;
       }
+
+      if (headEl) headEl.hidden = false;
 
       wrap.innerHTML = list
         .map((r) => {
@@ -72,9 +107,9 @@
     function renderProfileHolders(holders, holdersError) {
       const listEl = document.getElementById("profileHolders");
       const emptyEl = document.getElementById("profileHoldersEmpty");
-      const dateEl = document.getElementById("profileHoldersDate");
       const summaryEl = document.getElementById("profileChangeSummary");
-      if (!listEl || !emptyEl || !dateEl || !summaryEl) return;
+      const headEl = document.querySelector(".profile-holders-head");
+      if (!listEl || !emptyEl || !summaryEl) return;
 
       listEl.innerHTML = "";
       emptyEl.textContent = "";
@@ -82,12 +117,12 @@
       summaryEl.innerHTML = "";
 
       if (!holders?.list?.length) {
-        dateEl.textContent = "";
         emptyEl.textContent = holdersError || "暂无股东数据";
+        if (headEl) headEl.hidden = true;
         return;
       }
 
-      dateEl.textContent = holders.date ? `截至 ${holders.date}` : "";
+      if (headEl) headEl.hidden = false;
 
       const counts = { 新进: 0, 增持: 0, 减持: 0, 不变: 0 };
       holders.list.forEach((h) => {
@@ -118,6 +153,76 @@
         .join("");
     }
 
+    function researchRatingTone(name) {
+      const s = String(name || "");
+      if (/买入|增持|强烈|推荐|跑赢/.test(s)) return "up";
+      if (/卖出|减持|跑输/.test(s)) return "down";
+      return "flat";
+    }
+
+    function renderProfileNewsList(opts) {
+      const { listElId, emptyElId, items, error, emptyText } = opts;
+      const listEl = document.getElementById(listElId);
+      const emptyEl = document.getElementById(emptyElId);
+      if (!listEl || !emptyEl) return;
+
+      listEl.innerHTML = "";
+      emptyEl.textContent = "";
+
+      const list = items?.list || [];
+      if (!list.length) {
+        emptyEl.textContent = error || emptyText;
+        return;
+      }
+
+      listEl.innerHTML = list
+        .map((item) => {
+          const title = escapeHtml(item.title || "--");
+          const date = escapeHtml(item.date || "");
+          const extra = item.org
+            ? escapeHtml(item.org)
+            : item.type
+              ? escapeHtml(item.type)
+              : "";
+          const extraClass = item.org ? "news-org" : "news-type";
+          const rating = item.rating
+            ? `<span class="profile-rating ${researchRatingTone(item.rating)}">${escapeHtml(item.rating)}</span>`
+            : "";
+          const inner = `
+            <div class="profile-news-title">${title}</div>
+            <div class="profile-news-meta">
+              <span class="news-date">${date}</span>
+              ${extra ? `<span class="${extraClass}">${extra}</span>` : ""}
+              ${rating}
+            </div>`;
+          if (item.url) {
+            return `<a class="profile-news-row" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+          }
+          return `<div class="profile-news-row">${inner}</div>`;
+        })
+        .join("");
+    }
+
+    function renderProfileResearch(research, researchError) {
+      renderProfileNewsList({
+        listElId: "profileResearch",
+        emptyElId: "profileResearchEmpty",
+        items: research,
+        error: researchError,
+        emptyText: "暂无研报数据"
+      });
+    }
+
+    function renderProfileNotices(notices, noticesError) {
+      renderProfileNewsList({
+        listElId: "profileNotices",
+        emptyElId: "profileNoticesEmpty",
+        items: notices,
+        error: noticesError,
+        emptyText: "暂无公告数据"
+      });
+    }
+
     let profileRequestId = 0;
 
     async function openProfileModal() {
@@ -134,12 +239,17 @@
       document.getElementById("profileModalSub").textContent =
         `代码 ${holding.code} · 加载中…`;
       document.getElementById("profileList").innerHTML = "";
+      const financeHead = document.getElementById("profileListHead");
+      if (financeHead) financeHead.hidden = true;
       renderProfileHolders(null, "");
+      renderProfileResearch(null, "加载中…");
+      renderProfileNotices(null, "加载中…");
       document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.profileKind === "all");
       });
       openProfileModal._kind = "all";
       openProfileModal._data = null;
+      resetProfileSections();
 
       showModal("profileModal");
       setStatus("profileStatus", "加载个股资料…");
@@ -154,19 +264,17 @@
         document.getElementById("profileModalSub").textContent =
           `代码 ${profile.code} · 金额单位：${profile.currencyLabel || "本币"}`;
 
+        const financeEmpty =
+          profile.financeError && !profile.reports?.length
+            ? profile.financeError
+            : profile.reports?.length
+              ? ""
+              : "暂无财务数据";
+        renderProfileList(profile.reports, "all", financeEmpty);
         renderProfileHolders(profile.holders, profile.holdersError);
-
-        if (profile.financeError && !profile.reports?.length) {
-          setStatus("profileStatus", profile.financeError);
-          return;
-        }
-
-        renderProfileList(profile.reports, "all");
-        setStatus("profileStatus", 
-          profile.reports?.length
-            ? ""
-            : profile.financeError || "暂无财务数据"
-        );
+        renderProfileResearch(profile.research, profile.researchError);
+        renderProfileNotices(profile.notices, profile.noticesError);
+        setStatus("profileStatus", "");
       } catch (err) {
         if (reqId !== profileRequestId) return;
         setStatus("profileStatus", err.message || "加载失败");
@@ -181,8 +289,11 @@
       const data = openProfileModal._data;
       if (!data) return;
       const filtered = filterReports(data.reports, kind);
-      renderProfileList(data.reports, kind);
-      setStatus("profileStatus", filtered.length ? "" : "该分类暂无数据");
+      renderProfileList(
+        data.reports,
+        kind,
+        filtered.length ? "" : "该分类暂无数据"
+      );
     }
 
     function closeProfileModal() {
@@ -191,4 +302,3 @@
       hideModal("profileModal");
       setStatus("profileStatus", "");
     }
-

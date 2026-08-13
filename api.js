@@ -2427,7 +2427,8 @@
    * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
    * 浏览器直连：
    *   1) 东财数据中心 RPT_FUND_RANK + pingzhongdata.js（稳，不依赖本地代理）
-   *   2) 可选增强：fundmobapi 持仓 / 历史净值（有 CORS，偶发风控则跳过）
+   *   2) F10 FundArchivesDatas 重仓占比（script，不走 App 风控）
+   *   3) 可选增强：本地 /api/fund-detail、fundmobapi（有 CORS，偶发风控则跳过）
    */
   const FUND_DETAIL_PERIODS = [
     { key: "Z", title: "近1周", field: "CHANGE_7DAYS" },
@@ -2742,6 +2743,184 @@
     return { asOf: "", list };
   }
 
+  function holdingsHasRatio(pack) {
+    return (
+      Array.isArray(pack?.list) && pack.list.some((x) => x && x.ratio != null)
+    );
+  }
+
+  function decodeFundHtml(s) {
+    return String(s || "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .trim();
+  }
+
+  function parseFundJjccStockTable(tbodyHtml) {
+    const re =
+      /<tr>\s*<td>(\d+)<\/td>\s*<td><a href=['"][^'"]*?(\d+)\.([^'"/]+)['"][^>]*>([^<]+)<\/a><\/td>\s*<td class=['"]tol['"]><a[^>]*>([^<]+)<\/a><\/td>[\s\S]*?<td class=['"]tor['"]>\s*([\d.]+)%/g;
+    const list = [];
+    const matches = String(tbodyHtml || "").matchAll(re);
+    for (const m of matches) {
+      const ratio = Number(m[6]);
+      const code = decodeFundHtml(m[4] || m[3]);
+      if (!code) continue;
+      list.push({
+        rank: Number(m[1]),
+        market: Number(m[2]),
+        code,
+        name: decodeFundHtml(m[5]) || code,
+        ratio: Number.isNaN(ratio) ? null : round2(ratio)
+      });
+    }
+    return list;
+  }
+
+  function mapFundHoldingsFromJjcc(pack) {
+    const html = String(pack?.content || "");
+    const asOf =
+      (html.match(/截止至：<font class=['"]px12['"]>([^<]+)<\/font>/) ||
+        [])[1] || "";
+    const tbodies = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/g)].map(
+      (x) => x[1]
+    );
+    const current = parseFundJjccStockTable(tbodies[0] || "");
+    const prev = parseFundJjccStockTable(tbodies[1] || "");
+    const prevMap = {};
+    prev.forEach((row) => {
+      if (row.code && row.ratio != null) prevMap[row.code] = row.ratio;
+    });
+    const list = current.map((row) => {
+      const prevRatio = prevMap[row.code];
+      let change = null;
+      let changeType = "";
+      if (row.ratio != null && prevRatio == null && prev.length) {
+        change = row.ratio;
+        changeType = "新增";
+      } else if (row.ratio != null && prevRatio != null) {
+        change = round2(row.ratio - prevRatio);
+        changeType = change > 0 ? "增持" : change < 0 ? "减持" : "";
+      }
+      return {
+        rank: row.rank,
+        code: row.code,
+        name: row.name,
+        ratio: row.ratio,
+        changeType,
+        change,
+        market: Number.isNaN(row.market) ? null : row.market,
+        sector: ""
+      };
+    });
+    return { asOf: String(asOf || "").trim(), list };
+  }
+
+  let jjccChain = Promise.resolve();
+
+  function loadFundJjccPack(fundCode, timeoutMs = 12000) {
+    const run = () =>
+      new Promise((resolve, reject) => {
+        const keys = ["apidata"];
+        const saved = {};
+        keys.forEach((k) => {
+          saved[k] = global[k];
+          try {
+            delete global[k];
+          } catch {
+            global[k] = undefined;
+          }
+        });
+
+        const script = document.createElement("script");
+        script.charset = "utf-8";
+        script.src =
+          "https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code=" +
+          fundCode +
+          "&topline=10&year=&month=&rt=" +
+          Date.now();
+
+        const timer = setTimeout(() => {
+          cleanup(true);
+          reject(new Error("持仓披露加载超时"));
+        }, timeoutMs);
+
+        function restore() {
+          keys.forEach((k) => {
+            if (saved[k] === undefined) {
+              try {
+                delete global[k];
+              } catch {
+                global[k] = undefined;
+              }
+            } else {
+              global[k] = saved[k];
+            }
+          });
+        }
+
+        function cleanup(failed) {
+          clearTimeout(timer);
+          script.onload = null;
+          script.onerror = null;
+          script.remove();
+          if (failed) restore();
+        }
+
+        script.onload = () => {
+          try {
+            const raw = global.apidata;
+            if (!raw || raw.content == null) {
+              throw new Error("持仓披露为空");
+            }
+            const pack = {
+              content: String(raw.content || ""),
+              arryear: Array.isArray(raw.arryear) ? raw.arryear.slice() : [],
+              curyear: raw.curyear
+            };
+            restore();
+            cleanup(false);
+            resolve(pack);
+          } catch (err) {
+            cleanup(true);
+            reject(err);
+          }
+        };
+
+        script.onerror = () => {
+          cleanup(true);
+          reject(new Error("持仓披露脚本加载失败"));
+        };
+
+        document.head.appendChild(script);
+      });
+
+    const next = jjccChain.then(run, run);
+    jjccChain = next.then(
+      () => {},
+      () => {}
+    );
+    return next;
+  }
+
+  async function tryLoadFundDetailProxy(fundCode) {
+    const resp = await fetch(
+      "/api/fund-detail?" +
+        buildQuery({
+          code: fundCode,
+          navPages: "1",
+          _: String(Date.now())
+        }),
+      { headers: { Accept: "application/json" } }
+    );
+    if (!resp.ok) throw new Error("详情代理不可用");
+    const json = await resp.json();
+    if (!json || json.error) throw new Error(json?.error || "详情代理无数据");
+    return json;
+  }
+
   function withTimeout(promise, ms, label) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
@@ -2838,10 +3017,11 @@
     const fundCode = raw.padStart(6, "0").slice(-6);
     const warnings = [];
 
-    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码
-    const [dcSettled, pzSettled] = await Promise.allSettled([
+    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码 + F10 重仓占比
+    const [dcSettled, pzSettled, jjccSettled] = await Promise.allSettled([
       fetchFundDcDetailRow(fundCode),
-      loadFundPingzhongPack(fundCode)
+      loadFundPingzhongPack(fundCode),
+      loadFundJjccPack(fundCode)
     ]);
 
     if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
@@ -2881,14 +3061,21 @@
     }
 
     let holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
+    if (jjccSettled.status === "fulfilled") {
+      const fromJjcc = mapFundHoldingsFromJjcc(jjccSettled.value);
+      if (holdingsHasRatio(fromJjcc)) holdings = fromJjcc;
+    }
 
-    // 2) 短超时尝试 App 接口增强持仓比例 / 累计净值（失败不影响主流程）
+    // 2) 短超时尝试 App / 本地代理增强持仓比例、累计净值（失败不影响主流程）
+    const needHoldingsBoost = !holdingsHasRatio(holdings);
     const mobBoost = await Promise.allSettled([
-      withTimeout(
-        fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
-        4500,
-        "持仓"
-      ),
+      needHoldingsBoost
+        ? withTimeout(
+            fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
+            4500,
+            "持仓"
+          )
+        : Promise.resolve(null),
       withTimeout(
         fetchFundMobJson("FundMNHisNetList", {
           FCODE: fundCode,
@@ -2902,14 +3089,23 @@
         fetchFundMobJson("FundMNPeriodIncrease", { FCODE: fundCode }),
         4500,
         "阶段涨幅"
-      )
+      ),
+      needHoldingsBoost
+        ? withTimeout(tryLoadFundDetailProxy(fundCode), 4500, "详情代理")
+        : Promise.resolve(null)
     ]);
 
-    if (mobBoost[0].status === "fulfilled") {
-      const rich = mapFundMobHoldings(mobBoost[0].value);
-      if (rich.list.length) holdings = rich;
-    } else if (!holdings.list.length) {
-      warnings.push("持仓暂不可用");
+    if (needHoldingsBoost) {
+      const proxied =
+        mobBoost[3].status === "fulfilled" ? mobBoost[3].value : null;
+      if (holdingsHasRatio(proxied?.holdings)) {
+        holdings = proxied.holdings;
+      } else if (mobBoost[0].status === "fulfilled" && mobBoost[0].value) {
+        const rich = mapFundMobHoldings(mobBoost[0].value);
+        if (rich.list.length) holdings = rich;
+      } else if (!holdings.list.length) {
+        warnings.push("持仓暂不可用");
+      }
     }
 
     if (mobBoost[1].status === "fulfilled") {

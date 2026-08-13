@@ -160,124 +160,6 @@ function mapPeriods(rows) {
     .filter((x) => x.title);
 }
 
-function mapHoldings(pack) {
-  const stocks = pack?.Datas?.fundStocks || pack?.fundStocks || [];
-  const asOf = pack?.Expansion || "";
-  const list = (Array.isArray(stocks) ? stocks : [])
-    .map((row, i) => {
-      const ratio = Number(row.JZBL);
-      const mkt = Number(row.NEWTEXCH);
-      return {
-        rank: i + 1,
-        code: String(row.GPDM || ""),
-        name: String(row.GPJC || row.GPDM || ""),
-        ratio: Number.isNaN(ratio) ? null : Math.round(ratio * 100) / 100,
-        changeType: row.PCTNVCHGTYPE || "",
-        change: parseFundPct(row.PCTNVCHG),
-        market: Number.isNaN(mkt) ? null : mkt,
-        sector: row.INDEXNAME || ""
-      };
-    })
-    .filter((x) => x.code);
-  return { asOf: typeof asOf === "string" ? asOf : "", list };
-}
-
-function holdingsHasRatio(pack) {
-  return Array.isArray(pack?.list) && pack.list.some((x) => x && x.ratio != null);
-}
-
-function decodeFundHtml(s) {
-  return String(s || "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .trim();
-}
-
-function parseJjccStockTable(tbodyHtml) {
-  const re =
-    /<tr>\s*<td>(\d+)<\/td>\s*<td><a href=['"][^'"]*?(\d+)\.([^'"/]+)['"][^>]*>([^<]+)<\/a><\/td>\s*<td class=['"]tol['"]><a[^>]*>([^<]+)<\/a><\/td>[\s\S]*?<td class=['"]tor['"]>\s*([\d.]+)%/g;
-  const list = [];
-  for (const m of String(tbodyHtml || "").matchAll(re)) {
-    const ratio = Number(m[6]);
-    const code = decodeFundHtml(m[4] || m[3]);
-    if (!code) continue;
-    list.push({
-      rank: Number(m[1]),
-      market: Number(m[2]),
-      code,
-      name: decodeFundHtml(m[5]) || code,
-      ratio: Number.isNaN(ratio) ? null : Math.round(ratio * 100) / 100
-    });
-  }
-  return list;
-}
-
-function mapHoldingsFromJjcc(pack) {
-  const html = String(pack?.content || "");
-  const asOf =
-    (html.match(/截止至：<font class=['"]px12['"]>([^<]+)<\/font>/) || [])[1] ||
-    "";
-  const tbodies = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/g)].map(
-    (x) => x[1]
-  );
-  const current = parseJjccStockTable(tbodies[0] || "");
-  const prev = parseJjccStockTable(tbodies[1] || "");
-  const prevMap = {};
-  prev.forEach((row) => {
-    if (row.code && row.ratio != null) prevMap[row.code] = row.ratio;
-  });
-  const list = current.map((row) => {
-    const prevRatio = prevMap[row.code];
-    let change = null;
-    let changeType = "";
-    if (row.ratio != null && prevRatio == null && prev.length) {
-      change = row.ratio;
-      changeType = "新增";
-    } else if (row.ratio != null && prevRatio != null) {
-      change = Math.round((row.ratio - prevRatio) * 100) / 100;
-      changeType = change > 0 ? "增持" : change < 0 ? "减持" : "";
-    }
-    return {
-      rank: row.rank,
-      code: row.code,
-      name: row.name,
-      ratio: row.ratio,
-      changeType,
-      change,
-      market: Number.isNaN(row.market) ? null : row.market,
-      sector: ""
-    };
-  });
-  return { asOf: String(asOf || "").trim(), list };
-}
-
-async function fetchJjccHoldings(code) {
-  const url =
-    "https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code=" +
-    code +
-    "&topline=10&year=&month=&rt=" +
-    Date.now();
-  const resp = await fetch(url, {
-    headers: {
-      Referer: "https://fund.eastmoney.com/",
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "*/*"
-    }
-  });
-  if (!resp.ok) throw new Error("持仓披露请求失败（" + resp.status + "）");
-  const text = await resp.text();
-  const start = text.indexOf("var apidata=");
-  if (start < 0) throw new Error("持仓披露解析失败");
-  let raw = text.slice(start + "var apidata=".length).trim();
-  if (raw.endsWith(";")) raw = raw.slice(0, -1);
-  const pack = Function('"use strict"; return (' + raw + ")")();
-  return mapHoldingsFromJjcc(pack);
-}
-
 function mapNavHistory(rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -315,11 +197,10 @@ async function handleFundDetail(url, res) {
   );
   const pageSize = 40;
 
-  const [basicSettled, periodSettled, holdSettled, ...navSettled] =
+  const [basicSettled, periodSettled, ...navSettled] =
     await Promise.allSettled([
       fetchMobJson("FundMNNBasicInformation", { FCODE: code }),
       fetchMobJson("FundMNPeriodIncrease", { FCODE: code }),
-      fetchMobJson("FundMNInverstPosition", { FCODE: code }),
       ...Array.from({ length: navPages }, (_, i) =>
         fetchMobJson("FundMNHisNetList", {
           FCODE: code,
@@ -348,18 +229,6 @@ async function handleFundDetail(url, res) {
     periodSettled.status === "fulfilled"
       ? mapPeriods(periodSettled.value?.Datas)
       : [];
-  let holdings =
-    holdSettled.status === "fulfilled"
-      ? mapHoldings(holdSettled.value)
-      : { asOf: "", list: [] };
-  if (!holdingsHasRatio(holdings)) {
-    try {
-      const fromJjcc = await fetchJjccHoldings(code);
-      if (holdingsHasRatio(fromJjcc)) holdings = fromJjcc;
-    } catch {
-      /* F10 披露失败则保留 App 结果 */
-    }
-  }
 
   const navRows = [];
   for (const settled of navSettled) {
@@ -377,15 +246,11 @@ async function handleFundDetail(url, res) {
       code,
       basic,
       periods,
-      holdings,
       history: history.slice(0, 30),
       chart,
       warnings: [
         periodSettled.status === "rejected"
           ? periodSettled.reason?.message
-          : "",
-        holdSettled.status === "rejected" && !holdings.list.length
-          ? holdSettled.reason?.message
           : "",
         navSettled.every((s) => s.status === "rejected")
           ? "历史净值加载失败"

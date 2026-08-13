@@ -2703,10 +2703,6 @@ header p {
 .fund-detail-nav .price.flat,
 .fund-detail-nav .chg.flat { color: #64748b; }
 
-.fund-hold-chg.up { color: var(--up); }
-.fund-hold-chg.down { color: var(--down); }
-.fund-hold-chg.flat { color: #64748b; }
-
 .fund-nav-row .up { color: var(--up); }
 .fund-nav-row .down { color: var(--down); }
 .fund-nav-row .flat { color: #64748b; }
@@ -2788,7 +2784,7 @@ header p {
 }
 
 .fund-hold-head {
-  grid-template-columns: minmax(0, 1.4fr) 0.65fr 0.85fr 0.85fr;
+  grid-template-columns: minmax(0, 1.6fr) 0.9fr;
 }
 
 .fund-nav-head {
@@ -2811,7 +2807,7 @@ header p {
 }
 
 .fund-hold-row {
-  grid-template-columns: minmax(0, 1.4fr) 0.65fr 0.85fr 0.85fr;
+  grid-template-columns: minmax(0, 1.6fr) 0.9fr;
 }
 
 .fund-nav-row {
@@ -2830,14 +2826,6 @@ header p {
   color: var(--muted);
 }
 
-.fund-hold-ratio,
-.fund-hold-day,
-.fund-hold-chg {
-  text-align: right;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
 .fund-hold-day {
   text-align: center;
   justify-self: center;
@@ -2845,6 +2833,8 @@ header p {
   align-items: center;
   justify-content: center;
   gap: 1px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .fund-hold-day.up { color: var(--up); }
@@ -2852,22 +2842,6 @@ header p {
 .fund-hold-day.flat { color: #64748b; }
 
 .fund-hold-day .chg-arrow {
-  width: 12px;
-  height: 12px;
-  display: block;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.fund-hold-chg {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1px;
-  justify-self: end;
-}
-
-.fund-hold-chg .chg-arrow {
   width: 12px;
   height: 12px;
   display: block;

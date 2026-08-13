@@ -77,17 +77,7 @@
     function renderFundDetailHoldings(holdings) {
       const wrap = document.getElementById("fundDetailHoldings");
       const asOfEl = document.getElementById("fundDetailHoldAsOf");
-      if (asOfEl) {
-        const list = holdings?.list || [];
-        const hasRatio = list.some((x) => x.ratio != null);
-        if (holdings?.asOf) {
-          asOfEl.textContent = `截至 ${holdings.asOf}`;
-        } else if (list.length && !hasRatio) {
-          asOfEl.textContent = "占比暂缺（接口繁忙）";
-        } else {
-          asOfEl.textContent = "重仓股披露";
-        }
-      }
+      if (asOfEl) asOfEl.textContent = "重仓股披露";
       if (!wrap) return;
       const list = holdings?.list || [];
       if (!list.length) {
@@ -96,23 +86,6 @@
       }
       wrap.innerHTML = list
         .map((item) => {
-          const type = String(item.changeType || "");
-          const signed =
-            item.change != null
-              ? item.change
-              : /减持|退出|清仓/.test(type)
-                ? -1
-                : /增持|新增/.test(type)
-                  ? 1
-                  : 0;
-          const chgTone = toneClass(signed);
-          const arrow =
-            signed === 0 || typeof chgArrowHtml !== "function"
-              ? ""
-              : chgArrowHtml(signed);
-          const pct = item.change == null ? "" : formatPct(item.change);
-          const chgText = arrow || pct ? `${pct || ""}${arrow}` : "--";
-
           const dayTone = toneClass(item.dayChange);
           const dayArrow =
             item.dayChange == null || typeof chgArrowHtml !== "function"
@@ -131,11 +104,7 @@
                   item.sector ? ` · ${item.sector}` : ""
                 }</div>
               </div>
-              <div class="fund-hold-ratio">${
-                item.ratio == null ? "--" : item.ratio.toFixed(2)
-              }</div>
               <div class="fund-hold-day ${dayTone}">${dayText}</div>
-              <div class="fund-hold-chg ${chgTone}">${chgText}</div>
             </div>`;
         })
         .join("");
@@ -169,7 +138,7 @@
           list
         });
       } catch {
-        /* 报价失败时保留较上期列，涨跌幅显示 -- */
+        /* 报价失败时涨跌幅显示 -- */
       }
     }
 

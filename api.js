@@ -2424,11 +2424,10 @@
   }
 
   /**
-   * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
+   * 基金详情（概况 / 阶段涨幅 / 持仓代码 / 历史净值）
    * 浏览器直连：
    *   1) 东财数据中心 RPT_FUND_RANK + pingzhongdata.js（稳，不依赖本地代理）
-   *   2) 数据中心 RPT_MAIN_ORGHOLDDETAIL 重仓占比（CORS *，不走 App / F10 风控）
-   *   3) 可选增强：fundmobapi 累计净值（有 CORS，偶发风控则跳过）
+   *   2) 可选增强：fundmobapi 累计净值（有 CORS，偶发风控则跳过）
    */
   const FUND_DETAIL_PERIODS = [
     { key: "Z", title: "近1周", field: "CHANGE_7DAYS" },
@@ -2732,126 +2731,12 @@
           rank: i + 1,
           code,
           name: code,
-          ratio: null,
-          changeType: "",
-          change: null,
           market,
           sector: ""
         };
       })
       .filter(Boolean);
     return { asOf: "", list };
-  }
-
-  function holdingsHasRatio(pack) {
-    return (
-      Array.isArray(pack?.list) && pack.list.some((x) => x && x.ratio != null)
-    );
-  }
-
-  function marketFromFundSecuCode(secu) {
-    const s = String(secu || "").toUpperCase();
-    if (s.endsWith(".SH")) return 1;
-    if (s.endsWith(".SZ") || s.endsWith(".BJ")) return 0;
-    if (s.endsWith(".HK")) return 116;
-    return null;
-  }
-
-  function mapFundHoldingsFromOrgHold(rows) {
-    const dated = (Array.isArray(rows) ? rows : [])
-      .map((row) => ({
-        date: String(row?.REPORT_DATE || "").slice(0, 10),
-        code: String(row?.SECURITY_CODE || "").trim(),
-        name: String(row?.SECURITY_NAME_ABBR || row?.SECURITY_CODE || ""),
-        ratio: parseFundRankPct(row?.NETVALUE_RATIO),
-        market: marketFromFundSecuCode(row?.SECUCODE)
-      }))
-      .filter((x) => x.date && x.code);
-    if (!dated.length) return { asOf: "", list: [] };
-
-    const dates = [];
-    dated.forEach((x) => {
-      if (dates.indexOf(x.date) < 0) dates.push(x.date);
-    });
-    dates.sort();
-    const latest = dates[dates.length - 1];
-    const prev = dates.length > 1 ? dates[dates.length - 2] : "";
-    const prevMap = {};
-    if (prev) {
-      dated.forEach((x) => {
-        if (x.date === prev && x.ratio != null) prevMap[x.code] = x.ratio;
-      });
-    }
-
-    const list = dated
-      .filter((x) => x.date === latest)
-      .sort((a, b) => (b.ratio || 0) - (a.ratio || 0))
-      .map((row, i) => {
-        const prevRatio = prevMap[row.code];
-        let change = null;
-        let changeType = "";
-        if (row.ratio != null && prev && prevRatio == null) {
-          change = row.ratio;
-          changeType = "新增";
-        } else if (row.ratio != null && prevRatio != null) {
-          change = round2(row.ratio - prevRatio);
-          changeType = change > 0 ? "增持" : change < 0 ? "减持" : "";
-        }
-        return {
-          rank: i + 1,
-          code: row.code,
-          name: row.name || row.code,
-          ratio: row.ratio,
-          changeType,
-          change,
-          market: row.market,
-          sector: ""
-        };
-      });
-    return { asOf: latest, list };
-  }
-
-  async function loadFundHoldingsFromDataCenter(fundCode) {
-    const params = {
-      reportName: "RPT_MAIN_ORGHOLDDETAIL",
-      columns:
-        "SECURITY_CODE,SECURITY_NAME_ABBR,SECUCODE,REPORT_DATE,NETVALUE_RATIO,FUND_CODE,HOLDER_CODE",
-      filter: `(FUND_CODE="${fundCode}")`,
-      pageNumber: "1",
-      pageSize: "100",
-      sortColumns: "REPORT_DATE,NETVALUE_RATIO",
-      sortTypes: "-1,-1",
-      source: "WEB",
-      client: "WEB",
-      _: String(Date.now())
-    };
-    const qs = buildQuery(params);
-    let lastError = null;
-    for (let i = 0; i < FUND_RANK_DC_HOSTS.length; i++) {
-      try {
-        const resp = await fetch(FUND_RANK_DC_HOSTS[i] + "?" + qs, {
-          headers: { Accept: "application/json" }
-        });
-        if (!resp.ok) {
-          lastError = new Error("持仓占比请求失败（" + resp.status + "）");
-          continue;
-        }
-        const json = await resp.json();
-        if (!json?.success) {
-          lastError = new Error(json?.message || "持仓占比暂不可用");
-          continue;
-        }
-        const mapped = mapFundHoldingsFromOrgHold(json?.result?.data);
-        if (!holdingsHasRatio(mapped)) {
-          lastError = new Error("暂无持仓占比");
-          continue;
-        }
-        return mapped;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError || new Error("持仓占比加载失败");
   }
 
   function withTimeout(promise, ms, label) {
@@ -2871,28 +2756,6 @@
         }
       );
     });
-  }
-
-  function mapFundMobHoldings(pack) {
-    const stocks = pack?.Datas?.fundStocks || pack?.fundStocks || [];
-    const asOf = pack?.Expansion || "";
-    const list = (Array.isArray(stocks) ? stocks : [])
-      .map((row, i) => {
-        const ratio = Number(row.JZBL);
-        const mkt = Number(row.NEWTEXCH);
-        return {
-          rank: i + 1,
-          code: String(row.GPDM || ""),
-          name: String(row.GPJC || row.GPDM || ""),
-          ratio: Number.isNaN(ratio) ? null : round2(ratio),
-          changeType: row.PCTNVCHGTYPE || "",
-          change: parseFundRankPct(row.PCTNVCHG),
-          market: Number.isNaN(mkt) ? null : mkt,
-          sector: row.INDEXNAME || ""
-        };
-      })
-      .filter((x) => x.code);
-    return { asOf: typeof asOf === "string" ? asOf : "", list };
   }
 
   function mapFundMobNavHistory(rows) {
@@ -2950,11 +2813,10 @@
     const fundCode = raw.padStart(6, "0").slice(-6);
     const warnings = [];
 
-    // 1) 先直连稳妥源：数据中心概况/持仓占比 + pingzhong 净值
-    const [dcSettled, pzSettled, holdSettled] = await Promise.allSettled([
+    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码
+    const [dcSettled, pzSettled] = await Promise.allSettled([
       fetchFundDcDetailRow(fundCode),
-      loadFundPingzhongPack(fundCode),
-      loadFundHoldingsFromDataCenter(fundCode)
+      loadFundPingzhongPack(fundCode)
     ]);
 
     if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
@@ -2993,21 +2855,10 @@
       history = fromPz.slice().reverse().slice(0, 30);
     }
 
-    let holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
-    if (holdSettled.status === "fulfilled" && holdingsHasRatio(holdSettled.value)) {
-      holdings = holdSettled.value;
-    }
+    const holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
 
-    // 2) 短超时直连 App 接口增强较上期 / 累计净值（失败不影响主流程）
-    const needHoldingsBoost = !holdingsHasRatio(holdings);
+    // 2) 短超时直连 App 接口增强累计净值（失败不影响主流程）
     const mobBoost = await Promise.allSettled([
-      needHoldingsBoost
-        ? withTimeout(
-            fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
-            4500,
-            "持仓"
-          )
-        : Promise.resolve(null),
       withTimeout(
         fetchFundMobJson("FundMNHisNetList", {
           FCODE: fundCode,
@@ -3024,17 +2875,8 @@
       )
     ]);
 
-    if (needHoldingsBoost) {
-      if (mobBoost[0].status === "fulfilled" && mobBoost[0].value) {
-        const rich = mapFundMobHoldings(mobBoost[0].value);
-        if (rich.list.length) holdings = rich;
-      } else if (!holdings.list.length) {
-        warnings.push("持仓暂不可用");
-      }
-    }
-
-    if (mobBoost[1].status === "fulfilled") {
-      const mobHist = mapFundMobNavHistory(mobBoost[1].value?.Datas || []);
+    if (mobBoost[0].status === "fulfilled") {
+      const mobHist = mapFundMobNavHistory(mobBoost[0].value?.Datas || []);
       if (mobHist.length) {
         // App 净值含累计净值，列表优先用它；走势图仍用 pingzhong 全量更平滑
         history = mobHist.slice(0, 30);
@@ -3042,9 +2884,9 @@
       }
     }
 
-    if (mobBoost[2].status === "fulfilled") {
-      const rows = Array.isArray(mobBoost[2].value?.Datas)
-        ? mobBoost[2].value.Datas
+    if (mobBoost[1].status === "fulfilled") {
+      const rows = Array.isArray(mobBoost[1].value?.Datas)
+        ? mobBoost[1].value.Datas
         : [];
       const titles = {
         Z: "近1周",

@@ -128,3 +128,17 @@
       return "";
     }
 
+    function formatPctWithArrow(n) {
+      if (n == null || Number.isNaN(Number(n))) return "--";
+      const x = Number(n);
+      return formatPct(x) + chgArrowHtml(x);
+    }
+
+    function paintChgArrow(el, change) {
+      if (!el) return;
+      const tone =
+        change == null || Number.isNaN(Number(change)) ? "flat" : toneClass(change);
+      el.className = "chg-arrow-host " + tone;
+      el.innerHTML = chgArrowHtml(change);
+    }
+

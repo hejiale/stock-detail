@@ -531,7 +531,8 @@
 
     function formatYoy(n) {
       if (n == null || Number.isNaN(n)) return "";
-      return `<span class="profile-yoy ${toneClass(n)}">${formatPct(n)}</span>`;
+      const arrow = typeof chgArrowHtml === "function" ? chgArrowHtml(n) : "";
+      return `<span class="profile-yoy ${toneClass(n)}">${formatPct(n)}${arrow}</span>`;
     }
 
     function setStatus(elOrId, msg) {

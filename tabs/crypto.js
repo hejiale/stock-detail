@@ -171,7 +171,7 @@
             >
               <div class="fund-period-label">${item.title}</div>
               <div class="fund-period-value ${tone}">${
-                item.change == null ? "--" : formatPct(item.change)
+                item.change == null ? "--" : formatPctWithArrow(item.change)
               }</div>
             </button>`;
         })
@@ -241,12 +241,7 @@
           quote?.change == null ? "--" : formatPct(quote.change);
         dayEl.className = "chg " + toneClass(quote?.change);
       }
-      if (dayArrowEl) {
-        dayArrowEl.innerHTML =
-          quote?.change == null || typeof chgArrowHtml !== "function"
-            ? ""
-            : chgArrowHtml(quote.change);
-      }
+      if (dayArrowEl) paintChgArrow(dayArrowEl, quote?.change);
       if (metaEl) {
         const parts = [];
         if (quote?.changeAmt != null) {

@@ -114,7 +114,7 @@
         const stockChg =
           item.stockChange == null
             ? ""
-            : ` ${formatPct(item.stockChange)}`;
+            : ` ${formatPctWithArrow(item.stockChange)}`;
         const stockText = item.stockName
           ? `${item.stockName}${
               item.stockPrice != null ? " " + formatBondPx(item.stockPrice) : ""

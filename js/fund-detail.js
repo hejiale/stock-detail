@@ -25,7 +25,7 @@
             <div class="fund-period-card">
               <div class="fund-period-label">${item.title}</div>
               <div class="fund-period-value ${tone}">${
-                item.change == null ? "--" : formatPct(item.change)
+                item.change == null ? "--" : formatPctWithArrow(item.change)
               }</div>
               <div class="fund-period-sub">${
                 item.rank ? `同类 ${item.rank}` : item.hs300 == null ? "" : `沪深300 ${formatPct(item.hs300)}`
@@ -162,7 +162,7 @@
                 item.accNav == null ? "--" : Number(item.accNav).toFixed(4)
               }</div>
               <div class="${tone}" style="text-align:right">${
-                item.dayChange == null ? "--" : formatPct(item.dayChange)
+                item.dayChange == null ? "--" : formatPctWithArrow(item.dayChange)
               }</div>
             </div>`;
         })
@@ -291,12 +291,7 @@
           basic?.dayChange == null ? "--" : formatPct(basic.dayChange);
         dayEl.className = "chg " + toneClass(basic?.dayChange);
       }
-      if (dayArrowEl) {
-        dayArrowEl.innerHTML =
-          basic?.dayChange == null || typeof chgArrowHtml !== "function"
-            ? ""
-            : chgArrowHtml(basic.dayChange);
-      }
+      if (dayArrowEl) paintChgArrow(dayArrowEl, basic?.dayChange);
       if (metaEl) {
         const parts = [];
         if (basic?.navDate) parts.push(`净值日 ${basic.navDate}`);

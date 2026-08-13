@@ -29,7 +29,10 @@
         chgEl.textContent = "--";
         chgEl.className = "chg flat";
       }
-      if (arrowEl) arrowEl.innerHTML = "";
+      if (arrowEl) {
+        arrowEl.innerHTML = "";
+        arrowEl.className = "chg-arrow-host";
+      }
       if (gridEl) gridEl.innerHTML = "";
       setChartQuoteExpanded(false);
       const dockEl = document.getElementById("chartQuoteDock");
@@ -258,10 +261,7 @@
           chgEl.className = "chg " + tone;
         }
       }
-      if (arrowEl) {
-        arrowEl.innerHTML =
-          typeof chgArrowHtml === "function" ? chgArrowHtml(quote.change) : "";
-      }
+      if (arrowEl) paintChgArrow(arrowEl, quote.change);
     }
 
     function renderPeriodReturns(returns) {
@@ -273,7 +273,7 @@
           el.className = "value";
           return;
         }
-        el.textContent = formatPct(value);
+        el.innerHTML = formatPctWithArrow(value);
         el.className = "value " + toneClass(value);
       });
     }
@@ -747,10 +747,7 @@
           chgEl.textContent = formatPct(chg);
           chgEl.className = "chg " + tone;
         }
-        if (arrowEl) {
-          arrowEl.innerHTML =
-            typeof chgArrowHtml === "function" ? chgArrowHtml(chg) : "";
-        }
+        if (arrowEl) paintChgArrow(arrowEl, chg);
       }
 
       const name =

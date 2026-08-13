@@ -38,7 +38,7 @@
       const detailEl = document.getElementById(`detail-${fundId}`);
 
       resultEl.classList.add("show");
-      valueEl.textContent = formatPct(estimate);
+      valueEl.innerHTML = formatPctWithArrow(estimate);
       valueEl.className = "value " + (estimate > 0 ? "up" : estimate < 0 ? "down" : "flat");
 
       const coverLabel = fund.market === "US" ? "等权合计" : "前十大合计";

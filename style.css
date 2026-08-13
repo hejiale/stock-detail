@@ -714,6 +714,16 @@ header p {
   display: block;
 }
 
+.chg-arrow {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  min-height: 10px;
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
 .change-field.up .change-icon.up-icon {
   display: block;
   color: var(--up);
@@ -847,6 +857,16 @@ header p {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.result .value .chg-arrow {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
 }
 
 .result .value.up { color: var(--up); }
@@ -1021,16 +1041,32 @@ header p {
 .chart-quote-summary .chg-amt.flat,
 .chart-quote-summary .chg.flat { color: #64748b; }
 
-.chart-quote-summary .chg-arrow-host {
+.chg-arrow-host {
   display: inline-flex;
   align-items: center;
-  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.chg-arrow-host.up,
+.chg.up + .chg-arrow-host {
+  color: var(--up);
+}
+
+.chg-arrow-host.down,
+.chg.down + .chg-arrow-host {
+  color: var(--down);
+}
+
+.chg-arrow-host.flat,
+.chg.flat + .chg-arrow-host {
+  color: #64748b;
 }
 
 .chart-quote-summary .chg-arrow-host .chg-arrow {
   width: 12px;
   height: 12px;
-  display: block;
+  min-width: 12px;
+  min-height: 12px;
 }
 
 .chart-quote-dock {
@@ -1223,7 +1259,11 @@ header p {
 }
 
 .chart-period .value {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
   margin-top: 4px;
   font-size: 13px;
   font-weight: 700;
@@ -1671,9 +1711,8 @@ header p {
 .cn-index-card .idx-chg .chg-arrow {
   width: 11px;
   height: 11px;
-  display: block;
-  flex-shrink: 0;
-  object-fit: contain;
+  min-width: 11px;
+  min-height: 11px;
 }
 
 .cn-index-card .idx-chg.up { color: var(--up); }
@@ -1933,8 +1972,9 @@ header p {
 .board-chg .chg-arrow {
   width: 10px;
   height: 10px;
-  display: block;
-  object-fit: contain;
+  min-width: 10px;
+  min-height: 10px;
+  flex-shrink: 0;
 }
 
 .board-status {
@@ -2320,9 +2360,8 @@ header p {
 .us-index-card .idx-chg .chg-arrow {
   width: 11px;
   height: 11px;
-  display: block;
-  flex-shrink: 0;
-  object-fit: contain;
+  min-width: 11px;
+  min-height: 11px;
 }
 
 .us-index-card .idx-chg.up { color: var(--up); }
@@ -2601,7 +2640,9 @@ header p {
 }
 
 .profile-yoy {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-top: 2px;
   font-size: 10px;
 }
@@ -2805,16 +2846,11 @@ header p {
   font-variant-numeric: tabular-nums;
 }
 
-.fund-detail-nav .chg-arrow-host {
-  display: inline-flex;
-  align-items: center;
-}
-
 .fund-detail-nav .chg-arrow-host .chg-arrow {
   width: 12px;
   height: 12px;
-  display: block;
-  object-fit: contain;
+  min-width: 12px;
+  min-height: 12px;
 }
 
 .fund-detail-meta {
@@ -2897,6 +2933,10 @@ header p {
   font-size: 15px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
 .fund-period-value.up { color: var(--up); }
@@ -2909,6 +2949,15 @@ header p {
 .fund-detail-nav .chg.down { color: var(--down); }
 .fund-detail-nav .price.flat,
 .fund-detail-nav .chg.flat { color: #64748b; }
+
+.fund-nav-row .up,
+.fund-nav-row .down,
+.fund-nav-row .flat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
 
 .fund-nav-row .up { color: var(--up); }
 .fund-nav-row .down { color: var(--down); }
@@ -3051,9 +3100,8 @@ header p {
 .fund-hold-day .chg-arrow {
   width: 12px;
   height: 12px;
-  display: block;
-  object-fit: contain;
-  flex-shrink: 0;
+  min-width: 12px;
+  min-height: 12px;
 }
 
 /* 贵金属行情 */
@@ -3115,8 +3163,18 @@ header p {
 }
 
 .metals-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.metals-stats .chg-arrow {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  min-height: 8px;
 }
 
 .metals-stats em {

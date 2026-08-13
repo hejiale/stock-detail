@@ -11,7 +11,19 @@
   --shadow: 0 8px 24px rgba(22, 40, 80, 0.06);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+[type="button"],
+[type="submit"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 body {
   font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
@@ -1487,7 +1499,6 @@ header p {
 }
 
 .board-modal-close:hover {
-  background: #e2e8f0;
   color: #334155;
 }
 
@@ -1622,13 +1633,11 @@ header p {
   font: inherit;
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
 .cn-index-card:hover {
   border-color: #c7d7f5;
-  background: #f3f7ff;
-  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.08);
 }
 
 .cn-index-card:focus-visible {
@@ -1762,10 +1771,6 @@ header p {
   cursor: pointer;
 }
 
-.board-row-btn:hover {
-  background: #f1f5f9;
-}
-
 .board-row-btn:hover .board-name,
 .board-row-btn:hover .board-name-arrow {
   color: #1677ff;
@@ -1801,10 +1806,6 @@ header p {
 
 .board-row-btn:nth-child(odd) {
   background: #f8fafc;
-}
-
-.board-row-btn:nth-child(odd):hover {
-  background: #f1f5f9;
 }
 
 .board-stocks-modal {
@@ -2423,10 +2424,6 @@ header p {
   grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 0.85fr));
 }
 
-.fund-rank-list .fund-rank-row:hover {
-  background: rgba(22, 119, 255, 0.04);
-}
-
 .watch-fund-head {
   grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(0, 0.9fr));
 }
@@ -2754,10 +2751,6 @@ header p {
   color: inherit;
 }
 
-.fund-rank-row-btn:hover {
-  background: rgba(22, 119, 255, 0.04);
-}
-
 .fund-detail-quote {
   padding: 4px 16px 10px;
 }
@@ -3065,10 +3058,6 @@ header p {
   font: inherit;
   color: inherit;
   cursor: pointer;
-}
-
-.metals-row-btn:hover {
-  background: rgba(22, 119, 255, 0.06);
 }
 
 .metals-row-btn:hover .board-name,

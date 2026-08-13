@@ -11,6 +11,7 @@
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）
  *   2. 新浪财经 hq.sinajs.cn（A 股报价兜底；浏览器常因 Referer 被拒）
  *      及 Market_Center 涨跌榜（东财 delay 对 A 股 f3 常为 "-" 时的榜单兜底）
+ *   3. 币安 data-api.binance.vision（虚拟币 USDT 行情 / 日 K；失败回退 api.binance.com）
  *
  * holding 约定（与 data.js 一致）：
  *   { name, code, market?, ratio? }
@@ -18,6 +19,7 @@
  *     0=深交所 / 北交所, 1=上交所, 105=纳斯达克, 106=纽交所,
  *     116=港股, 176=日股, 177=韩股,
  *     101=国际期货, 113=上期所, 118=上金所, 122=国际现货/货币贵金属
+ *     CRYPTO=虚拟币（币安 USDT 交易对，code 为 BTC / ETH 等）
  */
 (function (global) {
   "use strict";
@@ -243,8 +245,9 @@
     return (ex === "sh" ? "1" : "0") + "." + holding.code;
   }
 
-  /** 市场归类：CN / US / HK / JP / KR / METAL */
+  /** 市场归类：CN / US / HK / JP / KR / METAL / CRYPTO */
   function getMarketKind(holding) {
+    if (String(holding?.market || "").toUpperCase() === "CRYPTO") return "CRYPTO";
     const m = Number(holding.market);
     if (m === 105 || m === 106) return "US";
     if (m === 116) return "HK";
@@ -258,6 +261,7 @@
 
   /** 是否按美股逻辑处理（含字母代码）；已标明其它市场时不按美股 */
   function isUsHolding(holding) {
+    if (String(holding?.market || "").toUpperCase() === "CRYPTO") return false;
     const m = Number(holding.market);
     if (m === 105 || m === 106) return true;
     if (holding.market != null && Number.isFinite(m)) return false;
@@ -2507,6 +2511,363 @@
   }
 
   /**
+   * 主流虚拟币（币安 USDT 现货）
+   * circulating / maxSupply 为近似流通量，用于估算市值
+   */
+  const CRYPTO_COINS = [
+    {
+      code: "BTC",
+      symbol: "BTCUSDT",
+      name: "比特币",
+      nameEn: "Bitcoin",
+      circulating: 19.92e6,
+      maxSupply: 21e6,
+      desc: "市值第一的加密资产，工作量证明，常被视为数字黄金"
+    },
+    {
+      code: "ETH",
+      symbol: "ETHUSDT",
+      name: "以太坊",
+      nameEn: "Ethereum",
+      circulating: 120.7e6,
+      maxSupply: null,
+      desc: "智能合约公链，质押权益证明，DeFi / NFT 基础设施"
+    },
+    {
+      code: "BNB",
+      symbol: "BNBUSDT",
+      name: "币安币",
+      nameEn: "BNB",
+      circulating: 137.7e6,
+      maxSupply: null,
+      desc: "币安生态代币，用于手续费抵扣与 BNB Chain"
+    },
+    {
+      code: "SOL",
+      symbol: "SOLUSDT",
+      name: "索拉纳",
+      nameEn: "Solana",
+      circulating: 538e6,
+      maxSupply: null,
+      desc: "高性能公链，低手续费，生态覆盖支付、Meme 与 DeFi"
+    },
+    {
+      code: "XRP",
+      symbol: "XRPUSDT",
+      name: "瑞波币",
+      nameEn: "XRP",
+      circulating: 59.8e9,
+      maxSupply: 100e9,
+      desc: "面向跨境支付清算，Ripple 网络核心资产"
+    },
+    {
+      code: "DOGE",
+      symbol: "DOGEUSDT",
+      name: "狗狗币",
+      nameEn: "Dogecoin",
+      circulating: 150.8e9,
+      maxSupply: null,
+      desc: "最早的 Meme 币之一，社区驱动，无限增发"
+    },
+    {
+      code: "ADA",
+      symbol: "ADAUSDT",
+      name: "艾达币",
+      nameEn: "Cardano",
+      circulating: 35.8e9,
+      maxSupply: 45e9,
+      desc: "学术导向公链，权益证明，强调形式化验证"
+    },
+    {
+      code: "TRX",
+      symbol: "TRXUSDT",
+      name: "波场",
+      nameEn: "TRON",
+      circulating: 86.5e9,
+      maxSupply: null,
+      desc: "高吞吐公链，稳定币转账与内容应用使用广泛"
+    },
+    {
+      code: "TON",
+      symbol: "TONUSDT",
+      name: "顿币",
+      nameEn: "Toncoin",
+      circulating: 2.49e9,
+      maxSupply: 5.1e9,
+      desc: "与 Telegram 生态结合的公链资产"
+    },
+    {
+      code: "AVAX",
+      symbol: "AVAXUSDT",
+      name: "雪崩",
+      nameEn: "Avalanche",
+      circulating: 422e6,
+      maxSupply: 720e6,
+      desc: "兼容 EVM 的高性能公链，子网架构"
+    },
+    {
+      code: "LINK",
+      symbol: "LINKUSDT",
+      name: "链环",
+      nameEn: "Chainlink",
+      circulating: 678e6,
+      maxSupply: 1e9,
+      desc: "去中心化预言机网络，为合约提供链下数据"
+    },
+    {
+      code: "DOT",
+      symbol: "DOTUSDT",
+      name: "波卡",
+      nameEn: "Polkadot",
+      circulating: 1.52e9,
+      maxSupply: null,
+      desc: "异构多链协议，平行链共享安全"
+    },
+    {
+      code: "LTC",
+      symbol: "LTCUSDT",
+      name: "莱特币",
+      nameEn: "Litecoin",
+      circulating: 76.3e6,
+      maxSupply: 84e6,
+      desc: "比特币早期分叉改良，区块时间更短"
+    },
+    {
+      code: "BCH",
+      symbol: "BCHUSDT",
+      name: "比特币现金",
+      nameEn: "Bitcoin Cash",
+      circulating: 19.9e6,
+      maxSupply: 21e6,
+      desc: "比特币扩容分叉，强调链上大区块支付"
+    },
+    {
+      code: "SUI",
+      symbol: "SUIUSDT",
+      name: "Sui",
+      nameEn: "Sui",
+      circulating: 3.47e9,
+      maxSupply: 10e9,
+      desc: "Move 语言公链，面向对象的并行执行模型"
+    }
+  ];
+
+  const BINANCE_HOSTS = [
+    "https://data-api.binance.vision",
+    "https://api.binance.com",
+    "https://api1.binance.com",
+    "https://api2.binance.com"
+  ];
+
+  function cryptoMetaOf(code) {
+    const key = String(code || "").trim().toUpperCase();
+    return CRYPTO_COINS.find((c) => c.code === key) || null;
+  }
+
+  async function fetchBinanceJson(pathWithQuery) {
+    let lastError = null;
+    for (let i = 0; i < BINANCE_HOSTS.length; i++) {
+      try {
+        const resp = await fetch(BINANCE_HOSTS[i] + pathWithQuery, {
+          headers: { Accept: "application/json" }
+        });
+        if (!resp.ok) {
+          lastError = new Error("虚拟币行情请求失败");
+          continue;
+        }
+        const json = await resp.json();
+        if (json && typeof json.code === "number" && json.code < 0) {
+          lastError = new Error(json.msg || "虚拟币行情请求失败");
+          continue;
+        }
+        return json;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("虚拟币行情请求失败");
+  }
+
+  function mapCryptoTicker(item, meta) {
+    const price = Number(item?.lastPrice);
+    const change = Number(item?.priceChangePercent);
+    const changeAmt = Number(item?.priceChange);
+    const open = Number(item?.openPrice);
+    const high = Number(item?.highPrice);
+    const low = Number(item?.lowPrice);
+    const preClose = Number(item?.prevClosePrice);
+    const volume = Number(item?.volume);
+    const amount = Number(item?.quoteVolume);
+    const trades = Number(item?.count);
+    const live = Number.isFinite(price) ? price : null;
+    const circulating = meta.circulating || null;
+    return {
+      code: meta.code,
+      symbol: meta.symbol,
+      name: meta.name,
+      nameEn: meta.nameEn,
+      desc: meta.desc,
+      market: "CRYPTO",
+      price: live,
+      change: Number.isFinite(change) ? round2(change) : null,
+      changeAmt: Number.isFinite(changeAmt) ? changeAmt : null,
+      open: Number.isFinite(open) ? open : null,
+      high: Number.isFinite(high) ? high : null,
+      low: Number.isFinite(low) ? low : null,
+      preClose: Number.isFinite(preClose) ? preClose : null,
+      volume: Number.isFinite(volume) ? volume : null,
+      amount: Number.isFinite(amount) ? amount : null,
+      trades: Number.isFinite(trades) ? trades : null,
+      circulating,
+      maxSupply: meta.maxSupply,
+      marketCap:
+        live != null && circulating ? live * circulating : null
+    };
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function formatLocalDateTime(ms) {
+    const d = new Date(ms);
+    return {
+      date:
+        d.getFullYear() +
+        "-" +
+        pad2(d.getMonth() + 1) +
+        "-" +
+        pad2(d.getDate()),
+      time: pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+    };
+  }
+
+  function mapBinanceKlines(rows, kind = "day") {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const openTime = Number(row?.[0]);
+        const high = Number(row?.[2]);
+        const low = Number(row?.[3]);
+        const close = Number(row?.[4]);
+        const volume = Number(row?.[5]);
+        if (!Number.isFinite(openTime) || !Number.isFinite(close)) return null;
+        const { date, time } = formatLocalDateTime(openTime);
+        return {
+          date,
+          time,
+          close,
+          high: Number.isFinite(high) ? high : close,
+          low: Number.isFinite(low) ? low : close,
+          volume: Number.isFinite(volume) ? volume : 0,
+          label: kind === "hour" ? time : date.slice(5)
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function mapBinanceDailyKlines(rows) {
+    return mapBinanceKlines(rows, "day");
+  }
+
+  function calcReturnByDays(klines, days) {
+    if (!klines?.length) return null;
+    const last = klines[klines.length - 1];
+    const baseDate = parseDate(last.date);
+    if (Number.isNaN(baseDate.getTime())) return null;
+    const target = toDateStr(
+      new Date(baseDate.getTime() - Number(days) * 24 * 3600 * 1000)
+    );
+    const base = findKlineOnOrBefore(klines, target) || klines[0];
+    return calcReturnFromBase(last, base);
+  }
+
+  async function loadCryptoQuotes() {
+    const symbols = CRYPTO_COINS.map((c) => c.symbol);
+    const path =
+      "/api/v3/ticker/24hr?symbols=" +
+      encodeURIComponent(JSON.stringify(symbols));
+    const rows = await fetchBinanceJson(path);
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    const bySymbol = {};
+    list.forEach((item) => {
+      if (item?.symbol) bySymbol[item.symbol] = item;
+    });
+    const mapped = CRYPTO_COINS.map((meta) => {
+      const item = bySymbol[meta.symbol];
+      return item ? mapCryptoTicker(item, meta) : null;
+    }).filter(Boolean);
+    if (!mapped.length) throw new Error("暂无虚拟币行情");
+    return {
+      list: mapped,
+      sub: "主流币种 · USDT 计价 · 币安现货"
+    };
+  }
+
+  async function loadCryptoDetail(code) {
+    const meta = cryptoMetaOf(code);
+    if (!meta) throw new Error("暂不支持该虚拟币");
+
+    const tickerPath = "/api/v3/ticker/24hr?symbol=" + encodeURIComponent(meta.symbol);
+    const klinePath =
+      "/api/v3/klines?symbol=" +
+      encodeURIComponent(meta.symbol) +
+      "&interval=1d&limit=400";
+    const hourPath =
+      "/api/v3/klines?symbol=" +
+      encodeURIComponent(meta.symbol) +
+      "&interval=1h&limit=200";
+
+    const [tickerResult, klineResult, hourResult] = await Promise.allSettled([
+      fetchBinanceJson(tickerPath),
+      fetchBinanceJson(klinePath),
+      fetchBinanceJson(hourPath)
+    ]);
+
+    if (tickerResult.status !== "fulfilled") {
+      throw tickerResult.reason || new Error("暂无虚拟币行情");
+    }
+
+    const quote = mapCryptoTicker(tickerResult.value, meta);
+    const klines =
+      klineResult.status === "fulfilled"
+        ? mapBinanceDailyKlines(klineResult.value)
+        : [];
+    const hours =
+      hourResult.status === "fulfilled"
+        ? mapBinanceKlines(hourResult.value, "hour")
+        : [];
+    const returns = calcPeriodReturns(klines);
+    if (quote.change != null) returns.day = quote.change;
+    returns["1w"] = calcReturnByDays(klines, 7);
+
+    const highs = klines.map((k) => k.high).filter((n) => n != null);
+    const lows = klines.map((k) => k.low).filter((n) => n != null);
+    const yearHigh = highs.length ? Math.max(...highs) : quote.high;
+    const yearLow = lows.length ? Math.min(...lows) : quote.low;
+
+    const periods = [
+      { key: "day", title: "近24小时", change: returns.day },
+      { key: "1w", title: "近1周", change: returns["1w"] },
+      { key: "1m", title: "近1月", change: returns["1m"] },
+      { key: "3m", title: "近3月", change: returns["3m"] },
+      { key: "ytd", title: "今年以来", change: returns.ytd },
+      { key: "1y", title: "近1年", change: returns["1y"] }
+    ];
+
+    return {
+      quote: {
+        ...quote,
+        yearHigh: yearHigh ?? null,
+        yearLow: yearLow ?? null
+      },
+      periods,
+      klines,
+      hours,
+      chart: klines.map((k) => ({ date: k.date, nav: k.close, volume: k.volume }))
+    };
+  }
+
+  /**
    * 开放式基金阶段涨幅排行
    * period: month=近1月, 3m=近3月, 6m=近6月, 1y=近1年
    *
@@ -3329,6 +3690,8 @@
     loadHkStockRank,
     loadHkMarketBreadth,
     loadMetalsQuotes,
+    loadCryptoQuotes,
+    loadCryptoDetail,
     loadOpenFundRank,
     loadFundDetail,
     normalizeFundCode,

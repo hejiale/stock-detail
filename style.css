@@ -3129,3 +3129,46 @@ header p {
   color: #94a3b8;
 }
 
+/* 虚拟币行情：复用贵金属列表 + 基金详情弹层 */
+#cryptoDetailModal .fund-detail-nav .price {
+  font-size: 24px;
+}
+
+#cryptoDetailModal .fund-detail-body {
+  min-height: 280px;
+}
+
+#cryptoDetailPeriods .fund-period-card {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: 0.15s ease;
+}
+
+#cryptoDetailPeriods .fund-period-card:hover {
+  border-color: #c7d7f5;
+}
+
+#cryptoDetailPeriods .fund-period-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+}
+
+.crypto-chart-wrap {
+  height: 248px;
+  cursor: crosshair;
+}
+
+#cryptoDetailChart {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#cryptoDetailChartTip.up { color: var(--up); }
+#cryptoDetailChartTip.down { color: var(--down); }
+

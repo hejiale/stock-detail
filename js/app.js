@@ -442,6 +442,31 @@
         return;
       }
 
+      if (e.target.closest("[data-crypto-refresh]")) {
+        loadCryptoList({ force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-crypto-detail-close]")) {
+        closeCryptoDetailModal();
+        return;
+      }
+
+      const cryptoRangeBtn = e.target.closest("[data-crypto-range]");
+      if (cryptoRangeBtn) {
+        setCryptoChartRange(cryptoRangeBtn.dataset.cryptoRange);
+        return;
+      }
+
+      const cryptoRow = e.target.closest("[data-crypto-code]");
+      if (cryptoRow) {
+        openCryptoDetailModal(
+          cryptoRow.dataset.cryptoCode,
+          cryptoRow.querySelector(".board-name")?.textContent
+        );
+        return;
+      }
+
       const jpRankBtn = e.target.closest("[data-jp-rank]");
       if (jpRankBtn) {
         loadJpRankKind(jpRankBtn.dataset.jpRank, { force: true });
@@ -754,6 +779,11 @@
           closeBoardModal();
           return;
         }
+        const cryptoDetailModal = document.getElementById("cryptoDetailModal");
+        if (cryptoDetailModal?.classList.contains("show")) {
+          closeCryptoDetailModal();
+          return;
+        }
         const modal = document.getElementById("chartModal");
         if (modal.classList.contains("show")) {
           if (isChartQuoteExpanded()) {
@@ -825,5 +855,12 @@
       else if (activeFundId === "krStocks") redrawKrSparklines();
       else if (activeFundId === "watchStocks") redrawWatchSparklines();
       else if (activeFundId) paintFundSparklines(activeFundId);
+      const cryptoDetailModal = document.getElementById("cryptoDetailModal");
+      if (cryptoDetailModal?.classList.contains("show")) {
+        drawCryptoDetailChart(
+          openCryptoDetailModal._chart || [],
+          openCryptoDetailModal._range
+        );
+      }
     });
 

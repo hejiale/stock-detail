@@ -30,6 +30,8 @@
       loadHkIndices,
       loadHkMarketBreadth,
       loadMetalsQuotes,
+      loadCryptoQuotes,
+      loadCryptoDetail,
       loadOpenFundRank,
       loadFundDetail,
       normalizeFundCode,
@@ -99,6 +101,7 @@
       { id: "markets", name: "全球股市", icon: "assets/gupiao.png", children: MARKET_SUB_TABS },
       { id: "fundRank", name: "基金", icon: "assets/jijin.png", iconClass: "tab-icon-sm" },
       { id: "metals", name: "贵金属", icon: "assets/gupiao.png" },
+      { id: "crypto", name: "虚拟币", icon: "assets/gupiao.png" },
       { id: "watch", name: "自选", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm", children: WATCH_SUB_TABS }
     ];
     const MARKET_TAB_IDS = MARKET_SUB_TABS.map((t) => t.id);
@@ -107,6 +110,7 @@
       ...MARKET_TAB_IDS,
       "fundRank",
       "metals",
+      "crypto",
       ...WATCH_TAB_IDS
     ]);
     const PAGE_SIZE = 10;
@@ -122,6 +126,7 @@
       "chartModal",
       "profileModal",
       "fundDetailModal",
+      "cryptoDetailModal",
       "boardModal",
       "boardStocksModal",
       "indexStocksModal",
@@ -273,6 +278,10 @@
 
     function isMetalsTab(id) {
       return id === "metals";
+    }
+
+    function isCryptoTab(id) {
+      return id === "crypto";
     }
 
     function isFundRankTab(id) {
@@ -453,6 +462,28 @@
       if (abs >= 1000) return n.toFixed(0);
       if (abs >= 100) return n.toFixed(1);
       return n.toFixed(2);
+    }
+
+    /** 虚拟币价格：大额保留 2 位，极小币种保留有效数字 */
+    function formatCryptoPrice(n) {
+      if (n == null || Number.isNaN(Number(n))) return "--";
+      const x = Number(n);
+      const abs = Math.abs(x);
+      if (abs >= 1000) return x.toFixed(2);
+      if (abs >= 1) return x.toFixed(2);
+      if (abs >= 0.1) return x.toFixed(4);
+      if (abs >= 0.01) return x.toFixed(4);
+      if (abs >= 0.0001) return x.toFixed(6);
+      return x.toPrecision(4);
+    }
+
+    function formatCryptoSigned(n) {
+      if (n == null || Number.isNaN(Number(n))) return "--";
+      const x = Number(n);
+      const sign = x > 0 ? "+" : x < 0 ? "-" : "";
+      const body = formatCryptoPrice(Math.abs(x));
+      if (body === "--") return "--";
+      return sign + body;
     }
 
     /** 贵金属等需要更多小数位的价格 */

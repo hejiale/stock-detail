@@ -1,0 +1,55 @@
+<div class="board-modal fund-detail-modal" id="cryptoDetailModal" aria-hidden="true">
+    <div class="board-modal-backdrop" data-crypto-detail-close></div>
+    <div class="board-modal-panel fund-detail-panel" role="dialog" aria-modal="true" aria-labelledby="cryptoDetailName">
+      <div class="board-modal-head">
+        <div class="board-modal-title">
+          <div class="name" id="cryptoDetailName">--</div>
+          <div class="sub" id="cryptoDetailSub">虚拟币详情</div>
+        </div>
+        <button class="board-modal-close" type="button" data-crypto-detail-close aria-label="关闭">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 2.4 8 6.9l4.5-4.5 1.1 1.1L9.1 8l4.5 4.5-1.1 1.1L8 9.1l-4.5 4.5-1.1-1.1L6.9 8 2.4 3.5l1.1-1.1z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="fund-detail-quote" id="cryptoDetailQuote">
+        <div class="fund-detail-nav">
+          <span class="price flat" id="cryptoDetailPrice">--</span>
+          <span class="fund-detail-chg-wrap">
+            <span class="chg flat" id="cryptoDetailDayChg">--</span>
+            <span class="chg-arrow-host" id="cryptoDetailDayChgArrow" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="fund-detail-meta" id="cryptoDetailMeta"></div>
+      </div>
+
+      <div class="board-modal-body fund-detail-body">
+        <div class="fund-detail-pane active">
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-title">阶段涨幅</div>
+            <div class="fund-period-grid" id="cryptoDetailPeriods"></div>
+          </div>
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-head">
+              <div class="fund-detail-section-title">价格走势</div>
+              <div class="fund-detail-section-sub" id="cryptoDetailChartTip">点击上方区间切换</div>
+            </div>
+            <div class="fund-nav-chart-wrap crypto-chart-wrap">
+              <canvas id="cryptoDetailChart"></canvas>
+              <div class="chart-crosshair-tip" id="cryptoDetailCrosshair" hidden>
+                <span class="t-time"></span>
+                <span class="t-price"></span>
+                <span class="t-pct"></span>
+              </div>
+            </div>
+          </div>
+          <div class="fund-detail-section">
+            <div class="fund-detail-section-title">基本信息</div>
+            <div class="fund-basic-grid" id="cryptoDetailBasic"></div>
+          </div>
+        </div>
+        <div class="board-status show" id="cryptoDetailStatus">加载中…</div>
+      </div>
+    </div>
+  </div>

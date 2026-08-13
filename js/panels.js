@@ -37,6 +37,10 @@
         await loadMetalsKind(metalsState.kind || "spotIntl", { force: true });
         return;
       }
+      if (isCryptoTab(fundId)) {
+        await loadCryptoList({ force: true });
+        return;
+      }
 
       const btn = document.querySelector(`[data-sync="${fundId}"]`);
       if (!btn) return;
@@ -320,6 +324,7 @@
       panels.appendChild(buildJpPanelElement(activeFundId === "jpStocks"));
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       panels.appendChild(buildMetalsPanelElement(activeFundId === "metals"));
+      panels.appendChild(buildCryptoPanelElement(activeFundId === "crypto"));
       panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));
       panels.appendChild(buildFocusFundsPanelElement(activeFundId === "funds"));

@@ -1,8 +1,26 @@
     function renderFundPicker() {
       const picker = document.getElementById("fundPicker");
       if (!picker) return;
-      picker.innerHTML = "";
-      picker.hidden = true;
+      const groupId = getMainGroupId(activeMainTab);
+      const group = MAIN_TABS.find((tab) => tab.id === groupId);
+      const children = group?.children;
+      if (!children?.length || (groupId === "watch" && !isLoggedIn())) {
+        picker.innerHTML = "";
+        picker.hidden = true;
+        picker.removeAttribute("aria-label");
+        return;
+      }
+      picker.hidden = false;
+      picker.setAttribute("aria-label", group.name);
+      picker.innerHTML = children
+        .map((tab) => {
+          const icon = tab.icon
+            ? `<img class="fund-pick-icon" src="${tab.icon}" alt="" aria-hidden="true" />`
+            : "";
+          const active = tab.id === activeMainTab;
+          return `<button class="fund-pick${active ? " active" : ""}" type="button" data-fund-pick="${tab.id}" role="tab" aria-selected="${active}">${icon}<span>${tab.name}</span></button>`;
+        })
+        .join("");
     }
 
     function buildFocusFundsPanelElement(isActive) {
@@ -45,7 +63,7 @@
         wrap.innerHTML = `
           <div class="watch-login-gate">
             <div class="watch-login-title">登录后查看自选</div>
-            <div class="watch-login-desc">自选基金需登录后同步到云端，登录后可新增、删除和查询自选。</div>
+            <div class="watch-login-desc">自选个股和自选基金需登录后同步到云端，登录后可在本页切换查看。</div>
             <div class="watch-login-actions">
               <button class="btn btn-primary" type="button" data-open-login>登录</button>
             </div>

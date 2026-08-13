@@ -84,17 +84,31 @@
     ];
     const watchlistState = { type: 1, list: [], trends: null };
     const focusFundsState = { list: [] };
+    const MARKET_SUB_TABS = [
+      { id: "cnSemi", name: "A股" },
+      { id: "usSemi", name: "美股" },
+      { id: "hkStocks", name: "港股" },
+      { id: "jpStocks", name: "日股" },
+      { id: "krStocks", name: "韩股" }
+    ];
+    const WATCH_SUB_TABS = [
+      { id: "watchStocks", name: "个股", icon: "assets/add_zixuan.png" },
+      { id: "funds", name: "基金", icon: "assets/zixuan_jijin.png" }
+    ];
     const MAIN_TABS = [
-      { id: "cnSemi", name: "A股", icon: "assets/gupiao.png" },
-      { id: "usSemi", name: "美股", icon: "assets/gupiao.png" },
-      { id: "hkStocks", name: "港股", icon: "assets/gupiao.png" },
-      { id: "jpStocks", name: "日股", icon: "assets/gupiao.png" },
-      { id: "krStocks", name: "韩股", icon: "assets/gupiao.png" },
+      { id: "markets", name: "全球股市", icon: "assets/gupiao.png", children: MARKET_SUB_TABS },
       { id: "metals", name: "贵金属", icon: "assets/gupiao.png" },
       { id: "fundRank", name: "基金", icon: "assets/jijin.png", iconClass: "tab-icon-sm" },
-      { id: "watchStocks", name: "自选个股", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm" },
-      { id: "funds", name: "自选基金", icon: "assets/zixuan_jijin.png", iconClass: "tab-icon-sm" }
+      { id: "watch", name: "自选", icon: "assets/add_zixuan.png", iconClass: "tab-icon-sm", children: WATCH_SUB_TABS }
     ];
+    const MARKET_TAB_IDS = MARKET_SUB_TABS.map((t) => t.id);
+    const WATCH_TAB_IDS = WATCH_SUB_TABS.map((t) => t.id);
+    const PANEL_IDS = new Set([
+      ...MARKET_TAB_IDS,
+      "metals",
+      "fundRank",
+      ...WATCH_TAB_IDS
+    ]);
     const PAGE_SIZE = 10;
     /** 涨跌榜：默认 10 条，上拉再加载 10，最多 100 */
     const RANK_PAGE_SIZE = 10;
@@ -102,6 +116,8 @@
     const rankLoadMoreObservers = new Map();
     const pageState = {};
     let activeMainTab = "cnSemi";
+    let lastMarketTab = "cnSemi";
+    let lastWatchTab = "watchStocks";
     const MODAL_IDS = [
       "chartModal",
       "profileModal",
@@ -209,14 +225,29 @@
     }
 
     function getActiveFundId() {
-      if (activeMainTab === "funds") return "funds";
-      if (activeMainTab === "usSemi") return "usSemi";
-      if (activeMainTab === "hkStocks") return "hkStocks";
-      if (activeMainTab === "jpStocks") return "jpStocks";
-      if (activeMainTab === "krStocks") return "krStocks";
-      if (activeMainTab === "metals") return "metals";
-      if (activeMainTab === "fundRank") return "fundRank";
-      if (activeMainTab === "watchStocks") return "watchStocks";
+      return PANEL_IDS.has(activeMainTab) ? activeMainTab : "cnSemi";
+    }
+
+    function isMarketTab(id) {
+      return MARKET_TAB_IDS.includes(id);
+    }
+
+    function isWatchGroupTab(id) {
+      return id === "watch" || WATCH_TAB_IDS.includes(id);
+    }
+
+    function getMainGroupId(panelId = activeMainTab) {
+      if (panelId === "markets" || isMarketTab(panelId)) return "markets";
+      if (isWatchGroupTab(panelId)) return "watch";
+      return panelId;
+    }
+
+    function resolvePanelId(tabOrFundId) {
+      if (tabOrFundId === "markets") return lastMarketTab || "cnSemi";
+      if (tabOrFundId === "watch") {
+        return isLoggedIn() ? lastWatchTab || "watchStocks" : "watchStocks";
+      }
+      if (PANEL_IDS.has(tabOrFundId)) return tabOrFundId;
       return "cnSemi";
     }
 

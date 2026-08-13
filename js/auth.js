@@ -60,12 +60,13 @@
     }
 
     function onAuthSuccess() {
-      if (activeMainTab === "watchStocks") {
-        loadWatchlist(watchlistState.type || 1, { force: true }).catch(() => {});
-      }
+      if (!isWatchGroupTab(activeMainTab)) return;
+      renderFundPicker();
       if (activeMainTab === "funds") {
         loadFocusFunds({ force: true }).catch(() => {});
+        return;
       }
+      loadWatchlist(watchlistState.type || 1, { force: true }).catch(() => {});
     }
 
     async function handleLoginSubmit(event) {

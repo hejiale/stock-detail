@@ -297,37 +297,18 @@
 
     function switchTab(tabOrFundId, { forceSync = false } = {}) {
       const prevFundId = getActiveFundId();
+      const fundId = resolvePanelId(tabOrFundId);
+      activeMainTab = fundId;
+      if (isMarketTab(fundId)) lastMarketTab = fundId;
+      if (WATCH_TAB_IDS.includes(fundId) && isLoggedIn()) lastWatchTab = fundId;
 
-      if (tabOrFundId === "usSemi") {
-        activeMainTab = "usSemi";
-      } else if (tabOrFundId === "cnSemi") {
-        activeMainTab = "cnSemi";
-      } else if (tabOrFundId === "hkStocks") {
-        activeMainTab = "hkStocks";
-      } else if (tabOrFundId === "jpStocks") {
-        activeMainTab = "jpStocks";
-      } else if (tabOrFundId === "krStocks") {
-        activeMainTab = "krStocks";
-      } else if (tabOrFundId === "metals") {
-        activeMainTab = "metals";
-      } else if (tabOrFundId === "fundRank") {
-        activeMainTab = "fundRank";
-      } else if (tabOrFundId === "watchStocks") {
-        activeMainTab = "watchStocks";
-      } else if (tabOrFundId === "funds") {
-        activeMainTab = "funds";
-      } else {
-        activeMainTab = "cnSemi";
-      }
-
-      const fundId = getActiveFundId();
       const alreadyActive = prevFundId === fundId && !forceSync;
 
       renderTabs();
       renderFundPicker();
       applyActivePanel(fundId);
 
-      const tab = getTabButtons().find((t) => t.dataset.tab === activeMainTab);
+      const tab = getTabButtons().find((t) => t.classList.contains("active"));
       tab?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
       updateTabArrows();
 

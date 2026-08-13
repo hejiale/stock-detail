@@ -296,13 +296,14 @@
     function renderTabs() {
       const tabsEl = document.querySelector(".tabs");
       if (!tabsEl) return;
+      const activeGroup = getMainGroupId(activeMainTab);
       tabsEl.innerHTML = MAIN_TABS.map((tab) => {
         const iconClass = ["tab-icon", tab.iconClass].filter(Boolean).join(" ");
         const icon = tab.icon
           ? `<img class="${iconClass}" src="${tab.icon}" alt="" aria-hidden="true" />`
           : "";
         return `<button class="tab${
-          tab.id === activeMainTab ? " active" : ""
+          tab.id === activeGroup ? " active" : ""
         }" data-tab="${tab.id}" type="button"><span class="tab-label">${tab.name}</span>${icon}</button>`;
       }).join("");
     }

@@ -8,14 +8,22 @@
       };
     }
 
+    function setWatchAuthGate(on) {
+      const card = document.querySelector('[data-panel="watchStocks"] .watch-rank-card');
+      const nameEl = document.querySelector('[data-panel="watchStocks"] .fund-meta .name');
+      if (card) card.classList.toggle("is-auth-gate", !!on);
+      if (nameEl) nameEl.textContent = on ? "自选" : "自选个股";
+    }
+
     function renderWatchLoginGate() {
+      setWatchAuthGate(true);
       const wrap = document.getElementById("watchStockList");
       const subEl = document.getElementById("watchRankSub");
       if (wrap) {
         wrap.innerHTML = `
           <div class="watch-login-gate">
             <div class="watch-login-title">登录后查看自选</div>
-            <div class="watch-login-desc">自选个股需登录后同步到云端，登录后可新增、删除和查询自选。</div>
+            <div class="watch-login-desc">自选个股和自选基金需登录后同步到云端，登录后可在本页切换查看。</div>
             <div class="watch-login-actions">
               <button class="btn btn-primary" type="button" data-open-login>登录</button>
             </div>
@@ -185,6 +193,8 @@
         renderWatchLoginGate();
         return;
       }
+
+      setWatchAuthGate(false);
 
       if (!force && watchlistState.type === next && watchlistState.list?.length) {
         renderWatchStockList(watchlistState.list);

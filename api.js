@@ -2427,8 +2427,8 @@
    * 基金详情（概况 / 阶段涨幅 / 持仓 / 历史净值）
    * 浏览器直连：
    *   1) 东财数据中心 RPT_FUND_RANK + pingzhongdata.js（稳，不依赖本地代理）
-   *   2) F10 FundArchivesDatas 重仓占比（script，不走 App 风控）
-   *   3) 可选增强：本地 /api/fund-detail、fundmobapi（有 CORS，偶发风控则跳过）
+   *   2) F10 FundArchivesDatas 重仓占比（script 直连，不走 App 风控）
+   *   3) 可选增强：fundmobapi 较上期/累计净值（有 CORS，偶发风控则跳过）
    */
   const FUND_DETAIL_PERIODS = [
     { key: "Z", title: "近1周", field: "CHANGE_7DAYS" },
@@ -2905,22 +2905,6 @@
     return next;
   }
 
-  async function tryLoadFundDetailProxy(fundCode) {
-    const resp = await fetch(
-      "/api/fund-detail?" +
-        buildQuery({
-          code: fundCode,
-          navPages: "1",
-          _: String(Date.now())
-        }),
-      { headers: { Accept: "application/json" } }
-    );
-    if (!resp.ok) throw new Error("详情代理不可用");
-    const json = await resp.json();
-    if (!json || json.error) throw new Error(json?.error || "详情代理无数据");
-    return json;
-  }
-
   function withTimeout(promise, ms, label) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
@@ -3066,7 +3050,7 @@
       if (holdingsHasRatio(fromJjcc)) holdings = fromJjcc;
     }
 
-    // 2) 短超时尝试 App / 本地代理增强持仓比例、累计净值（失败不影响主流程）
+    // 2) 短超时直连 App 接口增强较上期 / 累计净值（失败不影响主流程）
     const needHoldingsBoost = !holdingsHasRatio(holdings);
     const mobBoost = await Promise.allSettled([
       needHoldingsBoost
@@ -3089,18 +3073,11 @@
         fetchFundMobJson("FundMNPeriodIncrease", { FCODE: fundCode }),
         4500,
         "阶段涨幅"
-      ),
-      needHoldingsBoost
-        ? withTimeout(tryLoadFundDetailProxy(fundCode), 4500, "详情代理")
-        : Promise.resolve(null)
+      )
     ]);
 
     if (needHoldingsBoost) {
-      const proxied =
-        mobBoost[3].status === "fulfilled" ? mobBoost[3].value : null;
-      if (holdingsHasRatio(proxied?.holdings)) {
-        holdings = proxied.holdings;
-      } else if (mobBoost[0].status === "fulfilled" && mobBoost[0].value) {
+      if (mobBoost[0].status === "fulfilled" && mobBoost[0].value) {
         const rich = mapFundMobHoldings(mobBoost[0].value);
         if (rich.list.length) holdings = rich;
       } else if (!holdings.list.length) {

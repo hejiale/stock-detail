@@ -1756,6 +1756,52 @@
   }
 
   /**
+   * 指数范围内总市值榜（clist fid=f20）
+   * @param {string} indexCodeOrKey
+   * @param {number} [limit=20]
+   */
+  async function loadCnIndexMarketCapRank(indexCodeOrKey, limit = 20) {
+    const board = resolveCnIndexBoard(indexCodeOrKey);
+    if (!board) throw new Error("未知市场指数");
+    const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const { list } = await fetchEastClist({
+      fs: board.fs,
+      fields: "f12,f13,f14,f2,f3,f20",
+      pn: 1,
+      pz: Math.min(100, Math.max(take * 2, 30)),
+      po: 1,
+      fid: "f20"
+    });
+
+    return list
+      .map((item) => {
+        if (!item || item.f12 == null || item.f20 == null || item.f20 === "-") {
+          return null;
+        }
+        const marketCap = Number(item.f20);
+        if (Number.isNaN(marketCap) || marketCap <= 0) return null;
+        const price = Number(item.f2);
+        const dayChange =
+          item.f3 == null || item.f3 === "-" ? null : Number(item.f3);
+        const market = item.f13 != null ? Number(item.f13) : null;
+        return {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change:
+            dayChange == null || Number.isNaN(dayChange)
+              ? null
+              : round2(dayChange),
+          marketCap,
+          market: Number.isNaN(market) ? null : market
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.marketCap - a.marketCap)
+      .slice(0, take);
+  }
+
+  /**
    * 按涨跌幅排序的 clist，统计涨 / 跌家数（二分定位分界页）
    * @param {string} fs
    * @param {0|1} po 1=降序统计上涨，0=升序统计下跌
@@ -3799,6 +3845,7 @@
     loadCnIndices,
     loadCnIndexHotStocks,
     loadCnIndexMonthGainers,
+    loadCnIndexMarketCapRank,
     resolveCnIndexBoard,
     loadUsIndices,
     loadUsFamousSectorStats,

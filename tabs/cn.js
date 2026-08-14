@@ -297,7 +297,8 @@
       });
       const head = document.getElementById("indexStocksChgHead");
       if (head) {
-        head.textContent = kind === "month" ? "月涨幅%" : "涨跌幅%";
+        head.textContent =
+          kind === "month" ? "月涨幅%" : kind === "mcap" ? "总市值" : "涨跌幅%";
       }
     }
 
@@ -309,6 +310,7 @@
         return;
       }
 
+      const isMcap = indexStocksState.rank === "mcap";
       wrap.innerHTML = list
         .map((item, i) => {
           const chg = item.change;
@@ -323,6 +325,9 @@
             item.hotRank != null
               ? `人气第${item.hotRank} · ${item.code}`
               : `${i + 1} · ${item.code}`;
+          const rightCol = isMcap
+            ? `<div class="board-mcap">${formatMarketCap(item.marketCap)}</div>`
+            : `<div class="board-chg ${tone}">${chgText}${arrow}</div>`;
           return `
             <div class="board-row board-stock-row">
               <div class="board-info">
@@ -342,7 +347,7 @@
                 <div class="board-meta">${meta}</div>
               </div>
               <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
-              <div class="board-chg ${tone}">${chgText}${arrow}</div>
+              ${rightCol}
             </div>`;
         })
         .join("");
@@ -350,25 +355,26 @@
 
     async function loadIndexStocksRank(kind) {
       if (!indexStocksState.code) return;
-      const rank = kind === "month" ? "month" : "hot";
+      const rank =
+        kind === "month" ? "month" : kind === "mcap" ? "mcap" : "hot";
       indexStocksState.rank = rank;
       setIndexStocksRankTabs(rank);
 
       const reqId = ++indexStocksRequestId;
-      const rankLabel = rank === "month" ? "月涨幅" : "人气";
+      const rankLabel =
+        rank === "month" ? "月涨幅" : rank === "mcap" ? "市值" : "人气";
       document.getElementById("indexStocksModalSub").textContent =
         `${indexStocksState.label} · 加载${rankLabel}榜…`;
       document.getElementById("indexStocksList").innerHTML = "";
-      setStatus(
-        "indexStocksStatus",
-        rank === "month" ? "加载月涨幅榜…" : "加载人气榜…"
-      );
+      setStatus("indexStocksStatus", `加载${rankLabel}榜…`);
 
       try {
         const list =
           rank === "month"
             ? await loadCnIndexMonthGainers(indexStocksState.code, 20)
-            : await loadCnIndexHotStocks(indexStocksState.code, 20);
+            : rank === "mcap"
+              ? await loadCnIndexMarketCapRank(indexStocksState.code, 20)
+              : await loadCnIndexHotStocks(indexStocksState.code, 20);
         if (reqId !== indexStocksRequestId) return;
         document.getElementById("indexStocksModalSub").textContent =
           `${indexStocksState.label} · ${rankLabel}前 ${list.length} 只`;

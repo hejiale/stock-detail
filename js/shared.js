@@ -13,6 +13,7 @@
       loadCnIndices,
       loadCnIndexHotStocks,
       loadCnIndexMonthGainers,
+      loadCnIndexMarketCapRank,
       resolveCnIndexBoard,
       loadUsIndices,
       loadUsFamousSectorStats,

@@ -1851,6 +1851,12 @@ header p {
   padding-bottom: 2px;
 }
 
+.board-stocks-tabs .board-tab {
+  font-size: 12px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
 .board-stocks-head {
   grid-template-columns: 1fr 1fr 1fr;
   padding-left: 16px;
@@ -1883,8 +1889,17 @@ header p {
   color: #334155;
 }
 
-.board-stock-row .board-chg {
+.board-stock-row .board-chg,
+.board-stock-row .board-mcap {
   justify-self: end;
+}
+
+.board-stock-row .board-mcap {
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  text-align: right;
 }
 
 .board-rank {

@@ -586,7 +586,10 @@
 
       const cnIndexRankBtn = e.target.closest("[data-cn-index-rank]");
       if (cnIndexRankBtn) {
-        loadIndexStocksRank(cnIndexRankBtn.dataset.cnIndexRank);
+        loadIndexStocksRank(
+          cnIndexRankBtn.getAttribute("data-cn-index-rank") ||
+            cnIndexRankBtn.dataset.cnIndexRank
+        );
         return;
       }
 

@@ -291,9 +291,18 @@
       rank: "hot"
     };
 
+    function resolveIndexStocksRank(kind) {
+      const k = String(kind || "").trim().toLowerCase();
+      if (k === "month") return "month";
+      if (k === "mcap" || k === "market" || k === "cap") return "mcap";
+      return "hot";
+    }
+
     function setIndexStocksRankTabs(kind) {
       document.querySelectorAll("[data-cn-index-rank]").forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.cnIndexRank === kind);
+        const value =
+          btn.getAttribute("data-cn-index-rank") || btn.dataset.cnIndexRank;
+        btn.classList.toggle("active", resolveIndexStocksRank(value) === kind);
       });
       const head = document.getElementById("indexStocksChgHead");
       if (head) {
@@ -353,12 +362,25 @@
         .join("");
     }
 
+    function getIndexStocksRankLoader(rank) {
+      const api = window.MarketAPI || {};
+      const fn =
+        rank === "month"
+          ? api.loadCnIndexMonthGainers
+          : rank === "mcap"
+            ? api.loadCnIndexMarketCapRank
+            : api.loadCnIndexHotStocks;
+      if (typeof fn !== "function") {
+        throw new Error(rank === "mcap" ? "市值榜接口未加载" : "榜单接口未加载");
+      }
+      return fn;
+    }
+
     async function loadIndexStocksRank(kind) {
-      if (!indexStocksState.code) return;
-      const rank =
-        kind === "month" ? "month" : kind === "mcap" ? "mcap" : "hot";
+      const rank = resolveIndexStocksRank(kind);
       indexStocksState.rank = rank;
       setIndexStocksRankTabs(rank);
+      if (!indexStocksState.code) return;
 
       const reqId = ++indexStocksRequestId;
       const rankLabel =
@@ -369,12 +391,10 @@
       setStatus("indexStocksStatus", `加载${rankLabel}榜…`);
 
       try {
-        const list =
-          rank === "month"
-            ? await loadCnIndexMonthGainers(indexStocksState.code, 20)
-            : rank === "mcap"
-              ? await loadCnIndexMarketCapRank(indexStocksState.code, 20)
-              : await loadCnIndexHotStocks(indexStocksState.code, 20);
+        const list = await getIndexStocksRankLoader(rank)(
+          indexStocksState.code,
+          20
+        );
         if (reqId !== indexStocksRequestId) return;
         document.getElementById("indexStocksModalSub").textContent =
           `${indexStocksState.label} · ${rankLabel}前 ${list.length} 只`;

@@ -470,11 +470,13 @@
     }
 
     /** 列表编码 + 一键复制按钮（高度与文字一致） */
-    function codeWithCopyHtml(code) {
+    function codeWithCopyHtml(code, name) {
       const text = String(code ?? "").trim();
       if (!text) return "";
       const safe = escapeAttr(text);
-      return `<span class="code-with-copy"><span class="code-text">${safe}</span><span class="btn-copy-code" role="button" tabindex="0" data-copy-code="${safe}" title="复制代码" aria-label="复制 ${safe}"><img src="assets/icon-copy.png" alt="" /></span></span>`;
+      const label = String(name ?? "").trim() || text;
+      const safeName = escapeAttr(label);
+      return `<span class="code-with-copy"><span class="code-text">${safe}</span><span class="btn-copy-code" role="button" tabindex="0" data-copy-code="${safe}" data-copy-name="${safeName}" title="复制代码" aria-label="复制 ${safe}"><img src="assets/icon-copy.png" alt="" /></span></span>`;
     }
 
     async function copyTextToClipboard(text) {
@@ -506,8 +508,9 @@
     function copyCodeFromEl(el) {
       const code = el?.getAttribute?.("data-copy-code") || "";
       if (!code) return;
+      const name = el?.getAttribute?.("data-copy-name") || code;
       copyTextToClipboard(code).then((ok) => {
-        showToast(ok ? `已复制 ${code}` : "复制失败");
+        showToast(ok ? `已复制 ${name}` : "复制失败");
       });
     }
 

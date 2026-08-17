@@ -188,7 +188,7 @@
                         <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
                       </svg>
                     </div>
-                    <div class="board-meta">${codeWithCopyHtml(item.code)}${
+                    <div class="board-meta">${codeWithCopyHtml(item.code, item.name)}${
                       marketTag ? " · " + marketTag : ""
                     }</div>
                   </div>

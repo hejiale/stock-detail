@@ -193,7 +193,7 @@
                       title="查看 ${safeName} 当日分时"
                     >${h.name}</div>
                   </div>
-                  <div class="stock-code">${codeWithCopyHtml(h.code)}</div>
+                  <div class="stock-code">${codeWithCopyHtml(h.code, h.name)}</div>
                 </div>
               </div>
               <div class="ratio">${h.ratio.toFixed(2)}%</div>

@@ -915,7 +915,9 @@
       const codeEl = document.getElementById("chartModalCode");
       if (codeEl) {
         const code = holding.code || "";
-        codeEl.innerHTML = code ? codeWithCopyHtml(code) : "";
+        codeEl.innerHTML = code
+          ? codeWithCopyHtml(code, holding.name)
+          : "";
         codeEl.hidden = !code;
       }
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);

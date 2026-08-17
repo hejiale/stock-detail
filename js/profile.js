@@ -213,7 +213,7 @@
       const profileSub = document.getElementById("profileModalSub");
       if (profileSub) {
         profileSub.innerHTML = holding.code
-          ? `代码 ${codeWithCopyHtml(holding.code)} · 加载中…`
+          ? `代码 ${codeWithCopyHtml(holding.code, holding.name || name)} · 加载中…`
           : "加载中…";
       }
       document.getElementById("profileList").innerHTML = "";
@@ -241,9 +241,10 @@
         const profileSub = document.getElementById("profileModalSub");
         if (profileSub) {
           profileSub.innerHTML = profile.code
-            ? `代码 ${codeWithCopyHtml(profile.code)} · 金额单位：${
-                profile.currencyLabel || "本币"
-              }`
+            ? `代码 ${codeWithCopyHtml(
+                profile.code,
+                profile.name || name
+              )} · 金额单位：${profile.currencyLabel || "本币"}`
             : `金额单位：${profile.currencyLabel || "本币"}`;
         }
 

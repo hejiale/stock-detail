@@ -228,7 +228,7 @@
                       aria-label="加入自选 ${safeName}"
                     ><img src="assets/add_zixuan.png" alt="自选" /></button>
                   </div>
-                  <div class="board-meta">${codeWithCopyHtml(item.code)}</div>
+                  <div class="board-meta">${codeWithCopyHtml(item.code, item.name)}</div>
                 </div>
               </div>
               <div

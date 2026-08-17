@@ -163,7 +163,7 @@
             <div class="fund-hold-row">
               <div class="fund-hold-info">
                 <div class="fund-hold-name">${item.name}</div>
-                <div class="fund-hold-meta">${item.rank} · ${codeWithCopyHtml(item.code)}${
+                <div class="fund-hold-meta">${item.rank} · ${codeWithCopyHtml(item.code, item.name)}${
                   item.sector ? ` · ${item.sector}` : ""
                 }</div>
               </div>
@@ -341,7 +341,7 @@
       }
       if (subEl) {
         if (basic?.code) {
-          subEl.innerHTML = `${codeWithCopyHtml(basic.code)}${
+          subEl.innerHTML = `${codeWithCopyHtml(basic.code, basic.name)}${
             basic.type ? ` · ${escapeAttr(basic.type)}` : ""
           }`;
         } else {
@@ -397,7 +397,9 @@
       }
       const subEl = document.getElementById("fundDetailSub");
       if (subEl) {
-        subEl.innerHTML = fundCode ? codeWithCopyHtml(fundCode) : "";
+        subEl.innerHTML = fundCode
+          ? codeWithCopyHtml(fundCode, presetName || fundCode)
+          : "";
       }
       syncFundDetailAddWatch(fundCode, presetName || fundCode);
       showModal("fundDetailModal");

@@ -112,7 +112,7 @@
                     data-fund-detail-name="${safeName}"
                     title="查看 ${safeName} 详情"
                   >${item.name || item.code}</div>
-                  <div class="board-meta">${codeWithCopyHtml(item.code)}${
+                  <div class="board-meta">${codeWithCopyHtml(item.code, item.name)}${
                     item.date ? ` · ${item.date}` : ""
                   }</div>
                 </div>

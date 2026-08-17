@@ -193,7 +193,7 @@
                     aria-label="加入自选 ${safeName}"
                   ><img src="assets/add_zixuan.png" alt="自选" /></button>
                 </div>
-                <div class="board-meta">${i + 1} · ${codeWithCopyHtml(item.code)}</div>
+                <div class="board-meta">${i + 1} · ${codeWithCopyHtml(item.code, item.name)}</div>
               </div>
               <div class="board-price">${item.price == null ? "--" : formatPrice(item.price)}</div>
               <div class="board-chg ${tone}">${formatPct(item.change)}${arrow}</div>
@@ -332,8 +332,8 @@
           );
           const meta =
             item.hotRank != null
-              ? `人气第${item.hotRank} · ${codeWithCopyHtml(item.code)}`
-              : `${i + 1} · ${codeWithCopyHtml(item.code)}`;
+              ? `人气第${item.hotRank} · ${codeWithCopyHtml(item.code, item.name)}`
+              : `${i + 1} · ${codeWithCopyHtml(item.code, item.name)}`;
           const rightCol = isMcap
             ? `<div class="board-mcap">${formatMarketCap(item.marketCap)}</div>`
             : `<div class="board-chg ${tone}">${chgText}${arrow}</div>`;
@@ -683,7 +683,7 @@
                       aria-label="加入自选 ${safeName}"
                     ><img src="assets/add_zixuan.png" alt="自选" /></button>
                   </div>
-                  <div class="board-meta">${codeWithCopyHtml(item.code)}</div>
+                  <div class="board-meta">${codeWithCopyHtml(item.code, item.name)}</div>
                 </div>
               </div>
               <div

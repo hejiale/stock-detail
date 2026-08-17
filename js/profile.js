@@ -30,9 +30,53 @@
     }
 
     function resetProfileSections() {
-      ["finance", "holders"].forEach((key) => {
+      ["finance", "holders", "company"].forEach((key) => {
         setProfileSectionExpanded(key, true);
       });
+    }
+
+    function renderProfileCompany(company, companyError) {
+      const wrap = document.getElementById("profileCompany");
+      const emptyEl = document.getElementById("profileCompanyEmpty");
+      if (!wrap || !emptyEl) return;
+
+      wrap.innerHTML = "";
+      emptyEl.textContent = "";
+
+      const rows = company?.rows || [];
+      if (!rows.length && !company?.mainBusiness && !company?.profile) {
+        emptyEl.textContent = companyError || "暂无公司信息";
+        return;
+      }
+
+      wrap.innerHTML = rows
+        .map(
+          ([k, v]) => `
+          <div class="profile-company-row">
+            <div class="profile-company-k">${escapeHtml(k)}</div>
+            <div class="profile-company-v">${escapeHtml(v)}</div>
+          </div>`
+        )
+        .join("");
+
+      if (company?.mainBusiness) {
+        wrap.insertAdjacentHTML(
+          "beforeend",
+          `<div class="profile-company-block">
+            <div class="profile-company-block-title">主营业务</div>
+            <div class="profile-company-block-text">${escapeHtml(company.mainBusiness)}</div>
+          </div>`
+        );
+      }
+      if (company?.profile) {
+        wrap.insertAdjacentHTML(
+          "beforeend",
+          `<div class="profile-company-block">
+            <div class="profile-company-block-title">公司简介</div>
+            <div class="profile-company-block-text">${escapeHtml(company.profile)}</div>
+          </div>`
+        );
+      }
     }
 
     function renderProfileList(reports, kind, emptyMsg) {
@@ -172,6 +216,7 @@
       const financeHead = document.getElementById("profileListHead");
       if (financeHead) financeHead.hidden = true;
       renderProfileHolders(null, "");
+      renderProfileCompany(null, "");
       document.querySelectorAll("#profileTabs .board-tab").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.profileKind === "all");
       });
@@ -200,6 +245,7 @@
               : "暂无财务数据";
         renderProfileList(profile.reports, "all", financeEmpty);
         renderProfileHolders(profile.holders, profile.holdersError);
+        renderProfileCompany(profile.company, profile.companyError);
         setStatus("profileStatus", "");
       } catch (err) {
         if (reqId !== profileRequestId) return;

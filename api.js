@@ -575,7 +575,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 个股资料（市值 + 财报）
+  // 个股资料（市值 + 财报 + 股东 + 公司信息）
   // ---------------------------------------------------------------------------
 
   const EAST_DC_WEB = "https://datacenter-web.eastmoney.com/api/data/v1/get";
@@ -770,6 +770,134 @@
     };
   }
 
+  /** A 股 emh5 fc：沪 01 / 深北 02 */
+  function toEmh5Fc(holding) {
+    const code = String(holding.code || "");
+    const m = Number(holding.market);
+    if (m === 1) return code + "01";
+    if (m === 0) return code + "02";
+    const ex = resolveCnExchange(code);
+    return code + (ex === "sh" ? "01" : "02");
+  }
+
+  function cleanCompanyText(v) {
+    const s = String(v == null ? "" : v).trim();
+    if (!s || s === "--" || s === "null" || s === "undefined") return null;
+    return s;
+  }
+
+  function formatCompanyDate(v) {
+    const s = cleanCompanyText(v);
+    return s ? s.slice(0, 10) : null;
+  }
+
+  function formatCompanyEmployees(v) {
+    const n = numOrNull(v);
+    if (n == null) return cleanCompanyText(v);
+    return String(Math.round(n));
+  }
+
+  /**
+   * A 股公司信息（emh5 基本资料，CORS *）
+   * @returns {Promise<{ rows: Array<[string,string]>, profile?: string, mainBusiness?: string }>}
+   */
+  async function loadCnCompanyInfo(holding) {
+    const fc = toEmh5Fc(holding);
+    const resp = await fetch(
+      "https://emh5.eastmoney.com/api/GongSiGaiKuang/GetJiBenZiLiao",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ fc })
+      }
+    );
+    if (!resp.ok) throw new Error("公司信息请求失败");
+    const json = await resp.json();
+    if (json?.Status !== 0) {
+      throw new Error(json?.Message || "暂无公司信息");
+    }
+    const row = json?.Result?.JiBenZiLiao;
+    if (!row) throw new Error("暂无公司信息");
+
+    const rows = [
+      ["公司名称", cleanCompanyText(row.CompanyName)],
+      ["所属行业", cleanCompanyText(row.Industry)],
+      ["所属概念", cleanCompanyText(row.Block)],
+      ["法定代表人", cleanCompanyText(row.Representative)],
+      ["董事长", cleanCompanyText(row.Chairman)],
+      ["总经理", cleanCompanyText(row.GeneralManager)],
+      ["董秘", cleanCompanyText(row.Secretaries)],
+      ["成立日期", formatCompanyDate(row.FoundDate)],
+      ["注册资本", cleanCompanyText(row.RegisteredCapital)],
+      ["员工人数", formatCompanyEmployees(row.Employees)],
+      ["省份", cleanCompanyText(row.Provice)],
+      ["办公地址", cleanCompanyText(row.OfficeAddress)],
+      ["注册地址", cleanCompanyText(row.RegisteredAddress)],
+      ["官网", cleanCompanyText(row.Website)],
+      ["电话", cleanCompanyText(row.Phone)],
+      ["邮箱", cleanCompanyText(row.Email)]
+    ].filter(([, v]) => v);
+
+    return {
+      rows,
+      mainBusiness: cleanCompanyText(row.MainBusiness),
+      profile: cleanCompanyText(row.CompRofile)
+    };
+  }
+
+  /**
+   * 港股 / 美股公司信息（东财 F10 ORGPROFILE）
+   * @returns {Promise<{ rows: Array<[string,string]>, profile?: string, mainBusiness?: string }>}
+   */
+  async function loadOverseasCompanyInfo(secucode, marketKind) {
+    const isHk = marketKind === "HK";
+    const reportName = isHk
+      ? "RPT_HKF10_INFO_ORGPROFILE"
+      : "RPT_USF10_INFO_ORGPROFILE";
+    const json = await fetchDatacenterJson(
+      buildDatacenterUrl(EAST_DC_SEC, {
+        reportName,
+        columns: "ALL",
+        filter: '(SECUCODE="' + secucode + '")',
+        pageNumber: "1",
+        pageSize: "1",
+        source: "SECURITIES",
+        client: "PC"
+      })
+    );
+    const row = json?.result?.data?.[0];
+    if (!row) throw new Error("暂无公司信息");
+
+    const rows = [
+      ["公司名称", cleanCompanyText(row.ORG_NAME)],
+      ["英文名称", cleanCompanyText(row.ORG_EN_ABBR)],
+      ["所属行业", cleanCompanyText(row.BELONG_INDUSTRY)],
+      ["所属市场", cleanCompanyText(row.BELONG_MARKET)],
+      ["董事长", cleanCompanyText(row.CHAIRMAN)],
+      ["公司秘书", cleanCompanyText(row.SECRETARY)],
+      ["成立日期", formatCompanyDate(row.FOUND_DATE)],
+      ["上市日期", formatCompanyDate(row.LISTING_DATE)],
+      ["注册资本", cleanCompanyText(row.REG_CAPITAL)],
+      ["员工人数", formatCompanyEmployees(row.EMP_NUM)],
+      ["注册地", cleanCompanyText(row.REG_PLACE || row.COUNTRY)],
+      ["办公地址", cleanCompanyText(row.ADDRESS)],
+      ["注册地址", cleanCompanyText(row.REG_ADDRESS)],
+      ["官网", cleanCompanyText(row.ORG_WEB)],
+      ["电话", cleanCompanyText(row.ORG_TEL)],
+      ["邮箱", cleanCompanyText(row.ORG_EMAIL)],
+      ["ISIN", cleanCompanyText(row.ISIN_CODE)]
+    ].filter(([, v]) => v);
+
+    return {
+      rows,
+      mainBusiness: cleanCompanyText(row.MAIN_BUSINESS),
+      profile: cleanCompanyText(row.ORG_PROFILE)
+    };
+  }
+
   /**
    * A 股前十大股东（最近报告期）+ 加减仓
    * @returns {Promise<{ date: string, list: Array }>}
@@ -815,14 +943,16 @@
   }
 
   /**
-   * 个股资料：市值 + 近年营收/利润/负债率 + 十大股东
+   * 个股资料：市值 + 近年营收/利润/负债率 + 十大股东 + 公司信息
    * @returns {Promise<{
    *   name, code, marketKind, currency, currencyLabel,
    *   marketCap: { total, float },
    *   reports: Array,
    *   holders: { date, list }|null,
+   *   company: { rows, profile?, mainBusiness? }|null,
    *   holdersError?: string,
-   *   financeError?: string
+   *   financeError?: string,
+   *   companyError?: string
    * }>}
    */
   async function loadStockProfile(holding) {
@@ -836,8 +966,10 @@
     }));
 
     let financePromise;
+    let companyPromise;
     if (marketKind === "CN") {
       financePromise = loadCnFinancialReports(code);
+      companyPromise = loadCnCompanyInfo(holding);
     } else if (marketKind === "US") {
       const primary = toUsSecuCode(holding);
       const fallback =
@@ -848,10 +980,17 @@
         if (fallback === primary) throw err;
         return loadOverseasFinancialReports(fallback, "US");
       });
+      companyPromise = loadOverseasCompanyInfo(primary, "US").catch((err) => {
+        if (fallback === primary) throw err;
+        return loadOverseasCompanyInfo(fallback, "US");
+      });
     } else if (marketKind === "HK") {
-      financePromise = loadOverseasFinancialReports(toHkSecuCode(holding), "HK");
+      const hkCode = toHkSecuCode(holding);
+      financePromise = loadOverseasFinancialReports(hkCode, "HK");
+      companyPromise = loadOverseasCompanyInfo(hkCode, "HK");
     } else {
       financePromise = Promise.reject(new Error("该市场暂不支持财务数据"));
+      companyPromise = Promise.reject(new Error("该市场暂无公司信息"));
     }
 
     const holdersPromise =
@@ -859,11 +998,13 @@
         ? loadCnTopHolders(code)
         : Promise.reject(new Error("该市场暂无十大股东数据"));
 
-    const [mcapResult, financeResult, holdersResult] = await Promise.allSettled([
-      mcapPromise,
-      financePromise,
-      holdersPromise
-    ]);
+    const [mcapResult, financeResult, holdersResult, companyResult] =
+      await Promise.allSettled([
+        mcapPromise,
+        financePromise,
+        holdersPromise,
+        companyPromise
+      ]);
 
     const mcap =
       mcapResult.status === "fulfilled"
@@ -873,6 +1014,8 @@
       financeResult.status === "fulfilled" ? financeResult.value : null;
     const holders =
       holdersResult.status === "fulfilled" ? holdersResult.value : null;
+    const company =
+      companyResult.status === "fulfilled" ? companyResult.value : null;
 
     return {
       name: finance?.name || mcap.name || holding.name || code,
@@ -888,6 +1031,7 @@
       },
       reports: finance?.reports || [],
       holders,
+      company,
       holdersError:
         holdersResult.status === "rejected"
           ? holdersResult.reason?.message || "暂无股东数据"
@@ -895,6 +1039,10 @@
       financeError:
         financeResult.status === "rejected"
           ? financeResult.reason?.message || "暂无财务数据"
+          : null,
+      companyError:
+        companyResult.status === "rejected"
+          ? companyResult.reason?.message || "暂无公司信息"
           : null
     };
   }

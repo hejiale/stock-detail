@@ -66,6 +66,24 @@
             <div class="profile-holders-empty" id="profileHoldersEmpty"></div>
           </div>
         </div>
+        <div class="profile-section" data-profile-section="company">
+          <button
+            class="profile-section-toggle"
+            type="button"
+            data-profile-section-toggle="company"
+            aria-expanded="true"
+            aria-controls="profileCompanyBody"
+          >
+            <span class="profile-section-title">公司信息</span>
+            <svg class="profile-section-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 5.8 4.4 4.6 8 8.2l3.6-3.6 1.2 1.2L8 10.6 3.2 5.8z"/>
+            </svg>
+          </button>
+          <div class="profile-section-body" id="profileCompanyBody">
+            <div class="profile-company-grid" id="profileCompany"></div>
+            <div class="profile-holders-empty" id="profileCompanyEmpty"></div>
+          </div>
+        </div>
         <div class="board-status show" id="profileStatus">加载中…</div>
       </div>
     </div>

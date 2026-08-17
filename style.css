@@ -2817,6 +2817,52 @@ header p {
   color: var(--muted);
 }
 
+.profile-company-grid {
+  padding: 0 12px 12px;
+}
+
+.profile-company-row {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+
+.profile-company-k {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.profile-company-v {
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.profile-company-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.profile-company-block-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.profile-company-block-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #334155;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* 基金详情弹层 */
 .fund-detail-modal {
   z-index: 120;

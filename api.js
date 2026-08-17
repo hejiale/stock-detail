@@ -1567,7 +1567,7 @@
     "399001": { key: "sz", label: "深交所", fs: "m:0+t:6" },
     "399006": { key: "cyb", label: "创业板", fs: "m:0+t:80" },
     "000688": { key: "kcb", label: "科创板", fs: "m:1+t:23" },
-    // s:2048：北交所正式挂牌；仅 m:0+t:81 会混入大量新三板，月涨幅常是虚假极端值
+    // s:2048：北交所正式挂牌；仅 m:0+t:81 会混入大量新三板，涨跌幅常是虚假极端值
     "899050": { key: "bj", label: "北交所", fs: "m:0+t:81+s:2048" }
   };
 
@@ -1708,51 +1708,44 @@
   }
 
   /**
-   * 指数范围内近1月涨幅榜（clist fid=f110，约 20 个交易日）
+   * 指数范围内实时日涨跌幅榜（clist fid=f3）
    * @param {string} indexCodeOrKey
    * @param {number} [limit=20]
+   * @param {"gainers"|"losers"} [kind="gainers"]
    */
-  async function loadCnIndexMonthGainers(indexCodeOrKey, limit = 20) {
+  async function loadCnIndexDayRank(indexCodeOrKey, limit = 20, kind = "gainers") {
     const board = resolveCnIndexBoard(indexCodeOrKey);
     if (!board) throw new Error("未知市场指数");
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
-    // 多取一些，过滤无行情 / 极端异常后再截断
+    const isLosers = kind === "losers";
     const { list } = await fetchEastClist({
       fs: board.fs,
-      fields: "f12,f13,f14,f2,f3,f110",
+      fields: "f12,f13,f14,f2,f3",
       pn: 1,
-      pz: Math.min(100, Math.max(take * 4, 40)),
-      po: 1,
-      fid: "f110"
+      pz: Math.min(100, Math.max(take * 2, 30)),
+      po: isLosers ? 0 : 1,
+      fid: "f3"
     });
 
     return list
       .map((item) => {
-        if (!item || item.f12 == null || item.f110 == null || item.f110 === "-") {
+        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
           return null;
         }
-        // 无最新价/当日涨跌的多为停牌或非挂牌脏数据，月涨幅不可信
-        if (item.f2 == null || item.f2 === "-" || item.f3 == null || item.f3 === "-") {
-          return null;
-        }
-        const monthChange = Number(item.f110);
-        if (Number.isNaN(monthChange)) return null;
-        // 极端值多为计算基期异常（如新三板残留）
-        if (Math.abs(monthChange) > 500) return null;
+        const change = Number(item.f3);
+        if (Number.isNaN(change)) return null;
         const price = Number(item.f2);
-        const dayChange = Number(item.f3);
         const market = item.f13 != null ? Number(item.f13) : null;
-        if (Number.isNaN(price) || price === 0) return null;
         return {
           code: String(item.f12),
           name: String(item.f14 || item.f12),
-          price,
-          change: round2(monthChange),
-          dayChange: Number.isNaN(dayChange) ? null : round2(dayChange),
+          price: Number.isNaN(price) || price === 0 ? null : price,
+          change: round2(change),
           market: Number.isNaN(market) ? null : market
         };
       })
       .filter(Boolean)
+      .sort((a, b) => (isLosers ? a.change - b.change : b.change - a.change))
       .slice(0, take);
   }
 
@@ -3880,7 +3873,7 @@
     loadCnStockRank,
     loadCnIndices,
     loadCnIndexHotStocks,
-    loadCnIndexMonthGainers,
+    loadCnIndexDayRank,
     loadCnIndexMarketCapRank,
     resolveCnIndexBoard,
     loadUsIndices,

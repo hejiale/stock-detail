@@ -12,7 +12,7 @@
       loadCnStockRank,
       loadCnIndices,
       loadCnIndexHotStocks,
-      loadCnIndexMonthGainers,
+      loadCnIndexDayRank,
       loadCnIndexMarketCapRank,
       resolveCnIndexBoard,
       loadUsIndices,

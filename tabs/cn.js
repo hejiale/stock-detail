@@ -18,7 +18,7 @@
               data-cn-index="${i}"
               data-cn-index-code="${item.code}"
               data-cn-index-label="${safeLabel}"
-              title="查看 ${safeLabel} 人气股与月涨幅榜"
+              title="查看 ${safeLabel} 人气股与涨跌榜"
             >
               <div class="idx-head">
                 <div class="idx-name">${label}</div>
@@ -293,7 +293,8 @@
 
     function resolveIndexStocksRank(kind) {
       const k = String(kind || "").trim().toLowerCase();
-      if (k === "month") return "month";
+      if (k === "gainers" || k === "day" || k === "month") return "gainers";
+      if (k === "losers") return "losers";
       if (k === "mcap" || k === "market" || k === "cap") return "mcap";
       return "hot";
     }
@@ -306,8 +307,7 @@
       });
       const head = document.getElementById("indexStocksChgHead");
       if (head) {
-        head.textContent =
-          kind === "month" ? "月涨幅%" : kind === "mcap" ? "总市值" : "涨跌幅%";
+        head.textContent = kind === "mcap" ? "总市值" : "涨跌幅%";
       }
     }
 
@@ -365,8 +365,8 @@
     function getIndexStocksRankLoader(rank) {
       const api = window.MarketAPI || {};
       const fn =
-        rank === "month"
-          ? api.loadCnIndexMonthGainers
+        rank === "gainers" || rank === "losers"
+          ? api.loadCnIndexDayRank
           : rank === "mcap"
             ? api.loadCnIndexMarketCapRank
             : api.loadCnIndexHotStocks;
@@ -376,6 +376,13 @@
       return fn;
     }
 
+    function indexStocksRankLabel(rank) {
+      if (rank === "gainers") return "涨幅";
+      if (rank === "losers") return "跌幅";
+      if (rank === "mcap") return "市值";
+      return "人气";
+    }
+
     async function loadIndexStocksRank(kind) {
       const rank = resolveIndexStocksRank(kind);
       indexStocksState.rank = rank;
@@ -383,8 +390,7 @@
       if (!indexStocksState.code) return;
 
       const reqId = ++indexStocksRequestId;
-      const rankLabel =
-        rank === "month" ? "月涨幅" : rank === "mcap" ? "市值" : "人气";
+      const rankLabel = indexStocksRankLabel(rank);
       document.getElementById("indexStocksModalSub").textContent =
         `${indexStocksState.label} · 加载${rankLabel}榜…`;
       document.getElementById("indexStocksList").innerHTML = "";
@@ -393,7 +399,8 @@
       try {
         const list = await getIndexStocksRankLoader(rank)(
           indexStocksState.code,
-          20
+          20,
+          rank
         );
         if (reqId !== indexStocksRequestId) return;
         document.getElementById("indexStocksModalSub").textContent =

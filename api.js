@@ -46,6 +46,36 @@
     return Math.round(Number(n) * 100) / 100;
   }
 
+  /**
+   * fetch 超时信号。AbortSignal.timeout 在部分手机浏览器不可用
+   *（Chrome Android <103、Safari <16、部分 WebView）。
+   */
+  function abortTimeout(ms) {
+    const timeoutMs = Math.max(1, Number(ms) || 5000);
+    if (
+      typeof AbortSignal !== "undefined" &&
+      typeof AbortSignal.timeout === "function"
+    ) {
+      return AbortSignal.timeout(timeoutMs);
+    }
+    if (typeof AbortController !== "function") return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(function () {
+      try {
+        controller.abort();
+      } catch (_) {
+        /* ignore */
+      }
+    }, timeoutMs);
+    const signal = controller.signal;
+    if (typeof signal.addEventListener === "function") {
+      signal.addEventListener("abort", function () {
+        clearTimeout(timer);
+      });
+    }
+    return signal;
+  }
+
   /** 拼接 query：k=encode(v)&... */
   function buildQuery(params) {
     return Object.keys(params)
@@ -103,7 +133,7 @@
       try {
         const resp = await fetch(hosts[i] + pathWithQuery, {
           headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(5000)
+          signal: abortTimeout(5000)
         });
         if (!resp.ok) {
           lastError = new Error("行情接口请求失败");
@@ -2220,7 +2250,7 @@
 
     const resp = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(8000)
+      signal: abortTimeout(8000)
     });
     if (!resp.ok) throw new Error("新浪 A 股涨跌榜请求失败");
     const rows = await resp.json();
@@ -2274,7 +2304,7 @@
       const countResp = await fetch(
         "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeStockCount?node=hs_a&_=" +
           Date.now(),
-        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) }
+        { headers: { Accept: "application/json" }, signal: abortTimeout(5000) }
       );
       if (countResp.ok) {
         total = Number(await countResp.json()) || total;

@@ -102,7 +102,8 @@
     for (let i = 0; i < hosts.length; i++) {
       try {
         const resp = await fetch(hosts[i] + pathWithQuery, {
-          headers: { Accept: "application/json" }
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(5000)
         });
         if (!resp.ok) {
           lastError = new Error("行情接口请求失败");
@@ -2124,24 +2125,43 @@
   }
 
   /**
+   * 集合竞价/delay 占位时：用买一/卖一 vs 昨收补最新价和涨跌幅
+   * f2/f3 为 "-" 时东财仍可能带 f18/f31/f32
+   */
+  function eastAuctionQuote(item) {
+    const prev = eastNum(item?.f18);
+    const bid = eastNum(item?.f31);
+    const ask = eastNum(item?.f32);
+    const price = bid || ask || null;
+    if (price == null || prev == null || prev === 0) {
+      return { price, change: null };
+    }
+    return { price, change: ((price - prev) / prev) * 100 };
+  }
+
+  /**
    * 映射东财涨跌榜行；f3 为 "-" / 无效时丢弃
    * （push2delay 对 A 股常返回 f2/f3="-"，海外市场正常）
-   * @param {{ upperCode?: boolean, zeroPriceNull?: boolean, defaultMarket?: number|null }} [opts]
+   * @param {{ upperCode?: boolean, zeroPriceNull?: boolean, defaultMarket?: number|null, allowAuctionQuote?: boolean }} [opts]
    */
   function mapEastRankItems(list, take, opts = {}) {
     const {
       upperCode = false,
       zeroPriceNull = true,
-      defaultMarket = null
+      defaultMarket = null,
+      allowAuctionQuote = false
     } = opts;
     return (list || [])
       .map((item) => {
-        if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") {
-          return null;
+        if (!item || item.f12 == null) return null;
+        let change = eastNum(item.f3);
+        let price = eastNum(item.f2);
+        if (allowAuctionQuote && (change == null || price == null || price === 0)) {
+          const auction = eastAuctionQuote(item);
+          if (change == null) change = auction.change;
+          if (price == null || price === 0) price = auction.price;
         }
-        const change = Number(item.f3);
-        const price = Number(item.f2);
-        if (Number.isNaN(change)) return null;
+        if (change == null) return null;
         const market = item.f13 != null ? Number(item.f13) : defaultMarket;
         let code = String(item.f12);
         if (upperCode) code = code.toUpperCase();
@@ -2149,9 +2169,7 @@
           code,
           name: String(item.f14 || item.f12),
           price:
-            Number.isNaN(price) || (zeroPriceNull && price === 0)
-              ? null
-              : price,
+            price == null || (zeroPriceNull && price === 0) ? null : price,
           change: round2(change),
           market: Number.isNaN(market) ? defaultMarket : market
         };
@@ -2193,49 +2211,60 @@
   /**
    * 新浪 A 股涨跌榜兜底（东财 delay 无 A 股涨跌幅时使用）
    * GET .../Market_Center.getHQNodeDataSimple  node=hs_a
+   * 未开盘时 trade/changepercent 常为 0，改用买一/卖一 vs 昨收计算涨跌并本地排序
    */
   async function loadCnStockRankFromSina(kind = "gainers", limit = 10, page = 1) {
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    // 多取一些，过滤停牌/无行情占位后再截断
-    const fetchNum = Math.min(100, Math.max(take * 5, 40));
-    const asc = kind === "losers" ? "1" : "0";
+    const skip = (pn - 1) * take;
+    const isLosers = kind === "losers";
     const url =
       "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeDataSimple" +
-      "?page=" +
-      pn +
-      "&num=" +
-      fetchNum +
-      "&sort=changepercent&asc=" +
-      asc +
+      "?page=1&num=100&sort=changepercent&asc=" +
+      (isLosers ? "1" : "0") +
       "&node=hs_a&_=" +
       Date.now();
 
     const resp = await fetch(url, {
-      headers: { Accept: "application/json" }
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000)
     });
     if (!resp.ok) throw new Error("新浪 A 股涨跌榜请求失败");
     const rows = await resp.json();
     if (!Array.isArray(rows)) throw new Error("新浪 A 股涨跌榜返回无效");
 
-    const list = rows
+    const mapped = rows
       .map((item) => {
         if (!item || item.code == null) return null;
-        const change = Number(item.changepercent);
-        if (Number.isNaN(change)) return null;
         const trade = Number(item.trade);
+        const buy = Number(item.buy);
+        const sell = Number(item.sell);
         const settle = Number(item.settlement);
-        // 无最新价且涨跌为 0：多为未开盘/停牌占位
-        if ((Number.isNaN(trade) || trade === 0) && change === 0) return null;
+        const hasLive = Number.isFinite(trade) && trade !== 0;
+        const hasAuction =
+          (Number.isFinite(buy) && buy !== 0) ||
+          (Number.isFinite(sell) && sell !== 0);
+        const price = hasLive
+          ? trade
+          : hasAuction
+            ? buy || sell
+            : Number.isFinite(settle) && settle !== 0
+              ? settle
+              : null;
+        let change = Number(item.changepercent);
+        if (
+          (!Number.isFinite(change) || (change === 0 && !hasLive)) &&
+          price != null &&
+          Number.isFinite(settle) &&
+          settle !== 0
+        ) {
+          change = ((price - settle) / settle) * 100;
+        }
+        if (!Number.isFinite(change)) return null;
+        if (!hasLive && !hasAuction) return null;
         const code = normalizeCnCode(item.code);
         if (!code) return null;
         const ex = resolveCnExchange(code);
-        const price =
-          !Number.isNaN(trade) && trade !== 0
-            ? trade
-            : !Number.isNaN(settle) && settle !== 0
-              ? settle
-              : null;
         return {
           code,
           name: String(item.name || code),
@@ -2245,28 +2274,31 @@
         };
       })
       .filter(Boolean)
-      .slice(0, take);
+      .sort((a, b) => (isLosers ? a.change - b.change : b.change - a.change));
 
-    let total = 0;
+    let total = mapped.length;
     try {
       const countResp = await fetch(
         "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeStockCount?node=hs_a&_=" +
           Date.now(),
-        { headers: { Accept: "application/json" } }
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) }
       );
       if (countResp.ok) {
-        total = Number(await countResp.json()) || 0;
+        total = Number(await countResp.json()) || total;
       }
     } catch {
       /* ignore */
     }
 
-    return { list, total: total || list.length };
+    return {
+      list: mapped.slice(skip, skip + take),
+      total: total || mapped.length
+    };
   }
 
   /**
    * A 股涨幅榜 / 跌幅榜（沪深京 A 股，分页）
-   * 优先东财 clist；push2 不可达或 delay 涨跌幅全为 "-" 时回退新浪
+   * 优先东财 clist；push2 不可达或 delay 首页被 f3="-" 占满时，多取后过滤再回退新浪
    *
    * @param {"gainers"|"losers"} kind
    * @param {number} [limit=10]
@@ -2276,19 +2308,23 @@
   async function loadCnStockRank(kind = "gainers", limit = 10, page = 1) {
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
+    const skip = (pn - 1) * take;
+    const isLosers = kind === "losers";
 
     try {
       const { list, total } = await fetchEastClist({
         fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
-        fields: "f12,f13,f14,f2,f3",
-        pn,
-        pz: take,
-        po: kind === "losers" ? 0 : 1,
-        requireValidChange: true
+        fields: "f12,f13,f14,f2,f3,f18,f31,f32",
+        pn: 1,
+        pz: 100,
+        po: isLosers ? 0 : 1
       });
-      const mapped = mapEastRankItems(list, take);
-      if (mapped.length) {
-        return { list: mapped, total: Number(total) || 0 };
+      const mapped = mapEastRankItems(list, 100, { allowAuctionQuote: true }).sort(
+        (a, b) => (isLosers ? a.change - b.change : b.change - a.change)
+      );
+      const pageList = mapped.slice(skip, skip + take);
+      if (pageList.length) {
+        return { list: pageList, total: Number(total) || mapped.length };
       }
     } catch {
       /* 东财失败或 delay 无有效涨跌幅 → 新浪 */

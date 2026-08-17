@@ -163,7 +163,7 @@
             <div class="fund-hold-row">
               <div class="fund-hold-info">
                 <div class="fund-hold-name">${item.name}</div>
-                <div class="fund-hold-meta">${item.rank} · ${item.code}${
+                <div class="fund-hold-meta">${item.rank} · ${codeWithCopyHtml(item.code)}${
                   item.sector ? ` · ${item.sector}` : ""
                 }</div>
               </div>
@@ -340,9 +340,13 @@
         syncFundDetailAddWatch(basic.code, basic.name || basic.code);
       }
       if (subEl) {
-        subEl.textContent = basic?.code
-          ? `${basic.code}${basic.type ? " · " + basic.type : ""}`
-          : "基金详情";
+        if (basic?.code) {
+          subEl.innerHTML = `${codeWithCopyHtml(basic.code)}${
+            basic.type ? ` · ${escapeAttr(basic.type)}` : ""
+          }`;
+        } else {
+          subEl.textContent = "基金详情";
+        }
       }
       if (navEl) {
         navEl.textContent =
@@ -392,7 +396,9 @@
         if (nameEl) nameEl.textContent = presetName;
       }
       const subEl = document.getElementById("fundDetailSub");
-      if (subEl) subEl.textContent = fundCode;
+      if (subEl) {
+        subEl.innerHTML = fundCode ? codeWithCopyHtml(fundCode) : "";
+      }
       syncFundDetailAddWatch(fundCode, presetName || fundCode);
       showModal("fundDetailModal");
       setStatus("fundDetailStatus", "加载基金详情…");

@@ -178,8 +178,8 @@
           );
           const meta =
             item.hotRank != null
-              ? `人气第${item.hotRank} · ${item.code}`
-              : `${i + 1} · ${item.code}`;
+              ? `人气第${item.hotRank} · ${codeWithCopyHtml(item.code)}`
+              : `${i + 1} · ${codeWithCopyHtml(item.code)}`;
           const priceText =
             item.price == null ? "--" : "$" + formatPrice(item.price);
           return `
@@ -397,7 +397,7 @@
                       aria-label="加入自选 ${safeName}"
                     ><img src="assets/add_zixuan.png" alt="自选" /></button>
                   </div>
-                  <div class="board-meta">${item.code}</div>
+                  <div class="board-meta">${codeWithCopyHtml(item.code)}</div>
                 </div>
               </div>
               <div

@@ -210,8 +210,12 @@
       const name = document.getElementById("chartModalName")?.textContent || holding.name;
 
       document.getElementById("profileModalName").textContent = name;
-      document.getElementById("profileModalSub").textContent =
-        `代码 ${holding.code} · 加载中…`;
+      const profileSub = document.getElementById("profileModalSub");
+      if (profileSub) {
+        profileSub.innerHTML = holding.code
+          ? `代码 ${codeWithCopyHtml(holding.code)} · 加载中…`
+          : "加载中…";
+      }
       document.getElementById("profileList").innerHTML = "";
       const financeHead = document.getElementById("profileListHead");
       if (financeHead) financeHead.hidden = true;
@@ -234,8 +238,14 @@
 
         document.getElementById("profileModalName").textContent =
           profile.name || name;
-        document.getElementById("profileModalSub").textContent =
-          `代码 ${profile.code} · 金额单位：${profile.currencyLabel || "本币"}`;
+        const profileSub = document.getElementById("profileModalSub");
+        if (profileSub) {
+          profileSub.innerHTML = profile.code
+            ? `代码 ${codeWithCopyHtml(profile.code)} · 金额单位：${
+                profile.currencyLabel || "本币"
+              }`
+            : `金额单位：${profile.currencyLabel || "本币"}`;
+        }
 
         const financeEmpty =
           profile.financeError && !profile.reports?.length

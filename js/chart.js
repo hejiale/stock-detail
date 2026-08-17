@@ -46,7 +46,7 @@
         legendEl.hidden = true;
       }
       if (codeEl) {
-        codeEl.textContent = "";
+        codeEl.innerHTML = "";
         codeEl.hidden = true;
       }
     }
@@ -914,8 +914,9 @@
       setChartProfileMode(fundId !== "metals" && fundId !== "bonds");
       const codeEl = document.getElementById("chartModalCode");
       if (codeEl) {
-        codeEl.textContent = holding.code || "";
-        codeEl.hidden = !holding.code;
+        const code = holding.code || "";
+        codeEl.innerHTML = code ? codeWithCopyHtml(code) : "";
+        codeEl.hidden = !code;
       }
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
 

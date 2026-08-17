@@ -328,6 +328,13 @@
     document.addEventListener(
       "click",
       (e) => {
+        const copyBtn = e.target.closest("[data-copy-code], .btn-copy-code");
+        if (copyBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          copyCodeFromEl(copyBtn);
+          return;
+        }
         const addWatchBtn = e.target.closest("[data-add-watch], .btn-add-watch");
         if (!addWatchBtn) return;
         e.preventDefault();
@@ -336,6 +343,15 @@
       },
       true
     );
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const copyBtn = e.target.closest?.("[data-copy-code], .btn-copy-code");
+      if (!copyBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      copyCodeFromEl(copyBtn);
+    });
 
     document.addEventListener("click", (e) => {
       if (e.target.closest("[data-login-close]")) {
@@ -470,7 +486,10 @@
       }
 
       const cryptoRow = e.target.closest("[data-crypto-code]");
-      if (cryptoRow) {
+      if (
+        cryptoRow &&
+        !e.target.closest("[data-copy-code], .btn-copy-code")
+      ) {
         openCryptoDetailModal(
           cryptoRow.dataset.cryptoCode,
           cryptoRow.querySelector(".board-name")?.textContent
@@ -531,7 +550,9 @@
       const fundDetailBtn = e.target.closest("[data-fund-detail]");
       if (
         fundDetailBtn &&
-        !e.target.closest("[data-add-watch], .btn-add-watch, [data-remove-focus-fund]")
+        !e.target.closest(
+          "[data-add-watch], .btn-add-watch, [data-remove-focus-fund], [data-copy-code], .btn-copy-code"
+        )
       ) {
         openFundDetailModal(
           fundDetailBtn.dataset.fundDetail,
@@ -677,7 +698,12 @@
       }
 
       const chartName = e.target.closest("[data-chart-fund]");
-      if (chartName && !e.target.closest("[data-add-watch], .btn-add-watch")) {
+      if (
+        chartName &&
+        !e.target.closest(
+          "[data-add-watch], .btn-add-watch, [data-copy-code], .btn-copy-code"
+        )
+      ) {
         openChartModal(chartName.dataset.chartFund, Number(chartName.dataset.chartIndex));
         return;
       }

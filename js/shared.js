@@ -461,6 +461,56 @@
       showToast._timer = setTimeout(() => el.classList.remove("show"), 2600);
     }
 
+    function escapeAttr(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    /** 列表编码 + 一键复制按钮（高度与文字一致） */
+    function codeWithCopyHtml(code) {
+      const text = String(code ?? "").trim();
+      if (!text) return "";
+      const safe = escapeAttr(text);
+      return `<span class="code-with-copy"><span class="code-text">${safe}</span><span class="btn-copy-code" role="button" tabindex="0" data-copy-code="${safe}" title="复制代码" aria-label="复制 ${safe}"><img src="assets/icon-copy.png" alt="" /></span></span>`;
+    }
+
+    async function copyTextToClipboard(text) {
+      const value = String(text ?? "");
+      if (!value) return false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+          return true;
+        }
+      } catch {
+        /* fallback below */
+      }
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;left:-9999px;top:0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+
+    function copyCodeFromEl(el) {
+      const code = el?.getAttribute?.("data-copy-code") || "";
+      if (!code) return;
+      copyTextToClipboard(code).then((ok) => {
+        showToast(ok ? `已复制 ${code}` : "复制失败");
+      });
+    }
+
     function toneClass(n) {
       if (n > 0) return "up";
       if (n < 0) return "down";

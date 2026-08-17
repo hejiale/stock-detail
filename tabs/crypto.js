@@ -103,7 +103,7 @@
                         <path d="M5.8 2.6 4.6 3.8 8.8 8l-4.2 4.2 1.2 1.2L11.2 8 5.8 2.6z"/>
                       </svg>
                     </div>
-                    <div class="board-meta">${item.code}</div>
+                    <div class="board-meta">${codeWithCopyHtml(item.code)}</div>
                   </div>
                 </div>
                 <div class="board-price ${tone}">${priceText}</div>
@@ -227,9 +227,13 @@
       const metaEl = document.getElementById("cryptoDetailMeta");
       if (nameEl) nameEl.textContent = quote?.name || quote?.code || "--";
       if (subEl) {
-        subEl.textContent = quote?.code
-          ? `${quote.code}${quote.symbol ? " · " + quote.symbol : ""} · USDT`
-          : "虚拟币详情";
+        if (quote?.code) {
+          subEl.innerHTML = `${codeWithCopyHtml(quote.code)}${
+            quote.symbol ? ` · ${escapeAttr(quote.symbol)}` : ""
+          } · USDT`;
+        } else {
+          subEl.textContent = "虚拟币详情";
+        }
       }
       if (priceEl) {
         priceEl.textContent =

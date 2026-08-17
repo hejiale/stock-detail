@@ -119,7 +119,7 @@
                     data-chart-index="${i}"
                     title="查看 ${safeName} 行情"
                   >${item.name || item.code}</div>
-                  <div class="board-meta">${item.code}</div>
+                  <div class="board-meta">${codeWithCopyHtml(item.code)}</div>
                 </div>
               </div>
               <div

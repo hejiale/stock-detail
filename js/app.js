@@ -458,6 +458,17 @@
         return;
       }
 
+      const oilKindBtn = e.target.closest("[data-oil-kind]");
+      if (oilKindBtn) {
+        loadOilKind(oilKindBtn.dataset.oilKind, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-oil-refresh]")) {
+        loadOilKind(oilState.kind || "intl", { force: true });
+        return;
+      }
+
       const bondsKindBtn = e.target.closest("[data-bonds-kind]");
       if (bondsKindBtn) {
         loadBondsKind(bondsKindBtn.dataset.bondsKind, { force: true });

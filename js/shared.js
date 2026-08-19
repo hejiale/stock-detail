@@ -30,6 +30,7 @@
       loadHkIndices,
       loadHkMarketBreadth,
       loadMetalsQuotes,
+      loadOilQuotes,
       loadBondsQuotes,
       loadCryptoQuotes,
       loadCryptoDetail,
@@ -102,6 +103,7 @@
       { id: "fundRank", name: "基金", icon: "assets/jijin.png" },
       { id: "bonds", name: "债券", icon: "assets/zhaiquan.png" },
       { id: "metals", name: "贵金属", icon: "assets/guijinshu.png" },
+      { id: "oil", name: "原油", icon: "assets/yuanyou.png" },
       { id: "crypto", name: "虚拟币", icon: "assets/xunibi.png" },
       { id: "watch", name: "自选", icon: "assets/zixuan.png", children: WATCH_SUB_TABS }
     ];
@@ -112,6 +114,7 @@
       "fundRank",
       "bonds",
       "metals",
+      "oil",
       "crypto",
       ...WATCH_TAB_IDS
     ]);
@@ -284,6 +287,10 @@
 
     function isMetalsTab(id) {
       return id === "metals";
+    }
+
+    function isOilTab(id) {
+      return id === "oil";
     }
 
     function isCryptoTab(id) {

@@ -41,6 +41,10 @@
         await loadMetalsKind(metalsState.kind || "spotIntl", { force: true });
         return;
       }
+      if (isOilTab(fundId)) {
+        await loadOilKind(oilState.kind || "intl", { force: true });
+        return;
+      }
       if (isCryptoTab(fundId)) {
         await loadCryptoList({ force: true });
         return;
@@ -324,6 +328,7 @@
       panels.appendChild(buildKrPanelElement(activeFundId === "krStocks"));
       panels.appendChild(buildBondsPanelElement(activeFundId === "bonds"));
       panels.appendChild(buildMetalsPanelElement(activeFundId === "metals"));
+      panels.appendChild(buildOilPanelElement(activeFundId === "oil"));
       panels.appendChild(buildCryptoPanelElement(activeFundId === "crypto"));
       panels.appendChild(buildFundRankPanelElement(activeFundId === "fundRank"));
       panels.appendChild(buildWatchPanelElement(activeFundId === "watchStocks"));

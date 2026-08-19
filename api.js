@@ -19,6 +19,7 @@
  *     0=深交所 / 北交所, 1=上交所, 105=纳斯达克, 106=纽交所,
  *     116=港股, 176=日股, 177=韩股,
  *     101=国际期货, 113=上期所, 118=上金所, 122=国际现货/货币贵金属
+ *     102=NYMEX 等国际能源期货, 112=ICE 布伦特等, 142=上期能源（INE 原油）
  *     CRYPTO=虚拟币（币安 USDT 交易对，code 为 BTC / ETH 等）
  *     债券：沪/深债与可转债同样用 0/1 市场前缀（代码如 019xxx / 11xxxx / 12xxxx）
  */
@@ -277,7 +278,7 @@
     return (ex === "sh" ? "1" : "0") + "." + holding.code;
   }
 
-  /** 市场归类：CN / US / HK / JP / KR / METAL / CRYPTO */
+  /** 市场归类：CN / US / HK / JP / KR / METAL / OIL / CRYPTO */
   function getMarketKind(holding) {
     if (String(holding?.market || "").toUpperCase() === "CRYPTO") return "CRYPTO";
     const m = Number(holding.market);
@@ -286,6 +287,7 @@
     if (m === 176) return "JP";
     if (m === 177) return "KR";
     if (m === 101 || m === 113 || m === 118 || m === 122) return "METAL";
+    if (m === 102 || m === 112 || m === 142) return "OIL";
     if (m === 0 || m === 1) return "CN";
     if (/[A-Za-z]/.test(String(holding.code || ""))) return "US";
     return "CN";
@@ -2729,6 +2731,132 @@
   }
 
   /**
+   * 原油实时行情（对齐东财期货 / 能源页）
+   * kind:
+   *   intl  国际原油（NYMEX WTI / ICE 布伦特 / 迷你原油）
+   *   ine   上期能源原油（上海国际能源交易中心 SC）
+   */
+  const OIL_QUOTE_FIELDS = METAL_QUOTE_FIELDS;
+
+  const OIL_KIND_META = {
+    intl: {
+      label: "国际原油",
+      sub: "NYMEX WTI / ICE 布伦特 · 美元/桶",
+      sources: [
+        { fs: "m:102", pz: 120, test: /^(CL|QM)/i },
+        { fs: "m:112", pz: 80, test: /^B/i }
+      ]
+    },
+    ine: {
+      label: "上期能源",
+      sub: "上海国际能源交易中心原油 · 元/桶",
+      sources: [{ fs: "m:142", pz: 80, test: /^sc/i }]
+    }
+  };
+
+  const OIL_FALLBACK_SECIDS = {
+    intl: "102.CL00Y,112.B00Y,102.QM00Y",
+    ine: "142.scm,142.scs"
+  };
+
+  function mapOilQuoteRow(item) {
+    return mapMetalQuoteRow(item);
+  }
+
+  function oilVolumeOf(row) {
+    return row.volume > 0 ? row.volume : 0;
+  }
+
+  function isOilContinuous(row) {
+    const c = String(row.code || "").toLowerCase();
+    return /00y$/i.test(c) || c === "scm" || c === "scs";
+  }
+
+  function oilRank(row) {
+    const c = String(row.code || "").toUpperCase();
+    if (c === "CL00Y") return 0;
+    if (c === "B00Y") return 1;
+    if (c === "QM00Y") return 2;
+    if (c === "SCM") return 0;
+    if (c === "SCS") return 1;
+    if (/^CL/i.test(c)) return 10;
+    if (/^B/i.test(c)) return 11;
+    if (/^QM/i.test(c)) return 12;
+    if (/^SC/i.test(c)) return 10;
+    return 20;
+  }
+
+  function sortOilRows(kind, list) {
+    const rows = list.slice();
+    rows.sort((a, b) => {
+      const cont = (isOilContinuous(a) ? 0 : 1) - (isOilContinuous(b) ? 0 : 1);
+      if (cont) return cont;
+      const d = oilRank(a) - oilRank(b);
+      if (d) return d;
+      const live = (a.price != null ? 0 : 1) - (b.price != null ? 0 : 1);
+      if (live) return live;
+      return oilVolumeOf(b) - oilVolumeOf(a);
+    });
+    return rows;
+  }
+
+  function filterOilRows(kind, list, test) {
+    return list.filter((row) => {
+      if (!test.test(row.code || "")) return false;
+      if (isOilContinuous(row)) return true;
+      return row.price != null || row.change != null;
+    });
+  }
+
+  async function loadOilQuotesFallback(kind) {
+    const secids = OIL_FALLBACK_SECIDS[kind];
+    if (!secids) return [];
+    const json = await fetchEastUlist(secids, OIL_QUOTE_FIELDS);
+    return sortOilRows(
+      kind,
+      normalizeEastDiff(json).map(mapOilQuoteRow).filter(Boolean)
+    );
+  }
+
+  async function loadOilQuotes(kind = "intl") {
+    const next = OIL_KIND_META[kind] ? kind : "intl";
+    const meta = OIL_KIND_META[next];
+    const chunks = await Promise.all(
+      meta.sources.map(async (src) => {
+        try {
+          const { list } = await fetchEastClist({
+            fs: src.fs,
+            fields: OIL_QUOTE_FIELDS,
+            pn: 1,
+            pz: src.pz,
+            po: 1,
+            fid: "f3"
+          });
+          const mapped = (list || []).map(mapOilQuoteRow).filter(Boolean);
+          return filterOilRows(next, mapped, src.test);
+        } catch (_) {
+          return [];
+        }
+      })
+    );
+    let rows = sortOilRows(next, chunks.flat());
+    if (!rows.length) {
+      try {
+        rows = await loadOilQuotesFallback(next);
+      } catch (_) {
+        rows = [];
+      }
+    }
+    return {
+      kind: next,
+      label: meta.label,
+      sub: meta.sub,
+      list: rows,
+      total: rows.length
+    };
+  }
+
+  /**
    * 债券 / 固定收益（对齐东财债券行情中心）
    * kind:
    *   treasury    国债（含国开/进出/农发等利率债）
@@ -4069,6 +4197,7 @@
     loadHkStockRank,
     loadHkMarketBreadth,
     loadMetalsQuotes,
+    loadOilQuotes,
     loadBondsQuotes,
     loadCryptoQuotes,
     loadCryptoDetail,

@@ -54,8 +54,10 @@
     function isMetalChart(holding) {
       if (!holding) return false;
       const fundId = openChartModal._state?.fundId;
-      if (fundId === "metals" || fundId === "bonds") return true;
-      return typeof getMarketKind === "function" && getMarketKind(holding) === "METAL";
+      if (fundId === "metals" || fundId === "oil" || fundId === "bonds") return true;
+      if (typeof getMarketKind !== "function") return false;
+      const kind = getMarketKind(holding);
+      return kind === "METAL" || kind === "OIL";
     }
 
     function chartPriceText(n, holding) {
@@ -122,7 +124,7 @@
         typeof getMarketKind === "function"
           ? getMarketKind({ code: quote.code, market: holding?.market })
           : "CN";
-      const metal = kind === "METAL";
+      const metal = kind === "METAL" || kind === "OIL";
       const showLimit = kind === "CN";
       const px = (v) => chartPriceText(v, holding);
 
@@ -890,6 +892,9 @@
       if (fundId === "metals" && typeof getMetalsHolding === "function") {
         return getMetalsHolding(index);
       }
+      if (fundId === "oil" && typeof getOilHolding === "function") {
+        return getOilHolding(index);
+      }
       if (fundId === "bonds" && typeof getBondsHolding === "function") {
         return getBondsHolding(index);
       }
@@ -911,7 +916,9 @@
         holding.name;
       resetChartQuoteUi();
       resetPeriodValues();
-      setChartProfileMode(fundId !== "metals" && fundId !== "bonds");
+      setChartProfileMode(
+        fundId !== "metals" && fundId !== "oil" && fundId !== "bonds"
+      );
       const codeEl = document.getElementById("chartModalCode");
       if (codeEl) {
         const code = holding.code || "";

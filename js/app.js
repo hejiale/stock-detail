@@ -469,6 +469,17 @@
         return;
       }
 
+      const fedKindBtn = e.target.closest("[data-fed-kind]");
+      if (fedKindBtn) {
+        loadFedKind(fedKindBtn.dataset.fedKind, { force: true });
+        return;
+      }
+
+      if (e.target.closest("[data-fed-refresh]")) {
+        loadFedKind(fedState.kind || "overview", { force: true });
+        return;
+      }
+
       const bondsKindBtn = e.target.closest("[data-bonds-kind]");
       if (bondsKindBtn) {
         loadBondsKind(bondsKindBtn.dataset.bondsKind, { force: true });

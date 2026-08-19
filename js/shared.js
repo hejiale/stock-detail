@@ -31,6 +31,7 @@
       loadHkMarketBreadth,
       loadMetalsQuotes,
       loadOilQuotes,
+      loadFedRates,
       loadBondsQuotes,
       loadCryptoQuotes,
       loadCryptoDetail,
@@ -104,6 +105,7 @@
       { id: "bonds", name: "债券", icon: "assets/zhaiquan.png" },
       { id: "metals", name: "贵金属", icon: "assets/guijinshu.png" },
       { id: "oil", name: "原油", icon: "assets/yuanyou.png" },
+      { id: "fed", name: "美联储", icon: "assets/meilianchu.png" },
       { id: "crypto", name: "虚拟币", icon: "assets/xunibi.png" },
       { id: "watch", name: "自选", icon: "assets/zixuan.png", children: WATCH_SUB_TABS }
     ];
@@ -115,6 +117,7 @@
       "bonds",
       "metals",
       "oil",
+      "fed",
       "crypto",
       ...WATCH_TAB_IDS
     ]);
@@ -291,6 +294,10 @@
 
     function isOilTab(id) {
       return id === "oil";
+    }
+
+    function isFedTab(id) {
+      return id === "fed";
     }
 
     function isCryptoTab(id) {

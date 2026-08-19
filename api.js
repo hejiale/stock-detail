@@ -2857,6 +2857,281 @@
   }
 
   /**
+   * 美联储 / 美元利率（纽约联储官方 + 东财美债收益率）
+   * kind:
+   *   overview  利率概览（目标区间、EFFR、SOFR 等）
+   *   treasury  美债收益率（2Y/5Y/10Y/30Y）
+   *   history   有效联邦基金利率近端历史
+   */
+  const NYFED_RATES_HOST = "https://markets.newyorkfed.org";
+
+  const FED_KIND_META = {
+    overview: {
+      label: "利率概览",
+      sub: "纽约联储 · 联邦基金目标区间 / EFFR / SOFR"
+    },
+    treasury: {
+      label: "美债收益率",
+      sub: "美国国债收益率 · 2年 / 5年 / 10年 / 30年"
+    },
+    history: {
+      label: "EFFR 历史",
+      sub: "有效联邦基金利率 · 近 30 个交易日"
+    }
+  };
+
+  const FED_RATE_META = {
+    TARGET: {
+      name: "联邦基金目标利率",
+      code: "FFTR",
+      tip: "FOMC 目标区间"
+    },
+    EFFR: {
+      name: "有效联邦基金利率",
+      code: "EFFR",
+      tip: "隔夜银行间拆借有效利率"
+    },
+    SOFR: {
+      name: "担保隔夜融资利率",
+      code: "SOFR",
+      tip: "美元无风险利率基准"
+    },
+    OBFR: {
+      name: "隔夜银行融资利率",
+      code: "OBFR",
+      tip: "Overnight Bank Funding Rate"
+    },
+    TGCR: {
+      name: "三方一般抵押利率",
+      code: "TGCR",
+      tip: "Tri-Party General Collateral Rate"
+    },
+    BGCR: {
+      name: "广义一般抵押利率",
+      code: "BGCR",
+      tip: "Broad General Collateral Rate"
+    }
+  };
+
+  const US_TREASURY_FIELDS = [
+    { key: "EMG00001306", tenor: "2Y", name: "美债 2 年期" },
+    { key: "EMG00001308", tenor: "5Y", name: "美债 5 年期" },
+    { key: "EMG00001310", tenor: "10Y", name: "美债 10 年期" },
+    { key: "EMG00001312", tenor: "30Y", name: "美债 30 年期" }
+  ];
+
+  async function fetchNyFedJson(pathWithQuery) {
+    const url = NYFED_RATES_HOST + pathWithQuery;
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: abortTimeout(10000)
+    });
+    if (!resp.ok) throw new Error("纽约联储利率请求失败");
+    return resp.json();
+  }
+
+  function nyFedNum(v) {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function findNyFedRate(list, type) {
+    return (list || []).find((r) => String(r?.type || "").toUpperCase() === type) || null;
+  }
+
+  function formatFedTargetRange(from, to) {
+    if (from == null && to == null) return null;
+    if (from != null && to != null) {
+      return Number(from).toFixed(2) + "–" + Number(to).toFixed(2);
+    }
+    const v = from != null ? from : to;
+    return Number(v).toFixed(2);
+  }
+
+  async function loadFedOverview() {
+    const json = await fetchNyFedJson("/api/rates/all/latest.json");
+    const rates = json?.refRates || [];
+    const effr = findNyFedRate(rates, "EFFR");
+    const sofr = findNyFedRate(rates, "SOFR");
+    const obfr = findNyFedRate(rates, "OBFR");
+    const tgcr = findNyFedRate(rates, "TGCR");
+    const bgcr = findNyFedRate(rates, "BGCR");
+
+    const targetFrom = nyFedNum(effr?.targetRateFrom);
+    const targetTo = nyFedNum(effr?.targetRateTo);
+    const asOf = String(effr?.effectiveDate || sofr?.effectiveDate || "").slice(0, 10);
+
+    let treasurySnap = null;
+    try {
+      const ty = await loadFedTreasuryYields(5);
+      treasurySnap = ty.list?.[0] || null;
+    } catch (_) {
+      treasurySnap = null;
+    }
+
+    const list = [];
+    list.push({
+      id: "target",
+      kind: "target",
+      name: FED_RATE_META.TARGET.name,
+      code: FED_RATE_META.TARGET.code,
+      tip: FED_RATE_META.TARGET.tip,
+      valueText: formatFedTargetRange(targetFrom, targetTo),
+      value: targetTo != null ? targetTo : targetFrom,
+      targetFrom,
+      targetTo,
+      unit: "%",
+      date: asOf,
+      volume: null,
+      highlight: true
+    });
+
+    function pushRate(row, metaKey) {
+      if (!row) return;
+      const meta = FED_RATE_META[metaKey];
+      const value = nyFedNum(row.percentRate);
+      if (value == null && !row.percentRate && row.percentRate !== 0) return;
+      list.push({
+        id: meta.code.toLowerCase(),
+        kind: "rate",
+        name: meta.name,
+        code: meta.code,
+        tip: meta.tip,
+        value,
+        valueText: value == null ? null : value.toFixed(2),
+        unit: "%",
+        date: String(row.effectiveDate || "").slice(0, 10),
+        volume: nyFedNum(row.volumeInBillions),
+        p1: nyFedNum(row.percentPercentile1),
+        p25: nyFedNum(row.percentPercentile25),
+        p75: nyFedNum(row.percentPercentile75),
+        p99: nyFedNum(row.percentPercentile99),
+        targetFrom: nyFedNum(row.targetRateFrom),
+        targetTo: nyFedNum(row.targetRateTo),
+        highlight: metaKey === "EFFR" || metaKey === "SOFR"
+      });
+    }
+
+    pushRate(effr, "EFFR");
+    pushRate(sofr, "SOFR");
+    pushRate(obfr, "OBFR");
+    pushRate(tgcr, "TGCR");
+    pushRate(bgcr, "BGCR");
+
+    if (treasurySnap) {
+      US_TREASURY_FIELDS.forEach((f) => {
+        const v = treasurySnap[f.tenor];
+        if (v == null) return;
+        list.push({
+          id: "ust-" + f.tenor.toLowerCase(),
+          kind: "treasury",
+          name: f.name,
+          code: "UST" + f.tenor,
+          tip: "美国国债名义收益率",
+          value: v,
+          valueText: Number(v).toFixed(2),
+          unit: "%",
+          date: treasurySnap.date,
+          volume: null
+        });
+      });
+    }
+
+    return {
+      kind: "overview",
+      label: FED_KIND_META.overview.label,
+      sub: FED_KIND_META.overview.sub,
+      asOf,
+      targetFrom,
+      targetTo,
+      list,
+      total: list.length
+    };
+  }
+
+  async function loadFedTreasuryYields(pageSize = 40) {
+    const json = await fetchDatacenterJson(
+      buildDatacenterUrl(EAST_DC_WEB, {
+        reportName: "RPTA_WEB_TREASURYYIELD",
+        columns: "ALL",
+        pageNumber: "1",
+        pageSize: String(pageSize),
+        sortColumns: "SOLAR_DATE",
+        sortTypes: "-1",
+        source: "WEB",
+        client: "WEB"
+      })
+    );
+    const rows = (json?.result?.data || [])
+      .map((row) => {
+        const date = normalizeReportDate(row.SOLAR_DATE);
+        const item = { date, kind: "treasury-row" };
+        let any = false;
+        US_TREASURY_FIELDS.forEach((f) => {
+          const v = numOrNull(row[f.key]);
+          item[f.tenor] = v;
+          if (v != null) any = true;
+        });
+        if (!any) return null;
+        if (item["2Y"] != null && item["10Y"] != null) {
+          item.spread2s10s = round2(item["10Y"] - item["2Y"]);
+        } else {
+          item.spread2s10s = null;
+        }
+        return item;
+      })
+      .filter(Boolean);
+
+    return {
+      kind: "treasury",
+      label: FED_KIND_META.treasury.label,
+      sub: FED_KIND_META.treasury.sub,
+      list: rows,
+      total: rows.length
+    };
+  }
+
+  async function loadFedEffrHistory() {
+    const json = await fetchNyFedJson("/api/rates/unsecured/effr/last/30.json");
+    const list = (json?.refRates || []).map((row) => {
+      const value = nyFedNum(row.percentRate);
+      const targetFrom = nyFedNum(row.targetRateFrom);
+      const targetTo = nyFedNum(row.targetRateTo);
+      return {
+        id: "effr-" + String(row.effectiveDate || ""),
+        kind: "history",
+        name: "有效联邦基金利率",
+        code: "EFFR",
+        date: String(row.effectiveDate || "").slice(0, 10),
+        value,
+        valueText: value == null ? null : value.toFixed(2),
+        unit: "%",
+        targetFrom,
+        targetTo,
+        targetText: formatFedTargetRange(targetFrom, targetTo),
+        volume: nyFedNum(row.volumeInBillions),
+        p1: nyFedNum(row.percentPercentile1),
+        p99: nyFedNum(row.percentPercentile99)
+      };
+    });
+    return {
+      kind: "history",
+      label: FED_KIND_META.history.label,
+      sub: FED_KIND_META.history.sub,
+      list,
+      total: list.length
+    };
+  }
+
+  async function loadFedRates(kind = "overview") {
+    const next = FED_KIND_META[kind] ? kind : "overview";
+    if (next === "treasury") return loadFedTreasuryYields(40);
+    if (next === "history") return loadFedEffrHistory();
+    return loadFedOverview();
+  }
+
+  /**
    * 债券 / 固定收益（对齐东财债券行情中心）
    * kind:
    *   treasury    国债（含国开/进出/农发等利率债）
@@ -4198,6 +4473,7 @@
     loadHkMarketBreadth,
     loadMetalsQuotes,
     loadOilQuotes,
+    loadFedRates,
     loadBondsQuotes,
     loadCryptoQuotes,
     loadCryptoDetail,

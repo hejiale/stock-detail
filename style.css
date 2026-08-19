@@ -3344,6 +3344,61 @@ button.fund-period-card:hover {
   color: var(--down);
 }
 
+/* 美联储利率 */
+.fed-hero {
+  margin: 10px 8px 4px;
+  padding: 14px 14px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
+}
+
+.fed-hero-label {
+  font-size: 12px;
+  color: #9a3412;
+}
+
+.fed-hero-value {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #9a3412;
+  line-height: 1.15;
+}
+
+.fed-hero-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #c2410c;
+}
+
+.fed-overview-head {
+  grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 0.85fr));
+}
+
+.fed-overview-main {
+  grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 0.85fr));
+}
+
+.fed-treasury-head,
+.fed-treasury-main {
+  grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr));
+}
+
+.fed-history-head,
+.fed-history-main {
+  grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 0.9fr));
+}
+
+.fed-row-highlight .board-name {
+  color: #9a3412;
+}
+
+.fed-row-highlight .board-price {
+  font-weight: 650;
+}
+
 /* 虚拟币行情：复用贵金属列表 + 基金详情弹层 */
 #cryptoDetailModal .fund-detail-nav .price {
   font-size: 24px;

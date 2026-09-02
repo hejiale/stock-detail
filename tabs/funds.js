@@ -4,7 +4,7 @@
       const groupId = getMainGroupId(activeMainTab);
       const group = MAIN_TABS.find((tab) => tab.id === groupId);
       const children = group?.children;
-      if (!children?.length || (groupId === "watch" && !isLoggedIn())) {
+      if (!children?.length) {
         picker.innerHTML = "";
         picker.hidden = true;
         picker.removeAttribute("aria-label");
@@ -125,12 +125,6 @@
     }
 
     async function loadFocusFunds({ force = false } = {}) {
-      if (!isLoggedIn()) {
-        focusFundsState.list = [];
-        renderFocusFundLoginGate();
-        return;
-      }
-
       if (!force && focusFundsState.list?.length) {
         renderFocusFundList(focusFundsState.list);
         const subEl = document.getElementById("focusFundSub");

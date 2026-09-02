@@ -17,6 +17,7 @@
   const WATCHLIST_BASE =
     "https://stock-backdev-production.up.railway.app";
   const AUTH_USER_KEY = "watch_user_v1";
+  const LOCAL_FOCUS_FUNDS_KEY = "local_focus_funds_v1";
   const VALID_WATCH_TYPES = [1, 2, 3, 4, 5];
 
   function market() {
@@ -204,13 +205,44 @@
     return raw.padStart(6, "0").slice(-6);
   }
 
-  /** GET /api/focus-list?userId= */
+  /** 从本地存储获取自选基金列表 */
+  function getLocalFocusFunds() {
+    try {
+      const raw = localStorage.getItem(LOCAL_FOCUS_FUNDS_KEY);
+      if (!raw) return [];
+      const data = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** 保存自选基金列表到本地存储 */
+  function saveLocalFocusFunds(funds) {
+    localStorage.setItem(LOCAL_FOCUS_FUNDS_KEY, JSON.stringify(funds));
+  }
+
+  /** 初始化本地自选基金数据 */
+  function initLocalFocusFunds() {
+    const existing = getLocalFocusFunds();
+    if (existing.length > 0) return;
+    
+    const defaultFunds = [
+      { code: "022184", created_at: "2026-08-13T02:21:47.000Z" },
+      { code: "008254", created_at: "2026-08-13T02:21:40.000Z" },
+      { code: "018147", created_at: "2026-08-13T02:21:32.000Z" },
+      { code: "021277", created_at: "2026-08-13T02:21:24.000Z" },
+      { code: "024239", created_at: "2026-08-13T02:21:15.000Z" },
+      { code: "006503", created_at: "2026-08-13T02:21:02.000Z" },
+      { code: "017811", created_at: "2026-08-13T02:19:50.000Z" }
+    ];
+    saveLocalFocusFunds(defaultFunds);
+  }
+
+  /** GET /api/focus-list?userId= (改为本地数据) */
   async function listFocusFunds() {
-    const userId = requireUserId();
-    const json = await watchlistFetch(
-      "/api/focus-list?userId=" + encodeURIComponent(userId)
-    );
-    const rows = Array.isArray(json.data) ? json.data : [];
+    initLocalFocusFunds();
+    const rows = getLocalFocusFunds();
     const seen = new Set();
     return rows
       .map((row) => {
@@ -225,31 +257,36 @@
       .filter(Boolean);
   }
 
-  /** POST /api/focus-list  { code, userId } */
+  /** POST /api/focus-list  { code, userId } (改为本地存储) */
   async function addFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("基金代码无效");
-    const userId = requireUserId();
-    const json = await watchlistFetch("/api/focus-list", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: fundCode, userId })
-    });
-    return { ...(json.data || {}), code: fundCode, userId };
+    
+    const funds = getLocalFocusFunds();
+    const exists = funds.some(f => normalizeFocusFundCode(f.code) === fundCode);
+    if (exists) {
+      throw new Error("已在关注");
+    }
+    
+    const newFund = {
+      code: fundCode,
+      created_at: new Date().toISOString()
+    };
+    funds.push(newFund);
+    saveLocalFocusFunds(funds);
+    
+    return { code: fundCode, created_at: newFund.created_at };
   }
 
-  /** DELETE /api/focus-list/:code?userId= */
+  /** DELETE /api/focus-list/:code?userId= (改为本地存储) */
   async function removeFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("缺少基金代码");
-    const userId = requireUserId();
-    await watchlistFetch(
-      "/api/focus-list/" +
-        encodeURIComponent(fundCode) +
-        "?userId=" +
-        encodeURIComponent(userId),
-      { method: "DELETE" }
-    );
+    
+    const funds = getLocalFocusFunds();
+    const filtered = funds.filter(f => normalizeFocusFundCode(f.code) !== fundCode);
+    saveLocalFocusFunds(filtered);
+    
     return true;
   }
 
@@ -346,6 +383,7 @@
 
   global.WatchlistAPI = {
     AUTH_USER_KEY,
+    LOCAL_FOCUS_FUNDS_KEY,
     getAuthUser,
     getUserId,
     saveAuthUser,
@@ -361,6 +399,9 @@
     loadWatchQuotes,
     listFocusFunds,
     addFocusFund,
-    removeFocusFund
+    removeFocusFund,
+    getLocalFocusFunds,
+    saveLocalFocusFunds,
+    initLocalFocusFunds
   };
 })(window);

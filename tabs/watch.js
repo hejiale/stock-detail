@@ -186,14 +186,6 @@
         btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
       });
 
-      if (!isLoggedIn()) {
-        watchlistState.type = next;
-        watchlistState.list = [];
-        watchlistState.trends = null;
-        renderWatchLoginGate();
-        return;
-      }
-
       setWatchAuthGate(false);
 
       if (!force && watchlistState.type === next && watchlistState.list?.length) {

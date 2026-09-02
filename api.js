@@ -3704,8 +3704,57 @@
   }
 
   /**
+   * 东财搜索接口（JSONP），支持按代码或名称模糊搜索全市场股票/基金
+   */
+  function searchEastMoneyJsonp(keyword, type, count) {
+    const kw = String(keyword || "").trim();
+    if (!kw) return Promise.resolve([]);
+    const cbName = "_esCb_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+    const url =
+      "https://searchapi.eastmoney.com/api/suggest/get" +
+      "?input=" +
+      encodeURIComponent(kw) +
+      "&type=" +
+      (type || "14") +
+      "&count=" +
+      (count || 20) +
+      "&token=D43BF722C8E33BDC906FB84D85E326E8" +
+      "&callback=" +
+      cbName +
+      "&_=" +
+      Date.now();
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve([]);
+      }, 5000);
+
+      function cleanup() {
+        clearTimeout(timer);
+        try { delete global[cbName]; } catch { global[cbName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      global[cbName] = function (data) {
+        cleanup();
+        const list = data?.QuotationCodeTable?.Data || [];
+        resolve(Array.isArray(list) ? list : []);
+      };
+
+      const script = document.createElement("script");
+      script.src = url;
+      script.onerror = function () {
+        cleanup();
+        resolve([]);
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
    * 通过代码或名称搜索股票并返回匹配结果列表
-   * 先尝试东财搜索，再从排行榜数据中按名称模糊匹配
+   * 通过 JSONP 搜索全市场
    */
   async function searchStockList(keyword, marketType) {
     const kw = String(keyword || "").trim();
@@ -3720,7 +3769,7 @@
     };
     const validMarkets = marketCodeMap[marketType] || [];
 
-    const results = await searchEastMoney(kw, "12", 20);
+    const results = await searchEastMoneyJsonp(kw, "12", 20);
     if (results.length) {
       return results
         .filter((r) => r.Code && validMarkets.includes(String(r.MktNum || "")))
@@ -3769,7 +3818,7 @@
 
   /**
    * 通过代码或名称搜索基金
-   * 先尝试用代码精确查询，再从排行榜数据中按名称模糊匹配
+   * 通过 JSONP 搜索全市场
    */
   async function searchFundList(keyword) {
     const kw = String(keyword || "").trim();
@@ -3785,7 +3834,7 @@
       }
     }
 
-    const results = await searchEastMoney(kw, "11", 20);
+    const results = await searchEastMoneyJsonp(kw, "11", 20);
     if (results.length) {
       return results
         .filter((r) => r.Code && /^\d{6}$/.test(String(r.Code).trim()))

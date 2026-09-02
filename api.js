@@ -3677,6 +3677,72 @@
     "https://datacenter-web.eastmoney.com/api/data/v1/get"
   ];
 
+  /**
+   * 东财搜索接口，支持按代码或名称模糊搜索股票/基金
+   */
+  async function searchEastMoney(keyword, type, count) {
+    const kw = String(keyword || "").trim();
+    if (!kw) return [];
+    const url =
+      "https://searchapi.eastmoney.com/api/suggest/get" +
+      "?input=" +
+      encodeURIComponent(kw) +
+      "&type=" +
+      (type || "14") +
+      "&count=" +
+      (count || 10) +
+      "&token=D43BF722C8E33BDC906FB84D85E326E8&_=" +
+      Date.now();
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: abortTimeout(5000)
+    });
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const list = json?.QuotationCodeTable?.Data || [];
+    return Array.isArray(list) ? list : [];
+  }
+
+  /**
+   * 通过代码或名称搜索股票并返回匹配结果列表
+   */
+  async function searchStockList(keyword, marketType) {
+    const kw = String(keyword || "").trim();
+    if (!kw) return [];
+
+    const marketCodeMap = {
+      CN: ["1", "0"],
+      US: ["105", "106"],
+      HK: ["116"],
+      JP: ["176"],
+      KR: ["177"]
+    };
+    const validMarkets = marketCodeMap[marketType] || [];
+    const results = await searchEastMoney(kw, "12", 20);
+    return results
+      .filter((r) => r.Code && validMarkets.includes(String(r.MktNum || "")))
+      .map((r) => ({
+        code: String(r.Code).trim(),
+        name: String(r.Name || r.Code).trim(),
+        market: Number(r.MktNum)
+      }));
+  }
+
+  /**
+   * 通过代码或名称搜索基金并返回匹配结果列表
+   */
+  async function searchFundList(keyword) {
+    const kw = String(keyword || "").trim();
+    if (!kw) return [];
+    const results = await searchEastMoney(kw, "11", 20);
+    return results
+      .filter((r) => r.Code && /^\d{6}$/.test(String(r.Code).trim()))
+      .map((r) => ({
+        code: String(r.Code).trim(),
+        name: String(r.Name || r.Code).trim()
+      }));
+  }
+
   function parseFundRankPct(raw) {
     if (raw == null || raw === "" || raw === "-" || raw === "--") return null;
     const n = Number(raw);
@@ -4482,6 +4548,8 @@
     loadFundQuotes,
     resolveFund,
     resolveStock,
+    searchStockList,
+    searchFundList,
     calcPeriodReturns,
     sliceKlinesForRange
   };

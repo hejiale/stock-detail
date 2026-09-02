@@ -67,13 +67,10 @@
                   type="text"
                   class="add-stock-input"
                   data-add-code="fundRank"
-                  placeholder="输入基金代码，如 017811"
+                  placeholder="输入代码或名称查询，如 017811、华夏成长"
                   autocomplete="off"
                   spellcheck="false"
                 />
-                <button class="btn btn-add" type="button" data-add-stock="fundRank" aria-label="添加自选基金" title="添加自选基金">
-                  <img src="assets/add_zixuan.png" alt="添加" />
-                </button>
               </div>
             </div>
             <div class="board-tabs kr-rank-tabs fund-rank-tabs">

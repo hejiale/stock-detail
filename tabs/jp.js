@@ -135,13 +135,10 @@
                   type="text"
                   class="add-stock-input"
                   data-add-code="jpStocks"
-                  placeholder="日股代码，如 7203、6758"
+                  placeholder="输入代码或名称查询，如 7203、丰田"
                   autocomplete="off"
                   spellcheck="false"
                 />
-                <button class="btn btn-add" type="button" data-add-stock="jpStocks" aria-label="添加股票" title="添加">
-                  <img src="assets/add_zixuan.png" alt="添加" />
-                </button>
               </div>
             </div>
             <div class="board-tabs kr-rank-tabs">

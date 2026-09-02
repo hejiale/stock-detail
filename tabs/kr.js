@@ -135,13 +135,10 @@
                   type="text"
                   class="add-stock-input"
                   data-add-code="krStocks"
-                  placeholder="韩股代码，如 005930"
+                  placeholder="输入代码或名称查询，如 005930、三星"
                   autocomplete="off"
                   spellcheck="false"
                 />
-                <button class="btn btn-add" type="button" data-add-stock="krStocks" aria-label="添加股票" title="添加">
-                  <img src="assets/add_zixuan.png" alt="添加" />
-                </button>
               </div>
             </div>
             <div class="board-tabs kr-rank-tabs">

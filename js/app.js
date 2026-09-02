@@ -1,3 +1,49 @@
+    async function queryFromSearchInput(inputEl) {
+      const raw = (inputEl?.value || "").trim();
+      if (!raw) {
+        showToast("请输入代码或名称");
+        inputEl?.focus();
+        return;
+      }
+      const fundId = inputEl?.dataset?.addCode || "";
+
+      if (fundId === "fundRank" || fundId === "funds") {
+        try {
+          const results = await searchFundList(raw);
+          if (results.length) {
+            openFundDetailModal(results[0].code, results[0].name);
+          } else {
+            showToast("未找到匹配的基金");
+          }
+        } catch (err) {
+          showToast(err.message || "查询失败");
+        }
+        return;
+      }
+
+      const typeMap = {
+        cnSemi: "CN",
+        usSemi: "US",
+        hkStocks: "HK",
+        jpStocks: "JP",
+        krStocks: "KR"
+      };
+      const marketType = typeMap[fundId];
+      if (!marketType) return;
+
+      try {
+        const results = await searchStockList(raw, marketType);
+        if (results.length) {
+          const h = results[0];
+          showToast(`查询到：${h.name}（${h.code}）`);
+        } else {
+          showToast("未找到匹配的股票");
+        }
+      } catch (err) {
+        showToast(err.message || "查询失败");
+      }
+    }
+
     function persistFromDom() {
       const saved = loadInputs();
       document.querySelectorAll(".change-value[data-fund]").forEach((el) => {
@@ -779,7 +825,7 @@
 
       if (e.key === "Enter" && e.target.matches?.("[data-add-code]")) {
         e.preventDefault();
-        addCustomStock(e.target.dataset.addCode);
+        queryFromSearchInput(e.target);
         return;
       }
 

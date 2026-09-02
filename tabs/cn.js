@@ -589,13 +589,10 @@
                   type="text"
                   class="add-stock-input"
                   data-add-code="cnSemi"
-                  placeholder="沪/深/北交所代码，如 600519、000001、920001"
+                  placeholder="输入代码或名称查询，如 600519、贵州茅台"
                   autocomplete="off"
                   spellcheck="false"
                 />
-                <button class="btn btn-add" type="button" data-add-stock="cnSemi" aria-label="添加股票" title="添加">
-                  <img src="assets/add_zixuan.png" alt="添加" />
-                </button>
               </div>
             </div>
             <div class="board-tabs kr-rank-tabs">

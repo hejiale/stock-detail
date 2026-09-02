@@ -41,7 +41,9 @@
       resolveFund,
       calcPeriodReturns,
       sliceKlinesForRange,
-      resolveStock
+      resolveStock,
+      searchStockList,
+      searchFundList
     } = window.MarketAPI;
 
     const {

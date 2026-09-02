@@ -301,7 +301,7 @@
         if (!addWatchBtn) return;
         e.preventDefault();
         e.stopPropagation();
-        addWatchFromRow(addWatchBtn);
+        return;
       },
       true
     );

@@ -3072,7 +3072,7 @@
           const v = numOrNull(row[f.key]);
           item[f.tenor] = v;
           if (v != null) any = true;
-        });
+        }); 
         if (!any) return null;
         if (item["2Y"] != null && item["10Y"] != null) {
           item.spread2s10s = round2(item["10Y"] - item["2Y"]);
@@ -3705,6 +3705,7 @@
 
   /**
    * 通过代码或名称搜索股票并返回匹配结果列表
+   * 先尝试东财搜索，再从排行榜数据中按名称模糊匹配
    */
   async function searchStockList(keyword, marketType) {
     const kw = String(keyword || "").trim();
@@ -3718,29 +3719,97 @@
       KR: ["177"]
     };
     const validMarkets = marketCodeMap[marketType] || [];
+
     const results = await searchEastMoney(kw, "12", 20);
-    return results
-      .filter((r) => r.Code && validMarkets.includes(String(r.MktNum || "")))
-      .map((r) => ({
-        code: String(r.Code).trim(),
-        name: String(r.Name || r.Code).trim(),
-        market: Number(r.MktNum)
-      }));
+    if (results.length) {
+      return results
+        .filter((r) => r.Code && validMarkets.includes(String(r.MktNum || "")))
+        .map((r) => ({
+          code: String(r.Code).trim(),
+          name: String(r.Name || r.Code).trim(),
+          market: Number(r.MktNum)
+        }));
+    }
+
+    const fsMap = {
+      CN: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
+      US: "m:105,m:106",
+      HK: "m:116+t:3,m:116+t:4",
+      JP: "m:176",
+      KR: "m:177"
+    };
+    const fs = fsMap[marketType];
+    if (!fs) return [];
+
+    try {
+      const { list } = await fetchEastClist({
+        fs,
+        fields: "f12,f13,f14,f2,f3",
+        pn: 1,
+        pz: 100,
+        po: 1
+      });
+      const lower = kw.toLowerCase();
+      return (Array.isArray(list) ? list : [])
+        .filter((item) => {
+          const name = String(item.f14 || "").toLowerCase();
+          const code = String(item.f12 || "");
+          return name.includes(lower) || code.includes(kw);
+        })
+        .slice(0, 10)
+        .map((item) => ({
+          code: String(item.f12 || "").trim(),
+          name: String(item.f14 || item.f12 || "").trim(),
+          market: Number(item.f13)
+        }));
+    } catch {
+      return [];
+    }
   }
 
   /**
-   * 通过代码或名称搜索基金并返回匹配结果列表
+   * 通过代码或名称搜索基金
+   * 先尝试用代码精确查询，再从排行榜数据中按名称模糊匹配
    */
   async function searchFundList(keyword) {
     const kw = String(keyword || "").trim();
     if (!kw) return [];
+
+    if (/^\d{6}$/.test(kw)) {
+      try {
+        const row = await fetchFundDcDetailRow(kw);
+        const q = mapFundQuoteFromDcRow(row, kw);
+        return [{ code: q.code, name: q.name }];
+      } catch {
+        return [];
+      }
+    }
+
     const results = await searchEastMoney(kw, "11", 20);
-    return results
-      .filter((r) => r.Code && /^\d{6}$/.test(String(r.Code).trim()))
-      .map((r) => ({
-        code: String(r.Code).trim(),
-        name: String(r.Name || r.Code).trim()
-      }));
+    if (results.length) {
+      return results
+        .filter((r) => r.Code && /^\d{6}$/.test(String(r.Code).trim()))
+        .map((r) => ({
+          code: String(r.Code).trim(),
+          name: String(r.Name || r.Code).trim()
+        }));
+    }
+
+    try {
+      const rankData = await loadOpenFundRank("month", 100);
+      const list = rankData?.list || [];
+      const lower = kw.toLowerCase();
+      return list
+        .filter((item) => {
+          const name = String(item.name || "").toLowerCase();
+          const code = String(item.code || "");
+          return name.includes(lower) || code.includes(kw);
+        })
+        .slice(0, 10)
+        .map((item) => ({ code: item.code, name: item.name }));
+    } catch {
+      return [];
+    }
   }
 
   function parseFundRankPct(raw) {

@@ -214,16 +214,6 @@
                       data-chart-index="${i}"
                       title="查看 ${safeName} 行情"
                     >${item.name}</div>
-                    <button
-                      class="btn-add-watch"
-                      type="button"
-                      data-add-watch="jpStocks"
-                      data-watch-code="${item.code}"
-                      data-watch-name="${safeName}"
-                      data-watch-type="5"
-                      title="加入自选"
-                      aria-label="加入自选 ${safeName}"
-                    ><img src="assets/add_zixuan.png" alt="自选" /></button>
                   </div>
                   <div class="board-meta">${codeWithCopyHtml(item.code, item.name)}</div>
                 </div>

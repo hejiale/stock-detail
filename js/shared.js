@@ -96,7 +96,6 @@
       { id: "krStocks", name: "韩股 KR" }
     ];
     const WATCH_SUB_TABS = [
-      { id: "watchStocks", name: "个股", icon: "assets/add_zixuan.png" },
       { id: "funds", name: "基金", icon: "assets/zixuan_jijin.png" }
     ];
     const MAIN_TABS = [
@@ -258,7 +257,7 @@
     function resolvePanelId(tabOrFundId) {
       if (tabOrFundId === "markets") return lastMarketTab || "cnSemi";
       if (tabOrFundId === "watch") {
-        return isLoggedIn() ? lastWatchTab || "watchStocks" : "watchStocks";
+        return "funds";
       }
       if (PANEL_IDS.has(tabOrFundId)) return tabOrFundId;
       return "cnSemi";

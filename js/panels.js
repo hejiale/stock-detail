@@ -1,10 +1,6 @@
     const fundSparkTrends = {};
 
     async function syncFundQuotes(fundId) {
-      if (isWatchTab(fundId)) {
-        await loadWatchlist(watchlistState.type || 1, { force: true });
-        return;
-      }
       if (isFundRankTab(fundId)) {
         await loadFundRankPeriod(fundRankState.period || "month", { force: true });
         return;

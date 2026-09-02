@@ -82,15 +82,8 @@
     }
 
     async function addStockToWatchlist(rawCode, type, { refreshWatch = false } = {}) {
-      const t = normalizeWatchType(type);
-      const marketType = watchMarketOfType(t);
-      const stock = await resolveStock(rawCode, marketType);
-      await addWatchStock(stock.code, t);
-      showToast(`加入成功：${stock.name}（${stock.code}）`);
-      if (refreshWatch || activeMainTab === "watchStocks") {
-        await loadWatchlist(t, { force: true });
-      }
-      return stock;
+      // 个股功能已禁用
+      return null;
     }
 
     async function addCustomStock(fundId) {
@@ -127,37 +120,6 @@
         }
         return;
       }
-
-      const type = watchTypeOfFund(fundId);
-      if (!type || !ADDABLE_FUNDS.has(fundId)) return;
-
-      const input = document.querySelector(`[data-add-code="${fundId}"]`);
-      const btn = document.querySelector(`[data-add-stock="${fundId}"]`);
-      const raw = (input?.value || "").trim();
-      if (!raw) {
-        showToast(addEmptyTipOfFund(fundId));
-        input?.focus();
-        return;
-      }
-
-      if (btn) {
-        btn.classList.add("is-loading");
-        btn.disabled = true;
-      }
-      try {
-        const stock = await addStockToWatchlist(raw, type, {
-          refreshWatch: activeMainTab === "watchStocks"
-        });
-        if (!stock) return;
-        if (input) input.value = "";
-      } catch (err) {
-        showToast(err.message || "添加失败");
-      } finally {
-        if (btn) {
-          btn.classList.remove("is-loading");
-          btn.disabled = false;
-        }
-      }
     }
 
     function purgeLocalCustomStock(code) {
@@ -180,16 +142,8 @@
     }
 
     async function removeWatchlistStock(code) {
-      const raw = String(code || "").trim();
-      if (!raw) return;
-      try {
-        await removeWatchStock(raw);
-        purgeLocalCustomStock(raw);
-        showToast("已移除自选股票");
-        await loadWatchlist(watchlistState.type || 1, { force: true });
-      } catch (err) {
-        showToast(err.message || "删除失败");
-      }
+      // 个股功能已禁用
+      return;
     }
 
     async function removeFocusListFund(code) {
@@ -236,40 +190,6 @@
         }
         return;
       }
-
-      const type =
-        Number(btn?.getAttribute("data-watch-type") || btn?.dataset?.watchType) ||
-        watchTypeOfFund(fundId);
-
-      if (!code) {
-        showToast("缺少股票代码，无法加入自选");
-        return;
-      }
-      if (!type || !ADDABLE_FUNDS.has(fundId)) {
-        showToast("无法识别市场类型");
-        return;
-      }
-
-      if (btn?.classList.contains("is-added") || btn?.disabled) return;
-
-      if (btn) btn.disabled = true;
-      try {
-        // 与搜索框添加走同一条链路：addStockToWatchlist
-        const stock = await addStockToWatchlist(code, type);
-        if (!stock) {
-          if (btn) btn.disabled = false;
-          return;
-        }
-        if (btn) {
-          btn.classList.add("is-added");
-          const labelName = stock?.name || code;
-          btn.title = "已加入自选";
-          btn.setAttribute("aria-label", `已加入自选 ${labelName}`);
-        }
-      } catch (err) {
-        showToast(err.message || "添加失败");
-        if (btn) btn.disabled = false;
-      }
     }
 
     function getTabButtons() {
@@ -296,7 +216,7 @@
       const fundId = resolvePanelId(tabOrFundId);
       activeMainTab = fundId;
       if (isMarketTab(fundId)) lastMarketTab = fundId;
-      if (WATCH_TAB_IDS.includes(fundId) && isLoggedIn()) lastWatchTab = fundId;
+      if (WATCH_TAB_IDS.includes(fundId)) lastWatchTab = fundId;
 
       const alreadyActive = prevFundId === fundId && !forceSync;
 
@@ -581,12 +501,10 @@
 
       const watchTypeBtn = e.target.closest("[data-watch-type]");
       if (watchTypeBtn) {
-        loadWatchlist(Number(watchTypeBtn.dataset.watchType), { force: true });
         return;
       }
 
       if (e.target.closest("[data-watch-refresh]")) {
-        loadWatchlist(watchlistState.type || 1, { force: true });
         return;
       }
 

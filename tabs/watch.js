@@ -37,43 +37,7 @@
       const panel = document.createElement("section");
       panel.className = "panel" + (isActive ? " active" : "");
       panel.dataset.panel = "watchStocks";
-      const type = normalizeWatchType(watchlistState.type || 1);
-      const typeTabs = WATCH_TYPE_META.map(
-        (m) => `
-          <button
-            class="board-tab${m.type === type ? " active" : ""}"
-            type="button"
-            data-watch-type="${m.type}"
-          >${m.label}</button>`
-      ).join("");
-
-      panel.innerHTML = `
-          <div class="fund-card kr-rank-card watch-rank-card">
-            <div class="fund-meta">
-              <div class="fund-meta-text">
-                <div class="name">自选个股</div>
-                <div class="sub" id="watchRankSub">${watchTypeLabel(type)} · 加载中…</div>
-              </div>
-              <div class="fund-meta-actions">
-                <button class="btn-sync" type="button" data-watch-refresh title="刷新自选" aria-label="刷新自选">
-                  <img src="assets/pull.png" alt="刷新" />
-                </button>
-              </div>
-            </div>
-            <div class="board-tabs kr-rank-tabs watch-type-tabs">
-              ${typeTabs}
-            </div>
-            <div class="board-list-head us-stock-head kr-stock-head watch-stock-head">
-              <div>股票</div>
-              <div style="text-align:center">走势</div>
-              <div style="text-align:center">最新价</div>
-              <div style="text-align:center">涨跌幅%</div>
-            </div>
-            <div class="kr-rank-body">
-              <div class="us-stock-list kr-stock-list watch-stock-list" id="watchStockList"></div>
-              <div class="board-status show" id="watchBoardStatus">加载中…</div>
-            </div>
-          </div>`;
+      panel.style.display = "none";
       return panel;
     }
 
@@ -181,63 +145,6 @@
     }
 
     async function loadWatchlist(type, { force = false } = {}) {
-      const next = normalizeWatchType(type != null ? type : watchlistState.type || 1);
-      document.querySelectorAll("[data-watch-type]").forEach((btn) => {
-        btn.classList.toggle("active", Number(btn.dataset.watchType) === next);
-      });
-
-      setWatchAuthGate(false);
-
-      if (!force && watchlistState.type === next && watchlistState.list?.length) {
-        renderWatchStockList(watchlistState.list);
-        const subEl = document.getElementById("watchRankSub");
-        if (subEl) {
-          subEl.textContent = `${watchTypeLabel(next)} · 自选 ${watchlistState.list.length} 只`;
-        }
-        setStatus("watchBoardStatus", "");
-        requestAnimationFrame(() => redrawWatchSparklines());
-        return;
-      }
-
-      watchlistState.type = next;
-      watchlistState.trends = null;
-
-      const requestId = (loadWatchlist._req = (loadWatchlist._req || 0) + 1);
-      const listEl = document.getElementById("watchStockList");
-      const subEl = document.getElementById("watchRankSub");
-      if (listEl) listEl.innerHTML = "";
-      setStatus("watchBoardStatus", "加载自选列表…");
-      if (subEl) subEl.textContent = `${watchTypeLabel(next)} · 加载中…`;
-
-      try {
-        const rows = await listWatchStocks(next);
-        if (requestId !== loadWatchlist._req) return;
-        const list = rows.length ? await loadWatchQuotes(rows, next) : [];
-        if (requestId !== loadWatchlist._req) return;
-        watchlistState.list = list;
-        renderWatchStockList(list);
-        if (subEl) {
-          subEl.textContent = `${watchTypeLabel(next)} · 自选 ${list.length} 只`;
-        }
-        setStatus(
-          "watchBoardStatus",
-          list.length ? "" : `暂无${watchTypeLabel(next)}自选，可在各市场页添加`
-        );
-        if (list.length) {
-          requestAnimationFrame(() => {
-            if (requestId !== loadWatchlist._req) return;
-            paintWatchSparklines(list, requestId).catch(() => {});
-          });
-        }
-      } catch (err) {
-        if (requestId !== loadWatchlist._req) return;
-        watchlistState.list = [];
-        watchlistState.trends = null;
-        if (listEl) listEl.innerHTML = "";
-        if (subEl) subEl.textContent = `${watchTypeLabel(next)} · 加载失败`;
-        setStatus(
-          "watchBoardStatus",
-          err?.message || "自选列表加载失败，请稍后重试"
-        );
-      }
+      // 个股功能已禁用，直接返回
+      return;
     }

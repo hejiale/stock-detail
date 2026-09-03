@@ -204,7 +204,11 @@
       codes: [],
       allCodesCount: 0,
       name: "",
-      rank: "gainers"
+      rank: "gainers",
+      list: [],
+      page: 0,
+      hasMore: true,
+      loadingMore: false
     };
 
     function setBoardStocksRankTabs(kind) {
@@ -220,15 +224,88 @@
           ? `含${boardStocksState.allCodesCount}个细分`
           : boardStocksState.codes[0] || "";
       if (phase === "loading") return `${prefix} · 加载${rankLabel}榜…`;
-      if (phase === "done") return `${prefix} · ${rankLabel}前 ${listLen} 只`;
+      if (phase === "done") return `${prefix} · ${rankLabel}榜共 ${listLen} 只`;
       return phase;
+    }
+
+    function updateBoardStocksLoadMoreUI() {
+      const host = document.querySelector(`[data-board-stocks-more]`);
+      if (!host) return;
+      const { hasMore, loadingMore, list } = boardStocksState;
+      if (loadingMore) {
+        host.innerHTML = `<div class="rank-load-more loading" data-board-stocks-more>加载中…</div>`;
+        return;
+      }
+      if (!hasMore && list.length) {
+        host.innerHTML = `<div class="rank-load-more done" data-board-stocks-more>已加载全部（${list.length}）</div>`;
+        return;
+      }
+      host.innerHTML = list.length
+        ? `<div class="rank-load-more" data-board-stocks-more data-board-stocks-sentinel>上拉加载更多</div>`
+        : "";
+      if (list.length) bindBoardStocksLoadMore();
+    }
+
+    function bindBoardStocksLoadMore() {
+      unbindBoardStocksLoadMore();
+      const sentinel = document.querySelector(`[data-board-stocks-sentinel]`);
+      if (!sentinel) return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) loadBoardStocksMore();
+        },
+        { root: null, rootMargin: "160px 0px", threshold: 0 }
+      );
+      observer.observe(sentinel);
+      boardStocksState._observer = observer;
+    }
+
+    function unbindBoardStocksLoadMore() {
+      boardStocksState._observer?.disconnect();
+      boardStocksState._observer = null;
+    }
+
+    async function loadBoardStocksMore() {
+      if (boardStocksState.loadingMore || !boardStocksState.hasMore) return;
+      boardStocksState.loadingMore = true;
+      updateBoardStocksLoadMoreUI();
+      const reqId = boardStocksRequestId;
+      try {
+        const nextPage = boardStocksState.page + 1;
+        const result = await loadCnSectorStocks(
+          boardStocksState.codes,
+          50,
+          boardStocksState.rank,
+          nextPage
+        );
+        if (reqId !== boardStocksRequestId) return;
+        const start = boardStocksState.list.length;
+        boardStocksState.list = mergeRankList(boardStocksState.list, result);
+        const added = boardStocksState.list.length - start;
+        boardStocksState.page = nextPage;
+        boardStocksState.hasMore = added >= 50;
+        renderBoardStocksList(boardStocksState.list.slice(start), true);
+        document.getElementById("boardStocksModalSub").textContent =
+          boardStocksSubTip("done", boardStocksState.list.length);
+      } catch (_) {
+      } finally {
+        if (reqId === boardStocksRequestId) {
+          boardStocksState.loadingMore = false;
+          updateBoardStocksLoadMoreUI();
+        }
+      }
     }
 
     async function loadBoardStocksRank(kind) {
       if (!boardStocksState.codes.length) return;
       const rank = kind === "losers" ? "losers" : "gainers";
       boardStocksState.rank = rank;
+      boardStocksState.list = [];
+      boardStocksState.page = 0;
+      boardStocksState.hasMore = true;
+      boardStocksState.loadingMore = false;
       setBoardStocksRankTabs(rank);
+      unbindBoardStocksLoadMore();
 
       const reqId = ++boardStocksRequestId;
       document.getElementById("boardStocksModalSub").textContent =
@@ -240,11 +317,15 @@
       );
 
       try {
-        const list = await loadCnSectorStocks(boardStocksState.codes, 20, rank);
+        const list = await loadCnSectorStocks(boardStocksState.codes, 50, rank, 1);
         if (reqId !== boardStocksRequestId) return;
+        boardStocksState.list = list;
+        boardStocksState.page = 1;
+        boardStocksState.hasMore = list.length >= 50;
         document.getElementById("boardStocksModalSub").textContent =
           boardStocksSubTip("done", list.length);
         renderBoardStocksList(list);
+        updateBoardStocksLoadMoreUI();
         setStatus("boardStocksStatus", list.length ? "" : "暂无成分股数据");
       } catch (err) {
         if (reqId !== boardStocksRequestId) return;
@@ -268,6 +349,10 @@
       boardStocksState.allCodesCount = codes.length;
       boardStocksState.name = boardName || fetchCodes[0];
       boardStocksState.rank = "gainers";
+      boardStocksState.list = [];
+      boardStocksState.page = 0;
+      boardStocksState.hasMore = true;
+      boardStocksState.loadingMore = false;
 
       document.getElementById("boardStocksModalName").textContent =
         boardStocksState.name;
@@ -277,6 +362,7 @@
 
     function closeBoardStocksModal() {
       boardStocksRequestId += 1;
+      unbindBoardStocksLoadMore();
       hideModal("boardStocksModal");
       setStatus("boardStocksStatus", "");
     }
@@ -285,7 +371,11 @@
     const indexStocksState = {
       code: "",
       label: "",
-      rank: "hot"
+      rank: "hot",
+      list: [],
+      page: 0,
+      hasMore: true,
+      loadingMore: false
     };
 
     function resolveIndexStocksRank(kind) {
@@ -308,17 +398,19 @@
       }
     }
 
-    function renderIndexStocksList(list) {
+    function renderIndexStocksList(list, append = false) {
       const wrap = document.getElementById("indexStocksList");
       if (!wrap) return;
-      if (!list.length) {
+      if (!append && !list.length) {
         wrap.innerHTML = "";
         return;
       }
 
       const isMcap = indexStocksState.rank === "mcap";
-      wrap.innerHTML = list
+      const start = append ? wrap.children.length : 0;
+      const html = list
         .map((item, i) => {
+          const idx = start + i;
           const chg = item.change;
           const tone = chg == null ? "flat" : toneClass(chg);
           const arrow = chg == null ? "" : chgArrowHtml(chg);
@@ -330,7 +422,7 @@
           const meta =
             item.hotRank != null
               ? `人气第${item.hotRank} · ${codeWithCopyHtml(item.code, item.name)}`
-              : `${i + 1} · ${codeWithCopyHtml(item.code, item.name)}`;
+              : `${idx + 1} · ${codeWithCopyHtml(item.code, item.name)}`;
           const rightCol = isMcap
             ? `<div class="board-mcap">${formatMarketCap(item.marketCap)}</div>`
             : `<div class="board-chg ${tone}">${chgText}${arrow}</div>`;
@@ -343,7 +435,7 @@
                     role="button"
                     tabindex="0"
                     data-chart-fund="indexStocks"
-                    data-chart-index="${i}"
+                    data-chart-index="${idx}"
                     title="查看 ${safeName} 行情与个股资料"
                   >${item.name}</div>
                 </div>
@@ -354,6 +446,96 @@
             </div>`;
         })
         .join("");
+      if (append) {
+        wrap.insertAdjacentHTML("beforeend", html);
+      } else {
+        wrap.innerHTML = html;
+      }
+    }
+
+    function updateIndexStocksLoadMoreUI() {
+      const host = document.querySelector(`[data-index-stocks-more]`);
+      if (!host) return;
+      const { hasMore, loadingMore, list } = indexStocksState;
+      if (loadingMore) {
+        host.innerHTML = `<div class="rank-load-more loading" data-index-stocks-more>加载中…</div>`;
+        return;
+      }
+      if (!hasMore && list.length) {
+        host.innerHTML = `<div class="rank-load-more done" data-index-stocks-more>已加载全部（${list.length}）</div>`;
+        return;
+      }
+      host.innerHTML = list.length
+        ? `<div class="rank-load-more" data-index-stocks-more data-index-stocks-sentinel>上拉加载更多</div>`
+        : "";
+      if (list.length) bindIndexStocksLoadMore();
+    }
+
+    function bindIndexStocksLoadMore() {
+      unbindIndexStocksLoadMore();
+      const sentinel = document.querySelector(`[data-index-stocks-sentinel]`);
+      if (!sentinel) return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) loadIndexStocksMore();
+        },
+        { root: null, rootMargin: "160px 0px", threshold: 0 }
+      );
+      observer.observe(sentinel);
+      indexStocksState._observer = observer;
+    }
+
+    function unbindIndexStocksLoadMore() {
+      indexStocksState._observer?.disconnect();
+      indexStocksState._observer = null;
+    }
+
+    async function loadIndexStocksMore() {
+      if (indexStocksState.loadingMore || !indexStocksState.hasMore) return;
+      indexStocksState.loadingMore = true;
+      updateIndexStocksLoadMoreUI();
+      const reqId = indexStocksRequestId;
+      try {
+        const nextPage = indexStocksState.page + 1;
+        let list;
+        const rank = indexStocksState.rank;
+        if (rank === "gainers" || rank === "losers") {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            rank,
+            nextPage
+          );
+        } else if (rank === "mcap") {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            nextPage
+          );
+        } else {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            nextPage
+          );
+        }
+        if (reqId !== indexStocksRequestId) return;
+        const start = indexStocksState.list.length;
+        indexStocksState.list = mergeRankList(indexStocksState.list, list);
+        const added = indexStocksState.list.length - start;
+        indexStocksState.page = nextPage;
+        indexStocksState.hasMore = added >= 50;
+        renderIndexStocksList(indexStocksState.list.slice(start), true);
+        const rankLabel = indexStocksRankLabel(indexStocksState.rank);
+        document.getElementById("indexStocksModalSub").textContent =
+          `${indexStocksState.label} · ${rankLabel}榜共 ${indexStocksState.list.length} 只`;
+      } catch (_) {
+      } finally {
+        if (reqId === indexStocksRequestId) {
+          indexStocksState.loadingMore = false;
+          updateIndexStocksLoadMoreUI();
+        }
+      }
     }
 
     function getIndexStocksRankLoader(rank) {
@@ -380,7 +562,12 @@
     async function loadIndexStocksRank(kind) {
       const rank = resolveIndexStocksRank(kind);
       indexStocksState.rank = rank;
+      indexStocksState.list = [];
+      indexStocksState.page = 0;
+      indexStocksState.hasMore = true;
+      indexStocksState.loadingMore = false;
       setIndexStocksRankTabs(rank);
+      unbindIndexStocksLoadMore();
       if (!indexStocksState.code) return;
 
       const reqId = ++indexStocksRequestId;
@@ -391,15 +578,35 @@
       setStatus("indexStocksStatus", `加载${rankLabel}榜…`);
 
       try {
-        const list = await getIndexStocksRankLoader(rank)(
-          indexStocksState.code,
-          20,
-          rank
-        );
+        let list;
+        if (rank === "gainers" || rank === "losers") {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            rank,
+            1
+          );
+        } else if (rank === "mcap") {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            1
+          );
+        } else {
+          list = await getIndexStocksRankLoader(rank)(
+            indexStocksState.code,
+            50,
+            1
+          );
+        }
         if (reqId !== indexStocksRequestId) return;
+        indexStocksState.list = list;
+        indexStocksState.page = 1;
+        indexStocksState.hasMore = list.length >= 50;
         document.getElementById("indexStocksModalSub").textContent =
-          `${indexStocksState.label} · ${rankLabel}前 ${list.length} 只`;
+          `${indexStocksState.label} · ${rankLabel}榜共 ${list.length} 只`;
         renderIndexStocksList(list);
+        updateIndexStocksLoadMoreUI();
         setStatus(
           "indexStocksStatus",
           list.length ? "" : `暂无${rankLabel}数据`
@@ -422,6 +629,10 @@
       indexStocksState.label =
         indexLabel || board?.label || indexStocksState.code;
       indexStocksState.rank = "hot";
+      indexStocksState.list = [];
+      indexStocksState.page = 0;
+      indexStocksState.hasMore = true;
+      indexStocksState.loadingMore = false;
 
       document.getElementById("indexStocksModalName").textContent =
         indexStocksState.label;
@@ -431,6 +642,7 @@
 
     function closeIndexStocksModal() {
       indexStocksRequestId += 1;
+      unbindIndexStocksLoadMore();
       hideModal("indexStocksModal");
       setStatus("indexStocksStatus", "");
     }

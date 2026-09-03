@@ -1609,7 +1609,7 @@
    * @param {"gainers"|"losers"} [kind="gainers"]
    * @returns {Promise<Array<{ code, name, price, change, market }>>}
    */
-  async function loadCnSectorStocks(boardCodeOrCodes, limit = 20, kind = "gainers") {
+  async function loadCnSectorStocks(boardCodeOrCodes, limit = 20, kind = "gainers", page = 1) {
     const codes = (Array.isArray(boardCodeOrCodes)
       ? boardCodeOrCodes
       : String(boardCodeOrCodes || "").split(",")
@@ -1620,6 +1620,7 @@
     if (!codes.length) throw new Error("缺少板块代码");
 
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const pageNum = Math.max(1, Number(page) || 1);
     const isLosers = kind === "losers";
     // 多子板块时多取一些再合并去重，避免漏掉强弱股
     const perBoard = codes.length === 1 ? take : Math.min(50, Math.max(take, 30));
@@ -1630,6 +1631,7 @@
           const { list } = await fetchEastClist({
             fs: "b:" + code + "+f:!50",
             fields: "f12,f13,f14,f2,f3",
+            pn: pageNum,
             pz: perBoard,
             po: isLosers ? 0 : 1
           });
@@ -1832,24 +1834,36 @@
    * 指数范围内人气股（东财人气榜筛选 + ulist 补行情）
    * @param {string} indexCodeOrKey 指数代码如 000001 / key 如 sh
    * @param {number} [limit=20]
+   * @param {number} [page=1] 页码（用于分页加载）
    */
-  async function loadCnIndexHotStocks(indexCodeOrKey, limit = 20) {
+  async function loadCnIndexHotStocks(indexCodeOrKey, limit = 20, page = 1) {
     const board = resolveCnIndexBoard(indexCodeOrKey);
     if (!board) throw new Error("未知市场指数");
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const pageNum = Math.max(1, Number(page) || 1);
 
     const picked = [];
     const seen = new Set();
-    for (let page = 1; page <= 5 && picked.length < take; page++) {
-      const rows = await fetchCnHotRankPage(page, 100);
+    // 根据页码计算起始位置
+    const startIdx = (pageNum - 1) * take;
+    const endIdx = pageNum * take;
+    let fetchPage = 1;
+    let totalFetched = 0;
+
+    for (; fetchPage <= 20 && picked.length < endIdx; fetchPage++) {
+      const rows = await fetchCnHotRankPage(fetchPage, 100);
       if (!rows.length) break;
       for (const row of rows) {
         if (!matchesCnIndexBoard(row.sc, board.key)) continue;
         if (seen.has(row.code)) continue;
         seen.add(row.code);
-        picked.push(row);
+        totalFetched++;
+        if (totalFetched > startIdx && totalFetched <= endIdx) {
+          picked.push(row);
+        }
         if (picked.length >= take) break;
       }
+      if (picked.length >= take) break;
       if (rows.length < 100) break;
     }
     if (!picked.length) return [];
@@ -1892,16 +1906,18 @@
    * @param {string} indexCodeOrKey
    * @param {number} [limit=20]
    * @param {"gainers"|"losers"} [kind="gainers"]
+   * @param {number} [page=1]
    */
-  async function loadCnIndexDayRank(indexCodeOrKey, limit = 20, kind = "gainers") {
+  async function loadCnIndexDayRank(indexCodeOrKey, limit = 20, kind = "gainers", page = 1) {
     const board = resolveCnIndexBoard(indexCodeOrKey);
     if (!board) throw new Error("未知市场指数");
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const pageNum = Math.max(1, Number(page) || 1);
     const isLosers = kind === "losers";
     const { list } = await fetchEastClist({
       fs: board.fs,
       fields: "f12,f13,f14,f2,f3",
-      pn: 1,
+      pn: pageNum,
       pz: Math.min(100, Math.max(take * 2, 30)),
       po: isLosers ? 0 : 1,
       fid: "f3"
@@ -1933,15 +1949,17 @@
    * 指数范围内总市值榜（clist fid=f20）
    * @param {string} indexCodeOrKey
    * @param {number} [limit=20]
+   * @param {number} [page=1]
    */
-  async function loadCnIndexMarketCapRank(indexCodeOrKey, limit = 20) {
+  async function loadCnIndexMarketCapRank(indexCodeOrKey, limit = 20, page = 1) {
     const board = resolveCnIndexBoard(indexCodeOrKey);
     if (!board) throw new Error("未知市场指数");
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
+    const pageNum = Math.max(1, Number(page) || 1);
     const { list } = await fetchEastClist({
       fs: board.fs,
       fields: "f12,f13,f14,f2,f3,f20",
-      pn: 1,
+      pn: pageNum,
       pz: Math.min(100, Math.max(take * 2, 30)),
       po: 1,
       fid: "f20"

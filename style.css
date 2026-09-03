@@ -947,7 +947,7 @@ header p {
 .chart-modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 200;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -2011,6 +2011,22 @@ header p {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.board-name[role="button"] {
+  cursor: pointer;
+  color: var(--accent);
+  transition: opacity 0.15s ease;
+}
+
+.board-name[role="button"]:hover {
+  opacity: 0.8;
+}
+
+.board-name[role="button"]:focus-visible {
+  outline: 2px solid rgba(22, 119, 255, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .board-meta {
@@ -3226,6 +3242,22 @@ button.fund-period-card:hover {
 .fund-hold-name {
   font-weight: 400;
   color: #0f172a;
+}
+
+.fund-hold-name[role="button"] {
+  cursor: pointer;
+  color: var(--accent);
+  transition: opacity 0.15s ease;
+}
+
+.fund-hold-name[role="button"]:hover {
+  opacity: 0.8;
+}
+
+.fund-hold-name[role="button"]:focus-visible {
+  outline: 2px solid rgba(22, 119, 255, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .fund-hold-meta {

@@ -181,7 +181,14 @@
             <div class="board-row board-stock-row">
               <div class="board-info">
                 <div class="board-name-row">
-                  <div class="board-name">${item.name}</div>
+                  <div
+                    class="board-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="boardStocks"
+                    data-chart-index="${i}"
+                    title="查看 ${safeName} 行情与个股资料"
+                  >${item.name}</div>
                 </div>
                 <div class="board-meta">${i + 1} · ${codeWithCopyHtml(item.code, item.name)}</div>
               </div>
@@ -331,7 +338,14 @@
             <div class="board-row board-stock-row">
               <div class="board-info">
                 <div class="board-name-row">
-                  <div class="board-name">${item.name}</div>
+                  <div
+                    class="board-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="indexStocks"
+                    data-chart-index="${i}"
+                    title="查看 ${safeName} 行情与个股资料"
+                  >${item.name}</div>
                 </div>
                 <div class="board-meta">${meta}</div>
               </div>
@@ -689,6 +703,36 @@
         code: item.code,
         market: item.market != null ? item.market : 1
       };
+    }
+
+    function getBoardStocksHolding(index) {
+      const wrap = document.getElementById("boardStocksList");
+      if (!wrap) return null;
+      const rows = wrap.querySelectorAll(".board-stock-row");
+      const row = rows[index];
+      if (!row) return null;
+      const nameEl = row.querySelector(".board-name");
+      const metaEl = row.querySelector(".board-meta");
+      const name = nameEl?.textContent?.trim() || "";
+      const codeMatch = metaEl?.textContent?.match(/(\d{6})/);
+      const code = codeMatch?.[1] || "";
+      if (!name && !code) return null;
+      return { name, code, market: 1 };
+    }
+
+    function getIndexStocksHolding(index) {
+      const wrap = document.getElementById("indexStocksList");
+      if (!wrap) return null;
+      const rows = wrap.querySelectorAll(".board-stock-row");
+      const row = rows[index];
+      if (!row) return null;
+      const nameEl = row.querySelector(".board-name");
+      const metaEl = row.querySelector(".board-meta");
+      const name = nameEl?.textContent?.trim() || "";
+      const codeMatch = metaEl?.textContent?.match(/(\d{6})/);
+      const code = codeMatch?.[1] || "";
+      if (!name && !code) return null;
+      return { name, code, market: 1 };
     }
 
     async function paintCnSparklines(list, requestId, { start = 0 } = {}) {

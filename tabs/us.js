@@ -186,7 +186,14 @@
             <div class="board-row board-stock-row">
               <div class="board-info">
                 <div class="board-name-row">
-                  <div class="board-name">${item.name}</div>
+                  <div
+                    class="board-name"
+                    role="button"
+                    tabindex="0"
+                    data-chart-fund="usBoardStocks"
+                    data-chart-index="${i}"
+                    title="查看 ${safeName} 行情与个股资料"
+                  >${item.name}</div>
                 </div>
                 <div class="board-meta">${meta}</div>
               </div>
@@ -413,6 +420,21 @@
         code: item.code,
         market: item.market != null ? item.market : 105
       };
+    }
+
+    function getUsBoardStocksHolding(index) {
+      const wrap = document.getElementById("usBoardStocksList");
+      if (!wrap) return null;
+      const rows = wrap.querySelectorAll(".board-stock-row");
+      const row = rows[index];
+      if (!row) return null;
+      const nameEl = row.querySelector(".board-name");
+      const metaEl = row.querySelector(".board-meta");
+      const name = nameEl?.textContent?.trim() || "";
+      const codeMatch = metaEl?.textContent?.match(/([A-Z]{1,5})/);
+      const code = codeMatch?.[1] || "";
+      if (!name && !code) return null;
+      return { name, code, market: 105 };
     }
 
     async function paintUsSparklines(list, requestId, { start = 0 } = {}) {

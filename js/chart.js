@@ -901,6 +901,18 @@
       if (fundId === "watchStocks" && typeof getWatchHolding === "function") {
         return getWatchHolding(index);
       }
+      if (fundId === "boardStocks" && typeof getBoardStocksHolding === "function") {
+        return getBoardStocksHolding(index);
+      }
+      if (fundId === "indexStocks" && typeof getIndexStocksHolding === "function") {
+        return getIndexStocksHolding(index);
+      }
+      if (fundId === "usBoardStocks" && typeof getUsBoardStocksHolding === "function") {
+        return getUsBoardStocksHolding(index);
+      }
+      if (fundId === "fundHoldings" && typeof getFundHoldingsHolding === "function") {
+        return getFundHoldingsHolding(index);
+      }
       return window.FUND_HOLDINGS?.[fundId]?.holdings?.[index] || null;
     }
 

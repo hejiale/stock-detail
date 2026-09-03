@@ -148,7 +148,7 @@
         return;
       }
       wrap.innerHTML = list
-        .map((item) => {
+        .map((item, i) => {
           const dayTone = toneClass(item.dayChange);
           const dayArrow =
             item.dayChange == null || typeof chgArrowHtml !== "function"
@@ -158,11 +158,19 @@
             item.dayChange == null
               ? "--"
               : `${formatPct(item.dayChange)}${dayArrow}`;
+          const safeName = String(item.name || "").replace(/"/g, "&quot;");
 
           return `
             <div class="fund-hold-row">
               <div class="fund-hold-info">
-                <div class="fund-hold-name">${item.name}</div>
+                <div
+                  class="fund-hold-name"
+                  role="button"
+                  tabindex="0"
+                  data-chart-fund="fundHoldings"
+                  data-chart-index="${i}"
+                  title="查看 ${safeName} 行情与个股资料"
+                >${item.name}</div>
                 <div class="fund-hold-meta">${item.rank} · ${codeWithCopyHtml(item.code, item.name)}${
                   item.sector ? ` · ${item.sector}` : ""
                 }</div>
@@ -445,4 +453,16 @@
       openFundDetailModal._chart = [];
       hideModal("fundDetailModal");
       setStatus("fundDetailStatus", "");
+    }
+
+    function getFundHoldingsHolding(index) {
+      const detail = openFundDetailModal._detail;
+      const list = detail?.holdings?.list;
+      if (!list?.[index]) return null;
+      const item = list[index];
+      return {
+        name: item.name,
+        code: item.code,
+        market: item.market != null ? item.market : undefined
+      };
     }

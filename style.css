@@ -2948,7 +2948,7 @@ header p {
 
 /* 基金详情弹层 */
 .fund-detail-modal {
-  z-index: 100;
+  z-index: 20;
 }
 
 .fund-detail-panel {

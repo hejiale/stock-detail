@@ -947,7 +947,7 @@ header p {
 .chart-modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 10;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1494,7 +1494,7 @@ header p {
 .board-modal {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 10;
   display: flex;
   align-items: flex-end;
   justify-content: center;

@@ -881,7 +881,7 @@ header p {
   opacity: 0;
   pointer-events: none;
   transition: 0.2s ease;
-  z-index: 300;
+  z-index: 30;
   max-width: calc(100% - 32px);
   text-align: center;
 }

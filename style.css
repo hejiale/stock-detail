@@ -1905,7 +1905,7 @@ header p {
 }
 
 .board-stocks-modal {
-  z-index: 25;
+  z-index: 35;
 }
 
 .board-stocks-tabs {

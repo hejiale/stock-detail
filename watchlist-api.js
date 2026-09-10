@@ -233,7 +233,6 @@
       { code: "018147", created_at: "2026-08-13T02:21:32.000Z" },
       { code: "021277", created_at: "2026-08-13T02:21:24.000Z" },
       { code: "024239", created_at: "2026-08-13T02:21:15.000Z" },
-      { code: "006503", created_at: "2026-08-13T02:21:02.000Z" },
       { code: "017811", created_at: "2026-08-13T02:19:50.000Z" }
     ];
     saveLocalFocusFunds(defaultFunds);

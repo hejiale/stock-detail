@@ -224,9 +224,9 @@
       if (limitUp != null || limitDown != null) {
         center =
           `<text x="${cx}" y="${cy - 9}" text-anchor="middle" dominant-baseline="middle" ` +
-          `style="fill:var(--up);font-size:12px;font-weight:600">涨停 ${limitUp ?? 0}</text>` +
+          `style="fill:var(--up);font-size:10px;font-weight:600">涨停 ${limitUp ?? 0}</text>` +
           `<text x="${cx}" y="${cy + 11}" text-anchor="middle" dominant-baseline="middle" ` +
-          `style="fill:var(--down);font-size:12px;font-weight:600">跌停 ${limitDown ?? 0}</text>`;
+          `style="fill:var(--down);font-size:10px;font-weight:600">跌停 ${limitDown ?? 0}</text>`;
       }
 
       const centerLabel =

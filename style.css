@@ -2124,43 +2124,12 @@ header p {
   min-width: 0;
 }
 
-.market-breadth .breadth-chart {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.market-breadth .breadth-pie {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #e2e8f0;
-}
-
-.market-breadth .breadth-legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 14px;
-  min-width: 0;
-  font-size: 11px;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
-.market-breadth .breadth-item.up {
-  color: var(--up);
-}
-
-.market-breadth .breadth-item.down {
-  color: var(--down);
-}
-
-.market-breadth .breadth-item.flat {
-  color: #64748b;
-  white-space: nowrap;
+.market-breadth .breadth-donut {
+  display: block;
+  width: 100%;
+  max-width: 380px;
+  height: auto;
+  margin: 0 auto;
 }
 
 .fund-meta-actions {

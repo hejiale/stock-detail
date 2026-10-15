@@ -177,12 +177,29 @@
         })
         .join("");
 
+      // 中心：涨停 / 跌停家数（仅 A 股有数据）
+      const limitUp = breadth.limitUp;
+      const limitDown = breadth.limitDown;
+      let center = "";
+      if (limitUp != null || limitDown != null) {
+        center =
+          `<text x="${cx}" y="${cy - 9}" text-anchor="middle" dominant-baseline="middle" ` +
+          `style="fill:var(--up);font-size:12px;font-weight:600">涨停 ${limitUp ?? 0}</text>` +
+          `<text x="${cx}" y="${cy + 11}" text-anchor="middle" dominant-baseline="middle" ` +
+          `style="fill:var(--down);font-size:12px;font-weight:600">跌停 ${limitDown ?? 0}</text>`;
+      }
+
+      const centerLabel =
+        limitUp != null || limitDown != null
+          ? `，涨停 ${limitUp ?? 0}，跌停 ${limitDown ?? 0}`
+          : "";
       return (
         `<svg class="breadth-donut" viewBox="0 0 ${vbW} ${vbH}" role="img" ` +
-        `aria-label="涨 ${up}，平 ${flat}，跌 ${down}">` +
+        `aria-label="涨 ${up}，平 ${flat}，跌 ${down}${centerLabel}">` +
         `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" style="stroke:#e2e8f0" />` +
         rings.join("") +
         marks +
+        center +
         `</svg>`
       );
     }

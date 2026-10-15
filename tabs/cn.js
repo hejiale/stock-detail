@@ -661,11 +661,13 @@
       setCnSectionExpanded("region", true);
 
       try {
-        const [indicesResult, boardsResult, regionsResult] = await Promise.allSettled([
-          loadCnIndices(),
-          loadCnSectorBoards(),
-          loadCnRegionBoards()
-        ]);
+        const [indicesResult, boardsResult, regionsResult, limitResult] =
+          await Promise.allSettled([
+            loadCnIndices(),
+            loadCnSectorBoards(),
+            loadCnRegionBoards(),
+            loadCnLimitUpDown()
+          ]);
         if (requestId !== loadBoardList._req) return;
 
         const indices =
@@ -683,6 +685,8 @@
         const sh = indices.find((x) => x.code === "000001");
         const sz = indices.find((x) => x.code === "399001");
         if (sh || sz) {
+          const limits =
+            limitResult.status === "fulfilled" ? limitResult.value : null;
           renderMarketBreadth("cnMarketBreadth", {
             up: (sh?.upCount || 0) + (sz?.upCount || 0),
             down: (sh?.downCount || 0) + (sz?.downCount || 0),
@@ -693,7 +697,9 @@
               (sh?.flatCount || 0) +
               (sz?.upCount || 0) +
               (sz?.downCount || 0) +
-              (sz?.flatCount || 0)
+              (sz?.flatCount || 0),
+            limitUp: limits ? limits.limitUp : null,
+            limitDown: limits ? limits.limitDown : null
           });
         } else {
           renderMarketBreadth("cnMarketBreadth", null);

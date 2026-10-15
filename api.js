@@ -41,6 +41,10 @@
     "https://push2his.eastmoney.com",
     "https://push2delay.eastmoney.com"
   ];
+  /** 涨停/跌停池主机 */
+  const EAST_POOL_HOSTS = ["https://push2ex.eastmoney.com"];
+  /** 涨停/跌停池专用 ut（公开行情页同款） */
+  const EAST_POOL_UT = "7eea3edcaed734bea9cbfc24409ed989";
 
   /** 涨跌幅等保留两位小数 */
   function round2(n) {
@@ -2082,6 +2086,48 @@
     const down = downSide.count || 0;
     const flat = Math.max(0, total - up - down);
     return { up, down, flat, total };
+  }
+
+  /** 东财涨停/跌停池的查询串（date 为北京时间 YYYYMMDD） */
+  function buildPoolPath(apiPath, date, sort) {
+    const q = buildQuery({
+      ut: EAST_POOL_UT,
+      dpt: "wz.ztzt",
+      Pageindex: 0,
+      pagesize: 1,
+      sort,
+      date
+    });
+    return apiPath + "?" + q + "&_=" + Date.now();
+  }
+
+  /** 当前北京时间 YYYYMMDD */
+  function chinaDateYmd() {
+    const now = new Date();
+    const shifted = new Date(
+      now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60000
+    );
+    const y = shifted.getFullYear();
+    const m = String(shifted.getMonth() + 1).padStart(2, "0");
+    const d = String(shifted.getDate()).padStart(2, "0");
+    return `${y}${m}${d}`;
+  }
+
+  /**
+   * 全市场涨停 / 跌停家数（仅 A 股，东财涨停/跌停池）
+   * @returns {Promise<{limitUp:number,limitDown:number}>}
+   */
+  async function loadCnLimitUpDown() {
+    const date = chinaDateYmd();
+    const [zt, dt] = await Promise.allSettled([
+      fetchEastMoneyJson(EAST_POOL_HOSTS, buildPoolPath("/getTopicZTPool", date, "fbt:asc")),
+      fetchEastMoneyJson(EAST_POOL_HOSTS, buildPoolPath("/getTopicDTPool", date, "fund:asc"))
+    ]);
+    const limitUp =
+      zt.status === "fulfilled" ? Number(zt.value?.data?.tc) || 0 : 0;
+    const limitDown =
+      dt.status === "fulfilled" ? Number(dt.value?.data?.tc) || 0 : 0;
+    return { limitUp, limitDown };
   }
 
   /** 美股三大指数：道琼斯 / 纳斯达克 / 标普500 */
@@ -4658,6 +4704,7 @@
     loadCnIndexHotStocks,
     loadCnIndexDayRank,
     loadCnIndexMarketCapRank,
+    loadCnLimitUpDown,
     resolveCnIndexBoard,
     loadUsIndices,
     loadUsFamousSectorStats,

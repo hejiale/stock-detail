@@ -14,6 +14,7 @@
       loadCnIndexHotStocks,
       loadCnIndexDayRank,
       loadCnIndexMarketCapRank,
+      loadCnLimitUpDown,
       resolveCnIndexBoard,
       loadUsIndices,
       loadUsFamousSectorStats,

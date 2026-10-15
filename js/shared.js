@@ -124,7 +124,7 @@
       ...WATCH_TAB_IDS
     ]);
     const PAGE_SIZE = 10;
-    /** 涨跌榜：默认 10 条，上拉再加载 10，最多 100 */
+    /** 涨跌榜：默认 10 条，上拉再加载 10；A 股可不限条数，其他市场默认最多 100 */
     const RANK_PAGE_SIZE = 10;
     const RANK_MAX = 100;
     const rankLoadMoreObservers = new Map();
@@ -173,14 +173,15 @@
       saveJson(CUSTOM_STOCKS_KEY, all);
     }
 
-    function computeRankHasMore(loadedCount, fetchedCount, total) {
-      if (loadedCount >= RANK_MAX) return false;
+    function computeRankHasMore(loadedCount, fetchedCount, total, max = RANK_MAX) {
+      const capped = Number.isFinite(max) ? max : Infinity;
+      if (loadedCount >= capped) return false;
       if (fetchedCount < RANK_PAGE_SIZE) return false;
-      const cap = total > 0 ? Math.min(total, RANK_MAX) : RANK_MAX;
+      const cap = total > 0 ? Math.min(total, capped) : capped;
       return loadedCount < cap;
     }
 
-    function mergeRankList(prev, next) {
+    function mergeRankList(prev, next, max = RANK_MAX) {
       const base = Array.isArray(prev) ? prev.slice() : [];
       if (!next?.length) return base;
       const seen = new Set(base.map((item) => quoteKey(item.code)));
@@ -190,7 +191,7 @@
         seen.add(key);
         base.push(item);
       });
-      return base.slice(0, RANK_MAX);
+      return Number.isFinite(max) ? base.slice(0, max) : base;
     }
 
     function buildRankLoadMoreHtml(id, { hasMore = true, loading = false, loaded = 0 } = {}) {

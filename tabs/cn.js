@@ -1037,7 +1037,7 @@
           if (requestId !== loadCnRankKind._req) return;
           const list = result.list || [];
           const start = cnRankState.list?.length || 0;
-          cnRankState.list = mergeRankList(cnRankState.list, list);
+          cnRankState.list = mergeRankList(cnRankState.list, list, Infinity);
           const added = (cnRankState.list?.length || 0) - start;
           cnRankState.page = nextPage;
           cnRankState.total = result.total || cnRankState.total || 0;
@@ -1046,7 +1046,8 @@
             computeRankHasMore(
               cnRankState.list.length,
               list.length,
-              cnRankState.total
+              cnRankState.total,
+              Infinity
             );
           renderCnStockRank(cnRankState.list.slice(start), { append: true, start });
           updateCnRankSub();
@@ -1100,7 +1101,8 @@
         cnRankState.hasMore = computeRankHasMore(
           list.length,
           list.length,
-          cnRankState.total
+          cnRankState.total,
+          Infinity
         );
         renderCnStockRank(list);
         updateCnRankSub();

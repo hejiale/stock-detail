@@ -2453,11 +2453,14 @@
   async function loadCnStockRankFromSina(kind = "gainers", limit = 10, page = 1) {
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    const skip = (pn - 1) * take;
     const isLosers = kind === "losers";
     const url =
       "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeDataSimple" +
-      "?page=1&num=100&sort=changepercent&asc=" +
+      "?page=" +
+      pn +
+      "&num=" +
+      take +
+      "&sort=changepercent&asc=" +
       (isLosers ? "1" : "0") +
       "&node=hs_a&_=" +
       Date.now();
@@ -2528,14 +2531,14 @@
     }
 
     return {
-      list: mapped.slice(skip, skip + take),
+      list: mapped,
       total: total || mapped.length
     };
   }
 
   /**
-   * A 股涨幅榜 / 跌幅榜（沪深京 A 股，分页）
-   * 优先东财 clist；push2 不可达或 delay 首页被 f3="-" 占满时，多取后过滤再回退新浪
+   * A 股涨幅榜 / 跌幅榜（沪深京 A 股，服务端分页，不限条数）
+   * 优先东财 clist；push2 不可达或 delay 无有效涨跌幅时回退新浪
    *
    * @param {"gainers"|"losers"} kind
    * @param {number} [limit=10]
@@ -2545,23 +2548,21 @@
   async function loadCnStockRank(kind = "gainers", limit = 10, page = 1) {
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    const skip = (pn - 1) * take;
     const isLosers = kind === "losers";
 
     try {
       const { list, total } = await fetchEastClist({
         fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
         fields: "f12,f13,f14,f2,f3,f18,f31,f32",
-        pn: 1,
-        pz: 100,
+        pn,
+        pz: take,
         po: isLosers ? 0 : 1
       });
-      const mapped = mapEastRankItems(list, 100, { allowAuctionQuote: true }).sort(
-        (a, b) => (isLosers ? a.change - b.change : b.change - a.change)
-      );
-      const pageList = mapped.slice(skip, skip + take);
-      if (pageList.length) {
-        return { list: pageList, total: Number(total) || mapped.length };
+      const mapped = mapEastRankItems(list, take, {
+        allowAuctionQuote: true
+      }).sort((a, b) => (isLosers ? a.change - b.change : b.change - a.change));
+      if (mapped.length) {
+        return { list: mapped, total: Number(total) || mapped.length };
       }
     } catch {
       /* 东财失败或 delay 无有效涨跌幅 → 新浪 */

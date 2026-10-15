@@ -82,6 +82,9 @@
       ctx.stroke();
     }
 
+    // 渐变 id 自增，避免同页多个图 id 冲突
+    let breadthGradSeq = 0;
+
     function formatBreadthHtml(breadth) {
       if (!breadth) return "";
       const up = Number(breadth.up) || 0;
@@ -106,11 +109,45 @@
         return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
       };
 
+      // 每种状态的渐变（内浅外深，营造立体光泽）
+      const seq = (breadthGradSeq = (breadthGradSeq + 1) % 100000);
+      const uid = "bg" + seq;
       const segs = [
-        { label: "涨", value: up, color: "var(--up)" },
-        { label: "平", value: flat, color: "#94a3b8" },
-        { label: "跌", value: down, color: "var(--down)" },
+        {
+          key: "up",
+          label: "涨",
+          value: up,
+          base: "#e64545",
+          grad: ["#ffa6a6", "#ef5757", "#c02b2b"]
+        },
+        {
+          key: "flat",
+          label: "平",
+          value: flat,
+          base: "#94a3b8",
+          grad: ["#dbe3ee", "#9aa8bb", "#7285a0"]
+        },
+        {
+          key: "down",
+          label: "跌",
+          value: down,
+          base: "#12a150",
+          grad: ["#79e0a6", "#16a75a", "#0a7a3b"]
+        }
       ];
+
+      const defs = segs
+        .filter((s) => s.value > 0)
+        .map(
+          (s) =>
+            `<radialGradient id="${uid}-${s.key}" gradientUnits="userSpaceOnUse" ` +
+            `cx="${cx}" cy="${cy}" r="${rOuter}">` +
+            `<stop offset="58%" stop-color="${s.grad[0]}" />` +
+            `<stop offset="78%" stop-color="${s.grad[1]}" />` +
+            `<stop offset="100%" stop-color="${s.grad[2]}" />` +
+            `</radialGradient>`
+        )
+        .join("");
 
       let acc = 0;
       const rings = [];
@@ -122,11 +159,13 @@
         const offset = -acc * circ;
         acc += frac;
 
+        // 段与段之间留一点缝，让边界更清晰
+        const visDash = dash > 6 ? dash - 2.5 : dash;
         rings.push(
           `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" ` +
-            `stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" ` +
+            `stroke-dasharray="${visDash.toFixed(2)} ${(circ - visDash).toFixed(2)}" ` +
             `stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 ${cx} ${cy})" ` +
-            `style="stroke:${s.color}" />`
+            `stroke="url(#${uid}-${s.key})" />`
         );
 
         const midDeg = -90 + (acc - frac / 2) * 360;
@@ -134,7 +173,7 @@
         labels.push({
           label: s.label,
           value: s.value,
-          color: s.color,
+          color: s.base,
           start: polar(rOuter + 1, midDeg),
           side: Math.cos(rad) >= 0 ? 1 : -1,
           y: cy + (rOuter + 16) * Math.sin(rad),
@@ -170,7 +209,8 @@
           return (
             `<polyline points="${l.start.x.toFixed(1)},${l.start.y.toFixed(1)} ` +
             `${kinkX.toFixed(1)},${l.y.toFixed(1)} ${tailX.toFixed(1)},${l.y.toFixed(1)}" ` +
-            `fill="none" stroke-width="1.25" style="stroke:${l.color}" />` +
+            `fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" ` +
+            `style="stroke:${l.color}" />` +
             `<text x="${textX}" y="${l.y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" ` +
             `style="fill:${l.color};font-size:13px;font-weight:600">${l.label} ${l.value}</text>`
           );
@@ -196,7 +236,8 @@
       return (
         `<svg class="breadth-donut" viewBox="0 0 ${vbW} ${vbH}" role="img" ` +
         `aria-label="涨 ${up}，平 ${flat}，跌 ${down}${centerLabel}">` +
-        `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" style="stroke:#e2e8f0" />` +
+        `<defs>${defs}</defs>` +
+        `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" style="stroke:#e9eef6" />` +
         rings.join("") +
         marks +
         center +

@@ -14,8 +14,7 @@
 (function (global) {
   "use strict";
 
-  const WATCHLIST_BASE =
-    "https://stock-backdev-production.up.railway.app";
+  const WATCHLIST_BASE = "https://stock-backdev-production.up.railway.app";
   const AUTH_USER_KEY = "watch_user_v1";
   const LOCAL_FOCUS_FUNDS_KEY = "local_focus_funds_v1";
   const VALID_WATCH_TYPES = [1, 2, 3, 4, 5];
@@ -58,7 +57,7 @@
     }
     localStorage.setItem(
       AUTH_USER_KEY,
-      JSON.stringify({ userId, name: name || String(userId) })
+      JSON.stringify({ userId, name: name || String(userId) }),
     );
     return { userId, name: name || String(userId) };
   }
@@ -87,11 +86,13 @@
         code: c,
         market: m.inferCnMarketCandidates(c)[0],
         name: c,
-        watchType: t
+        watchType: t,
       };
     }
     if (t === 2) {
-      const c = String(code || "").trim().toUpperCase();
+      const c = String(code || "")
+        .trim()
+        .toUpperCase();
       return { code: c, market: 105, name: c, watchType: t };
     }
     if (t === 3) {
@@ -109,7 +110,7 @@
   async function watchlistFetch(path, options = {}) {
     const resp = await fetch(WATCHLIST_BASE + path, {
       headers: { Accept: "application/json", ...(options.headers || {}) },
-      ...options
+      ...options,
     });
     let json = null;
     try {
@@ -122,7 +123,7 @@
     const okApi = apiCode == null || (apiCode >= 200 && apiCode < 300);
     if (!okHttp || !okApi) {
       throw new Error(
-        (json && json.message) || "自选接口请求失败（" + resp.status + "）"
+        (json && json.message) || "自选接口请求失败（" + resp.status + "）",
       );
     }
     return json || {};
@@ -136,7 +137,7 @@
     const json = await watchlistFetch("/api/users/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: username, password: String(password) })
+      body: JSON.stringify({ name: username, password: String(password) }),
     });
     const user = json.data || {};
     return saveAuthUser(user);
@@ -150,7 +151,7 @@
     const json = await watchlistFetch("/api/users/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: username, password: String(password) })
+      body: JSON.stringify({ name: username, password: String(password) }),
     });
     return json.data || { name: username };
   }
@@ -164,7 +165,7 @@
     const json = await watchlistFetch("/api/stock/addStock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: holding.code, type: t, userId })
+      body: JSON.stringify({ code: holding.code, type: t, userId }),
     });
     return { ...(json.data || {}), code: holding.code, type: t, userId };
   }
@@ -178,7 +179,7 @@
       "/api/stock?type=" +
         encodeURIComponent(t) +
         "&userId=" +
-        encodeURIComponent(userId)
+        encodeURIComponent(userId),
     );
     const rows = Array.isArray(json.data) ? json.data : [];
     const seen = new Set();
@@ -193,14 +194,16 @@
           code,
           name: row.name || null,
           tag: row.tag || null,
-          type: normalizeWatchType(row.type != null ? row.type : t)
+          type: normalizeWatchType(row.type != null ? row.type : t),
         };
       })
       .filter(Boolean);
   }
 
   function normalizeFocusFundCode(code) {
-    const raw = String(code || "").trim().replace(/\D/g, "");
+    const raw = String(code || "")
+      .trim()
+      .replace(/\D/g, "");
     if (!raw) return "";
     return raw.padStart(6, "0").slice(-6);
   }
@@ -226,14 +229,15 @@
   function initLocalFocusFunds() {
     const existing = getLocalFocusFunds();
     if (existing.length > 0) return;
-    
+
     const defaultFunds = [
       { code: "022184", created_at: "2026-08-13T02:21:47.000Z" },
       { code: "008254", created_at: "2026-08-13T02:21:40.000Z" },
       { code: "018147", created_at: "2026-08-13T02:21:32.000Z" },
       { code: "021277", created_at: "2026-08-13T02:21:24.000Z" },
       { code: "024239", created_at: "2026-08-13T02:21:15.000Z" },
-      { code: "017811", created_at: "2026-08-13T02:19:50.000Z" }
+      { code: "017811", created_at: "2026-08-13T02:19:50.000Z" },
+      { code: "006962", created_at: "2026-08-13T02:19:50.000Z" },
     ];
     saveLocalFocusFunds(defaultFunds);
   }
@@ -250,7 +254,7 @@
         seen.add(code);
         return {
           code,
-          createdAt: row.created_at || row.createdAt || null
+          createdAt: row.created_at || row.createdAt || null,
         };
       })
       .filter(Boolean);
@@ -260,20 +264,22 @@
   async function addFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("基金代码无效");
-    
+
     const funds = getLocalFocusFunds();
-    const exists = funds.some(f => normalizeFocusFundCode(f.code) === fundCode);
+    const exists = funds.some(
+      (f) => normalizeFocusFundCode(f.code) === fundCode,
+    );
     if (exists) {
       throw new Error("已在关注");
     }
-    
+
     const newFund = {
       code: fundCode,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
     funds.push(newFund);
     saveLocalFocusFunds(funds);
-    
+
     return { code: fundCode, created_at: newFund.created_at };
   }
 
@@ -281,11 +287,13 @@
   async function removeFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("缺少基金代码");
-    
+
     const funds = getLocalFocusFunds();
-    const filtered = funds.filter(f => normalizeFocusFundCode(f.code) !== fundCode);
+    const filtered = funds.filter(
+      (f) => normalizeFocusFundCode(f.code) !== fundCode,
+    );
     saveLocalFocusFunds(filtered);
-    
+
     return true;
   }
 
@@ -299,7 +307,7 @@
         encodeURIComponent(raw) +
         "?userId=" +
         encodeURIComponent(userId),
-      { method: "DELETE" }
+      { method: "DELETE" },
     );
     return true;
   }
@@ -313,7 +321,7 @@
     const m = market();
     const t = normalizeWatchType(type);
     const stubs = (items || []).map((item) =>
-      holdingFromWatchType(item.code, item.type != null ? item.type : t)
+      holdingFromWatchType(item.code, item.type != null ? item.type : t),
     );
     if (!stubs.length) return [];
 
@@ -332,7 +340,7 @@
           const q = more[m.quoteKey(h.code)] || more[h.code];
           if (q) {
             const stub = stubs.find(
-              (s) => m.quoteKey(s.code) === m.quoteKey(h.code)
+              (s) => m.quoteKey(s.code) === m.quoteKey(h.code),
             );
             if (stub) stub.market = 106;
           }
@@ -357,7 +365,7 @@
           const q = more[m.quoteKey(h.code)] || more[h.code];
           if (q) {
             const stub = stubs.find(
-              (s) => m.quoteKey(s.code) === m.quoteKey(h.code)
+              (s) => m.quoteKey(s.code) === m.quoteKey(h.code),
             );
             if (stub) stub.market = h.market;
           }
@@ -375,7 +383,7 @@
         change:
           q && q.change != null && !Number.isNaN(Number(q.change))
             ? Number(q.change)
-            : null
+            : null,
       };
     });
   }
@@ -401,6 +409,6 @@
     removeFocusFund,
     getLocalFocusFunds,
     saveLocalFocusFunds,
-    initLocalFocusFunds
+    initLocalFocusFunds,
   };
 })(window);

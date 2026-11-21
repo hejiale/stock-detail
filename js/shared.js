@@ -103,14 +103,14 @@
       { id: "funds", name: "基金", icon: "assets/zixuan_jijin.png" }
     ];
     const MAIN_TABS = [
+      { id: "watch", name: "自选", icon: "assets/zixuan.png", children: WATCH_SUB_TABS },
       { id: "markets", name: "全球股市", icon: "assets/gupiao.png", children: MARKET_SUB_TABS },
       { id: "fundRank", name: "基金", icon: "assets/jijin.png" },
       { id: "bonds", name: "债券", icon: "assets/zhaiquan.png" },
       { id: "metals", name: "贵金属", icon: "assets/guijinshu.png" },
       { id: "oil", name: "原油", icon: "assets/yuanyou.png" },
       { id: "fed", name: "美联储", icon: "assets/meilianchu.png" },
-      { id: "crypto", name: "虚拟币", icon: "assets/xunibi.png" },
-      { id: "watch", name: "自选", icon: "assets/zixuan.png", children: WATCH_SUB_TABS }
+      { id: "crypto", name: "虚拟币", icon: "assets/xunibi.png" }
     ];
     const MARKET_TAB_IDS = MARKET_SUB_TABS.map((t) => t.id);
     const WATCH_TAB_IDS = WATCH_SUB_TABS.map((t) => t.id);

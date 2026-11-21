@@ -3784,7 +3784,7 @@
       "&count=" +
       (count || 20) +
       "&token=D43BF722C8E33BDC906FB84D85E326E8" +
-      "&callback=" +
+      "&cb=" +
       cbName +
       "&_=" +
       Date.now();
@@ -3834,7 +3834,7 @@
     };
     const validMarkets = marketCodeMap[marketType] || [];
 
-    const results = await searchEastMoneyJsonp(kw, "12", 20);
+    const results = await searchEastMoneyJsonp(kw, "14", 20);
     if (results.length) {
       return results
         .filter((r) => r.Code && validMarkets.includes(String(r.MktNum || "")))

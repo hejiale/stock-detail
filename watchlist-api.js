@@ -8,7 +8,9 @@
  *
  * 依赖：window.MarketAPI（代码规范化、报价）
  *
- * 数据源：stock-backdev-production.up.railway.app
+ * 数据源：
+ *   自选个股 / 自选基金：localStorage（参考 go-stock-dev 的本地数据查询）
+ *   登录 / 注册：stock-backdev-production.up.railway.app
  *   type：1 A股 / 2 美股 / 3 港股 / 4 韩股 / 5 日股
  */
 (function (global) {
@@ -16,6 +18,7 @@
 
   const WATCHLIST_BASE = "https://stock-backdev-production.up.railway.app";
   const AUTH_USER_KEY = "watch_user_v1";
+  const LOCAL_WATCH_STOCKS_KEY = "local_watch_stocks_v1";
   const LOCAL_FOCUS_FUNDS_KEY = "local_focus_funds_v1";
   const VALID_WATCH_TYPES = [1, 2, 3, 4, 5];
 
@@ -156,37 +159,75 @@
     return json.data || { name: username };
   }
 
-  /** POST /api/stock/addStock  { code, type, userId } */
-  async function addWatchStock(code, type) {
-    const t = normalizeWatchType(type);
-    const userId = requireUserId();
-    const holding = holdingFromWatchType(code, t);
-    if (!holding.code) throw new Error("股票代码无效");
-    const json = await watchlistFetch("/api/stock/addStock", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: holding.code, type: t, userId }),
-    });
-    return { ...(json.data || {}), code: holding.code, type: t, userId };
+  /** 本地自选股票原始记录 */
+  function getLocalWatchStocks() {
+    try {
+      const raw = localStorage.getItem(LOCAL_WATCH_STOCKS_KEY);
+      if (!raw) return [];
+      const data = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
   }
 
-  /** GET /api/stock?type=&userId= */
+  function saveLocalWatchStocks(list) {
+    localStorage.setItem(LOCAL_WATCH_STOCKS_KEY, JSON.stringify(list));
+  }
+
+  /** 本地自选股票代码比较 key（与列表去重保持一致） */
+  function watchStockCodeKey(code) {
+    return String(code || "").trim().toUpperCase();
+  }
+
+  /** 新增自选股票（本地存储） */
+  async function addWatchStock(code, type, name) {
+    const t = normalizeWatchType(type);
+    const holding = holdingFromWatchType(code, t);
+    if (!holding.code) throw new Error("股票代码无效");
+    const displayName = String(name || "").trim() || holding.name;
+
+    const rows = getLocalWatchStocks();
+    const key = watchStockCodeKey(holding.code);
+    const exists = rows.find(
+      (row) =>
+        watchStockCodeKey(row?.code) === key &&
+        normalizeWatchType(row?.type) === t,
+    );
+    if (exists) {
+      return {
+        code: exists.code,
+        name: exists.name || displayName,
+        tag: exists.tag || null,
+        type: t,
+        created_at: exists.created_at || exists.createdAt || null,
+        userId: getUserId(),
+      };
+    }
+
+    const row = {
+      code: holding.code,
+      name: displayName,
+      tag: null,
+      type: t,
+      created_at: new Date().toISOString(),
+    };
+    rows.push(row);
+    saveLocalWatchStocks(rows);
+    return { ...row, userId: getUserId() };
+  }
+
+  /** 自选股票列表（本地存储，按 type 过滤） */
   async function listWatchStocks(type) {
     const t = normalizeWatchType(type);
-    const userId = requireUserId();
     const { quoteKey } = market();
-    const json = await watchlistFetch(
-      "/api/stock?type=" +
-        encodeURIComponent(t) +
-        "&userId=" +
-        encodeURIComponent(userId),
-    );
-    const rows = Array.isArray(json.data) ? json.data : [];
     const seen = new Set();
-    return rows
+    return getLocalWatchStocks()
       .map((row) => {
         const code = String(row?.code || "").trim();
         if (!code) return null;
+        const rowType = normalizeWatchType(row.type != null ? row.type : t);
+        if (rowType !== t) return null;
         const key = quoteKey(code);
         if (seen.has(key)) return null;
         seen.add(key);
@@ -194,7 +235,7 @@
           code,
           name: row.name || null,
           tag: row.tag || null,
-          type: normalizeWatchType(row.type != null ? row.type : t),
+          type: rowType,
         };
       })
       .filter(Boolean);
@@ -297,18 +338,17 @@
     return true;
   }
 
-  /** DELETE /api/stock/deleteStock/:code?userId= */
+  /** 删除自选股票（本地存储） */
   async function removeWatchStock(code) {
     const raw = String(code || "").trim();
     if (!raw) throw new Error("缺少股票代码");
-    const userId = requireUserId();
-    await watchlistFetch(
-      "/api/stock/deleteStock/" +
-        encodeURIComponent(raw) +
-        "?userId=" +
-        encodeURIComponent(userId),
-      { method: "DELETE" },
+
+    const key = watchStockCodeKey(raw);
+    const filtered = getLocalWatchStocks().filter(
+      (row) => watchStockCodeKey(row?.code) !== key,
     );
+    saveLocalWatchStocks(filtered);
+
     return true;
   }
 
@@ -390,6 +430,7 @@
 
   global.WatchlistAPI = {
     AUTH_USER_KEY,
+    LOCAL_WATCH_STOCKS_KEY,
     LOCAL_FOCUS_FUNDS_KEY,
     getAuthUser,
     getUserId,
@@ -403,6 +444,8 @@
     addWatchStock,
     listWatchStocks,
     removeWatchStock,
+    getLocalWatchStocks,
+    saveLocalWatchStocks,
     loadWatchQuotes,
     listFocusFunds,
     addFocusFund,

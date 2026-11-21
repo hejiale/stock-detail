@@ -353,7 +353,7 @@
           if (requestId !== loadKrRankKind._req) return;
           const list = result.list || [];
           const start = krRankState.list?.length || 0;
-          krRankState.list = mergeRankList(krRankState.list, list);
+          krRankState.list = mergeRankList(krRankState.list, list, Infinity);
           const added = (krRankState.list?.length || 0) - start;
           krRankState.page = nextPage;
           krRankState.total = result.total || krRankState.total || 0;
@@ -362,7 +362,8 @@
             computeRankHasMore(
               krRankState.list.length,
               list.length,
-              krRankState.total
+              krRankState.total,
+              Infinity
             );
           renderKrStockRank(krRankState.list.slice(start), { append: true, start });
           updateKrRankSub();
@@ -416,7 +417,8 @@
         krRankState.hasMore = computeRankHasMore(
           list.length,
           list.length,
-          krRankState.total
+          krRankState.total,
+          Infinity
         );
         renderKrStockRank(list);
         updateKrRankSub();

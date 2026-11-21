@@ -26,10 +26,10 @@
       const last = points[points.length - 1];
       const lineColor =
         baseline == null
-          ? "#1677ff"
+          ? "#4c9dff"
           : last.price >= baseline
-            ? "#e64545"
-            : "#12a150";
+            ? "#ff6b6b"
+            : "#22c55e";
 
       function xAt(i) {
         if (points.length === 1) return cssW / 2;
@@ -43,7 +43,7 @@
         const y = yAt(baseline);
         ctx.save();
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = "#cbd5e1";
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -117,7 +117,7 @@
           key: "up",
           label: "涨",
           value: up,
-          base: "#e64545",
+          base: "#ff6b6b",
           grad: ["#ffa6a6", "#ef5757", "#c02b2b"]
         },
         {
@@ -125,13 +125,13 @@
           label: "平",
           value: flat,
           base: "#94a3b8",
-          grad: ["#dbe3ee", "#9aa8bb", "#7285a0"]
+          grad: ["#a9b7cc", "#64748b", "#475569"]
         },
         {
           key: "down",
           label: "跌",
           value: down,
-          base: "#12a150",
+          base: "#22c55e",
           grad: ["#79e0a6", "#16a75a", "#0a7a3b"]
         }
       ];
@@ -237,7 +237,7 @@
         `<svg class="breadth-donut" viewBox="0 0 ${vbW} ${vbH}" role="img" ` +
         `aria-label="涨 ${up}，平 ${flat}，跌 ${down}${centerLabel}">` +
         `<defs>${defs}</defs>` +
-        `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" style="stroke:#e9eef6" />` +
+        `<circle cx="${cx}" cy="${cy}" r="${rMid}" fill="none" stroke-width="${ringW}" style="stroke:#223049" />` +
         rings.join("") +
         marks +
         center +

@@ -328,8 +328,8 @@
       const maLines = isMetalChart(state.holding)
         ? [
             { key: "MA5", color: "#f59e0b", values: computeMovingAverage(points, 5) },
-            { key: "MA10", color: "#1677ff", values: computeMovingAverage(points, 10) },
-            { key: "MA20", color: "#7c3aed", values: computeMovingAverage(points, 20) }
+            { key: "MA10", color: "#4c9dff", values: computeMovingAverage(points, 10) },
+            { key: "MA20", color: "#a78bfa", values: computeMovingAverage(points, 20) }
           ]
         : [];
 
@@ -519,10 +519,10 @@
           : null;
       const lineColor =
         base == null
-          ? "#1677ff"
+          ? "#4c9dff"
           : last.price >= base
-            ? "#e64545"
-            : "#12a150";
+            ? "#ff6b6b"
+            : "#22c55e";
 
       function xAt(i) {
         if (points.length === 1) return pad.left + plotW / 2;
@@ -533,7 +533,7 @@
         return pad.top + ((maxP - price) / (maxP - minP)) * plotH;
       }
 
-      ctx.strokeStyle = "#edf0f5";
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
       ctx.lineWidth = 1;
       for (let i = 0; i <= 4; i++) {
         const y = pad.top + (plotH * i) / 4;
@@ -547,7 +547,7 @@
         const y = yAt(base);
         ctx.save();
         ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = "#94a3b8";
+        ctx.strokeStyle = "#8b9ab1";
         ctx.beginPath();
         ctx.moveTo(pad.left, y);
         ctx.lineTo(pad.left + plotW, y);
@@ -636,7 +636,7 @@
             i === 0
               ? base == null || p.price >= base
               : p.price >= points[i - 1].price;
-          ctx.fillStyle = up ? "rgba(230, 69, 69, 0.35)" : "rgba(18, 161, 80, 0.35)";
+          ctx.fillStyle = up ? "rgba(255, 107, 107, 0.35)" : "rgba(34, 197, 94, 0.35)";
           ctx.fillRect(x, y, barW, h);
         });
       }
@@ -647,7 +647,7 @@
       for (let i = 0; i <= 4; i++) {
         const price = maxP - ((maxP - minP) * i) / 4;
         const y = pad.top + (plotH * i) / 4;
-        ctx.fillStyle = "#8a8f98";
+        ctx.fillStyle = "#8b9ab1";
         ctx.textAlign = "right";
         ctx.fillText(chartPriceText(price, holding), pad.left - 8, y);
 
@@ -655,12 +655,12 @@
           const pct = ((price - base) / base) * 100;
           ctx.textAlign = "left";
           ctx.fillStyle =
-            pct > 0.005 ? "#e64545" : pct < -0.005 ? "#12a150" : "#8a8f98";
+            pct > 0.005 ? "#ff6b6b" : pct < -0.005 ? "#22c55e" : "#8b9ab1";
           ctx.fillText(formatPct(pct), pad.left + plotW + 8, y);
         }
       }
 
-      ctx.fillStyle = "#8a8f98";
+      ctx.fillStyle = "#8b9ab1";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const timeIdx = [0, Math.floor((points.length - 1) / 2), points.length - 1];
@@ -685,7 +685,7 @@
 
       ctx.save();
       ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = "rgba(71, 85, 105, 0.85)";
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.5)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(ax, pad.top);
@@ -699,7 +699,7 @@
 
       ctx.beginPath();
       ctx.arc(ax, ay, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = "#0b1220";
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = lineColor;

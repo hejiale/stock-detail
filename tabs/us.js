@@ -544,7 +544,7 @@
           if (requestId !== loadUsRankKind._req) return;
           const list = result.list || [];
           const start = usRankState.list?.length || 0;
-          usRankState.list = mergeRankList(usRankState.list, list);
+          usRankState.list = mergeRankList(usRankState.list, list, Infinity);
           const added = (usRankState.list?.length || 0) - start;
           usRankState.page = nextPage;
           usRankState.total = result.total || usRankState.total || 0;
@@ -553,7 +553,8 @@
             computeRankHasMore(
               usRankState.list.length,
               list.length,
-              usRankState.total
+              usRankState.total,
+              Infinity
             );
           renderUsStockRank(usRankState.list.slice(start), { append: true, start });
           updateUsRankSub();
@@ -607,7 +608,8 @@
         usRankState.hasMore = computeRankHasMore(
           list.length,
           list.length,
-          usRankState.total
+          usRankState.total,
+          Infinity
         );
         renderUsStockRank(list);
         updateUsRankSub();

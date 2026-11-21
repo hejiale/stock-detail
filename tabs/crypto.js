@@ -423,7 +423,7 @@
       maxP += span * 0.08;
       const pct = first ? ((last - first) / first) * 100 : 0;
       const up = last >= first;
-      const color = up ? "#e64545" : "#12a150";
+      const color = up ? "#ff6b6b" : "#22c55e";
       const maxVol = Math.max(...list.map((p) => p.volume || 0), 1);
 
       function xAt(i) {
@@ -434,7 +434,7 @@
         return pad.top + ((maxP - price) / (maxP - minP)) * plotH;
       }
 
-      ctx.strokeStyle = "#edf0f5";
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
       ctx.lineWidth = 1;
       for (let i = 0; i <= 4; i++) {
         const y = pad.top + (plotH * i) / 4;
@@ -447,7 +447,7 @@
       const baseY = yAt(first);
       ctx.save();
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = "#94a3b8";
+      ctx.strokeStyle = "#8b9ab1";
       ctx.beginPath();
       ctx.moveTo(pad.left, baseY);
       ctx.lineTo(pad.left + plotW, baseY);
@@ -465,8 +465,8 @@
       ctx.lineTo(xAt(0), pad.top + plotH);
       ctx.closePath();
       const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
-      grad.addColorStop(0, up ? "rgba(230,69,69,0.20)" : "rgba(18,161,80,0.20)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
+      grad.addColorStop(0, up ? "rgba(255,107,107,0.20)" : "rgba(34,197,94,0.20)");
+      grad.addColorStop(1, "rgba(7,11,20,0)");
       ctx.fillStyle = grad;
       ctx.fill();
 
@@ -489,8 +489,8 @@
         const y = volTop + volH - h;
         const barUp = i === 0 ? up : Number(p.nav) >= Number(list[i - 1].nav);
         ctx.fillStyle = barUp
-          ? "rgba(230, 69, 69, 0.32)"
-          : "rgba(18, 161, 80, 0.32)";
+          ? "rgba(255, 107, 107, 0.32)"
+          : "rgba(34, 197, 94, 0.32)";
         ctx.fillRect(x, y, barW, h);
       });
 
@@ -499,17 +499,17 @@
       for (let i = 0; i <= 4; i++) {
         const price = maxP - ((maxP - minP) * i) / 4;
         const y = pad.top + (plotH * i) / 4;
-        ctx.fillStyle = "#8a8f98";
+        ctx.fillStyle = "#8b9ab1";
         ctx.textAlign = "right";
         ctx.fillText("$" + formatCryptoPrice(price), pad.left - 6, y);
         const axisPct = first ? ((price - first) / first) * 100 : 0;
         ctx.textAlign = "left";
         ctx.fillStyle =
-          axisPct > 0.005 ? "#e64545" : axisPct < -0.005 ? "#12a150" : "#8a8f98";
+          axisPct > 0.005 ? "#ff6b6b" : axisPct < -0.005 ? "#22c55e" : "#8b9ab1";
         ctx.fillText(formatPct(axisPct), pad.left + plotW + 6, y);
       }
 
-      ctx.fillStyle = "#8a8f98";
+      ctx.fillStyle = "#8b9ab1";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const timeIdx = [0, Math.floor((list.length - 1) / 2), list.length - 1];
@@ -538,7 +538,7 @@
       const active = list[safeIndex];
       const ax = xAt(safeIndex);
       const ay = yAt(Number(active.nav));
-      ctx.strokeStyle = "rgba(15,23,42,0.35)";
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(ax, pad.top);

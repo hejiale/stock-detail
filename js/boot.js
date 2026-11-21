@@ -34,7 +34,7 @@
 })().catch((err) => {
   console.error(err);
   const el = document.createElement("pre");
-  el.style.cssText = "padding:16px;color:#b91c1c;white-space:pre-wrap";
+  el.style.cssText = "padding:16px;color:#f87171;white-space:pre-wrap";
   el.textContent = "页面初始化失败：\n" + (err && err.message ? err.message : err);
   document.body.prepend(el);
 });

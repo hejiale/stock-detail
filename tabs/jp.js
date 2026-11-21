@@ -353,7 +353,7 @@
           if (requestId !== loadJpRankKind._req) return;
           const list = result.list || [];
           const start = jpRankState.list?.length || 0;
-          jpRankState.list = mergeRankList(jpRankState.list, list);
+          jpRankState.list = mergeRankList(jpRankState.list, list, Infinity);
           const added = (jpRankState.list?.length || 0) - start;
           jpRankState.page = nextPage;
           jpRankState.total = result.total || jpRankState.total || 0;
@@ -362,7 +362,8 @@
             computeRankHasMore(
               jpRankState.list.length,
               list.length,
-              jpRankState.total
+              jpRankState.total,
+              Infinity
             );
           renderJpStockRank(jpRankState.list.slice(start), { append: true, start });
           updateJpRankSub();
@@ -416,7 +417,8 @@
         jpRankState.hasMore = computeRankHasMore(
           list.length,
           list.length,
-          jpRankState.total
+          jpRankState.total,
+          Infinity
         );
         renderJpStockRank(list);
         updateJpRankSub();

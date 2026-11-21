@@ -274,7 +274,7 @@
       const up = last >= first;
       const color = up ? "#ef4444" : "#22c55e";
 
-      ctx.strokeStyle = "rgba(148,163,184,0.35)";
+      ctx.strokeStyle = "rgba(148,163,184,0.18)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(pad.l, pad.t + h / 2);
@@ -294,7 +294,7 @@
 
       const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
       grad.addColorStop(0, up ? "rgba(239,68,68,0.18)" : "rgba(34,197,94,0.18)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
+      grad.addColorStop(1, "rgba(7,11,20,0)");
       ctx.lineTo(pad.l + w, pad.t + h);
       ctx.lineTo(pad.l, pad.t + h);
       ctx.closePath();

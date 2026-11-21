@@ -127,19 +127,41 @@
   }
 
   /**
+   * 东财 push2 有 IP 级限流：短时间并发过多会被直接断开连接。
+   * 所有东财行情请求统一排队，并保留最小间隔。
+   */
+  const EAST_REQUEST_MIN_GAP_MS = 300;
+  let eastRequestQueue = Promise.resolve();
+  let eastLastRequestAt = 0;
+
+  function runEastRequestThrottled(task) {
+    const run = eastRequestQueue.then(async () => {
+      const wait = EAST_REQUEST_MIN_GAP_MS - (Date.now() - eastLastRequestAt);
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      eastLastRequestAt = Date.now();
+      return task();
+    });
+    eastRequestQueue = run.catch(() => {});
+    return run;
+  }
+
+  /**
    * 按主机列表依次请求东财 JSON，直到成功
    * @param {string[]} hosts
    * @param {string} pathWithQuery 以 / 开头的路径+查询串
    * @param {(json: any) => boolean} [isValid] 可选校验；不通过则换下一主机
+   * @param {number} [timeoutMs] 单次请求超时
    */
-  async function fetchEastMoneyJson(hosts, pathWithQuery, isValid) {
+  async function fetchEastMoneyJson(hosts, pathWithQuery, isValid, timeoutMs = 5000) {
     let lastError = null;
     for (let i = 0; i < hosts.length; i++) {
       try {
-        const resp = await fetch(hosts[i] + pathWithQuery, {
-          headers: { Accept: "application/json" },
-          signal: abortTimeout(5000)
-        });
+        const resp = await runEastRequestThrottled(() =>
+          fetch(hosts[i] + pathWithQuery, {
+            headers: { Accept: "application/json" },
+            signal: abortTimeout(timeoutMs)
+          })
+        );
         if (!resp.ok) {
           lastError = new Error("行情接口请求失败");
           continue;
@@ -178,7 +200,9 @@
     pz = 50,
     po = 1,
     fid = "f3",
-    requireValidChange = false
+    requireValidChange = false,
+    hosts = EAST_PUSH_HOSTS,
+    timeoutMs = 5000
   }) {
     const path = buildEastPath("/api/qt/clist/get", {
       pn,
@@ -192,9 +216,10 @@
       fields
     });
     const json = await fetchEastMoneyJson(
-      EAST_PUSH_HOSTS,
+      hosts,
       path,
-      requireValidChange ? eastClistHasValidChange : undefined
+      requireValidChange ? eastClistHasValidChange : undefined,
+      timeoutMs
     );
     return {
       list: normalizeEastDiff(json),
@@ -429,6 +454,181 @@
 
       document.head.appendChild(script);
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 腾讯行情兜底（东财 push2 被限流/不可达时使用）
+  // ---------------------------------------------------------------------------
+
+  const TENCENT_MARKET_META = {
+    us: { prefix: "us", defaultMarket: 105 },
+    hk: { prefix: "hk", defaultMarket: 116 },
+    jp: { prefix: "jp", defaultMarket: 176 },
+    kr: { prefix: "kr", defaultMarket: 177 }
+  };
+
+  function tencentUsMarket(code) {
+    const s = String(code || "").toUpperCase();
+    if (s.endsWith(".N")) return 106;
+    if (s.endsWith(".AM")) return 107;
+    return 105;
+  }
+
+  async function fetchTencentQuoteText(symbols) {
+    const url =
+      "https://qt.gtimg.cn/q=" +
+      symbols.join(",") +
+      "&_=" +
+      Date.now();
+    const resp = await fetch(url, {
+      headers: { Accept: "text/plain" },
+      signal: abortTimeout(6000)
+    });
+    if (!resp.ok) throw new Error("腾讯行情请求失败");
+    if (typeof resp.arrayBuffer === "function") {
+      const buf = await resp.arrayBuffer();
+      try {
+        return new TextDecoder("gbk").decode(buf);
+      } catch {
+        return new TextDecoder().decode(buf);
+      }
+    }
+    return resp.text();
+  }
+
+  function parseTencentQuoteRows(text, marketKind) {
+    const meta = TENCENT_MARKET_META[marketKind] || TENCENT_MARKET_META.us;
+    const rows = [];
+    String(text || "")
+      .split(";")
+      .forEach((line) => {
+        const m = line.match(/v_[^=]+="([^"]*)"/);
+        if (!m) return;
+        const parts = m[1].split("~");
+        if (parts.length < 33) return;
+        const rawCode = String(parts[2] || "").trim();
+        const price = Number(parts[3]);
+        const change = Number(parts[32]);
+        if (!rawCode || !Number.isFinite(price) || !Number.isFinite(change)) {
+          return;
+        }
+        let code = rawCode;
+        if (marketKind !== "hk") code = rawCode.split(".")[0];
+        if (marketKind === "hk") code = code.padStart(5, "0");
+        if (marketKind === "us") code = code.toUpperCase();
+        const market =
+          marketKind === "us"
+            ? tencentUsMarket(rawCode)
+            : meta.defaultMarket;
+        rows.push({
+          code,
+          name: String(parts[1] || code),
+          price,
+          change: round2(change),
+          market
+        });
+      });
+    return rows;
+  }
+
+  async function loadTencentCuratedRank(codes, kind, limit, page, marketKind) {
+    const meta = TENCENT_MARKET_META[marketKind];
+    if (!meta) throw new Error("未知市场类型");
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
+    const pn = Math.max(1, Number(page) || 1);
+    const symbols = codes.map((code) => meta.prefix + code);
+    const text = await fetchTencentQuoteText(symbols);
+    const rows = parseTencentQuoteRows(text, marketKind).sort((a, b) =>
+      kind === "losers" ? a.change - b.change : b.change - a.change
+    );
+    return {
+      list: rows.slice((pn - 1) * take, pn * take),
+      total: rows.length
+    };
+  }
+
+  function loadTencentScriptVar(url) {
+    return new Promise((resolve, reject) => {
+      try {
+        delete global.list_data;
+      } catch {
+        global.list_data = undefined;
+      }
+      const script = document.createElement("script");
+      script.charset = "utf-8";
+      script.src = url + "&_=" + Date.now();
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("腾讯行情请求超时"));
+      }, 8000);
+
+      function cleanup() {
+        clearTimeout(timer);
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+      }
+
+      script.onload = () => {
+        const data = global.list_data;
+        cleanup();
+        resolve(data);
+      };
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("腾讯行情加载失败"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  let hkTencentRankCache = { at: 0, rows: null };
+
+  async function fetchHkTencentRankRows() {
+    const base =
+      "https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=1000&order=desc&var_name=list_data&reqPage=";
+    const first = await loadTencentScriptVar(base + "1");
+    if (!first?.data || !Array.isArray(first.data.page_data)) {
+      throw new Error("腾讯港股列表返回无效");
+    }
+    const pages = Math.max(1, Number(first.data.page_count) || 1);
+    const pageData = first.data.page_data.slice();
+    for (let p = 2; p <= pages; p++) {
+      const next = await loadTencentScriptVar(base + p);
+      if (next?.data && Array.isArray(next.data.page_data)) {
+        pageData.push(...next.data.page_data);
+      }
+    }
+    return pageData
+      .map((row) => {
+        const parts = String(row).split("~");
+        const code = String(parts[0] || "").padStart(5, "0");
+        const name = String(parts[1] || code);
+        const price = Number(parts[2]);
+        const change = Number(parts[3]);
+        if (!code || !Number.isFinite(price) || !Number.isFinite(change)) {
+          return null;
+        }
+        return { code, name, price, change: round2(change), market: 116 };
+      })
+      .filter(Boolean);
+  }
+
+  async function loadHkStockRankFromTencent(kind, limit, page) {
+    const take = Math.max(1, Math.min(100, Number(limit) || 10));
+    const pn = Math.max(1, Number(page) || 1);
+    let rows = hkTencentRankCache.rows;
+    if (!rows || Date.now() - hkTencentRankCache.at > 120000) {
+      rows = await fetchHkTencentRankRows();
+      hkTencentRankCache = { at: Date.now(), rows };
+    }
+    const sorted = rows.slice().sort((a, b) =>
+      kind === "losers" ? a.change - b.change : b.change - a.change
+    );
+    return {
+      list: sorted.slice((pn - 1) * take, pn * take),
+      total: sorted.length
+    };
   }
 
   /**
@@ -2399,7 +2599,9 @@
           if (price == null || price === 0) price = auction.price;
         }
         if (change == null) return null;
-        const market = item.f13 != null ? Number(item.f13) : defaultMarket;
+        let market = item.f13 != null ? Number(item.f13) : defaultMarket;
+        // 东财港股列表常返回 f13=128，统一按港股 secid 前缀 116 处理
+        if (market === 128) market = 116;
         let code = String(item.f12);
         if (upperCode) code = code.toUpperCase();
         return {
@@ -2422,27 +2624,41 @@
    * @param {number} [limit]
    * @param {number} [page]
    * @param {Parameters<typeof mapEastRankItems>[2]} [mapOpts]
+   * @param {{ hosts?: string[], timeoutMs?: number }} [fetchOpts]
    */
+  let overseasRankEastBlockedUntil = 0;
+
   async function loadStockRankByFs(
     fs,
     kind = "gainers",
     limit = 10,
     page = 1,
-    mapOpts = {}
+    mapOpts = {},
+    fetchOpts = {}
   ) {
+    if (Date.now() < overseasRankEastBlockedUntil) {
+      throw new Error("东财海外列表接口暂时不可用");
+    }
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    const { list, total } = await fetchEastClist({
-      fs,
-      fields: "f12,f13,f14,f2,f3",
-      pn,
-      pz: take,
-      po: kind === "losers" ? 0 : 1
-    });
-    return {
-      list: mapEastRankItems(list, take, mapOpts),
-      total: Number(total) || 0
-    };
+    try {
+      const { list, total } = await fetchEastClist({
+        fs,
+        fields: "f12,f13,f14,f2,f3",
+        pn,
+        pz: take,
+        po: kind === "losers" ? 0 : 1,
+        ...fetchOpts
+      });
+      return {
+        list: mapEastRankItems(list, take, mapOpts),
+        total: Number(total) || 0
+      };
+    } catch (err) {
+      // 东财海外列表连续失败时短暂停用，避免每次切页都等超时
+      overseasRankEastBlockedUntil = Date.now() + 120000;
+      throw err;
+    }
   }
 
   /**
@@ -2571,39 +2787,109 @@
     return loadCnStockRankFromSina(kind, take, pn);
   }
 
+  /** 东财列表不可用时，用主要权重股 + 腾讯行情兜底（本地排序） */
+  const US_RANK_FALLBACK_CODES = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO",
+    "JPM", "LLY", "V", "UNH", "XOM", "MA", "COST", "JNJ", "HD", "PG",
+    "NFLX", "AMD"
+  ];
+  const HK_RANK_FALLBACK_CODES = [
+    "00700", "09988", "03690", "01810", "00939", "01398", "00883", "01299",
+    "00005", "00388", "02318", "00941", "09618", "01024", "02020", "09999",
+    "01109", "00688", "02269", "00027"
+  ];
+  const JP_RANK_FALLBACK_CODES = [
+    "7203", "6758", "9984", "8306", "6861", "9432", "8035", "6098",
+    "4063", "4568", "6902", "7267", "6501", "8058", "8001", "9433",
+    "8766", "6367", "4519", "6594"
+  ];
+  const KR_RANK_FALLBACK_CODES = [
+    "005930", "000660", "373220", "207940", "005380", "000270", "068270",
+    "035420", "035720", "051910", "006400", "005490", "012330", "028260",
+    "105560", "055550", "086790", "015760", "033780", "017670"
+  ];
+
   /**
-   * 美股涨幅榜 / 跌幅榜（知名分类股，分页）
-   * fs 合并东财「科技/半导体/金融/医药/能源…」等知名美股分类
+   * 美股涨幅榜 / 跌幅榜（纳斯达克 + 纽交所 + 美交所，分页）
+   * 优先东财 clist（对齐 go-stock-dev getDCStockInfo）；失败时用腾讯主要美股兜底
    */
   async function loadUsStockRank(kind = "gainers", limit = 10, page = 1) {
-    return loadStockRankByFs(
-      "b:MK0215,b:MK0216,b:MK0217,b:MK0218,b:MK0219,b:MK0220,b:MK0212,b:MK0214",
-      kind,
-      limit,
-      page,
-      { upperCode: true, zeroPriceNull: false, defaultMarket: 105 }
-    );
+    try {
+      const result = await loadStockRankByFs(
+        "m:105,m:106,m:107",
+        kind,
+        limit,
+        page,
+        { upperCode: true, zeroPriceNull: false, defaultMarket: 105 },
+        { hosts: [EAST_PUSH_HOSTS[0]], timeoutMs: 3500 }
+      );
+      if (result.list.length) return result;
+    } catch {
+      /* 东财美股列表不可用时走腾讯兜底 */
+    }
+    return loadTencentCuratedRank(US_RANK_FALLBACK_CODES, kind, limit, page, "us");
   }
 
-  /** 韩股涨幅榜 / 跌幅榜（东财 market=177，分页） */
+  /** 韩股涨幅榜 / 跌幅榜（优先东财 market=177；失败时用腾讯主要韩股兜底） */
   async function loadKrStockRank(kind = "gainers", limit = 10, page = 1) {
-    return loadStockRankByFs("m:177", kind, limit, page, {
-      defaultMarket: 177
-    });
+    try {
+      const result = await loadStockRankByFs(
+        "m:177",
+        kind,
+        limit,
+        page,
+        { defaultMarket: 177 },
+        { hosts: [EAST_PUSH_HOSTS[0]], timeoutMs: 3500 }
+      );
+      if (result.list.length) return result;
+    } catch {
+      /* 东财韩股列表不可用时走腾讯兜底 */
+    }
+    return loadTencentCuratedRank(KR_RANK_FALLBACK_CODES, kind, limit, page, "kr");
   }
 
-  /** 日股涨幅榜 / 跌幅榜（东财 market=176，分页） */
+  /** 日股涨幅榜 / 跌幅榜（优先东财 market=176；失败时用腾讯主要日股兜底） */
   async function loadJpStockRank(kind = "gainers", limit = 10, page = 1) {
-    return loadStockRankByFs("m:176", kind, limit, page, {
-      defaultMarket: 176
-    });
+    try {
+      const result = await loadStockRankByFs(
+        "m:176",
+        kind,
+        limit,
+        page,
+        { defaultMarket: 176 },
+        { hosts: [EAST_PUSH_HOSTS[0]], timeoutMs: 3500 }
+      );
+      if (result.list.length) return result;
+    } catch {
+      /* 东财日股列表不可用时走腾讯兜底 */
+    }
+    return loadTencentCuratedRank(JP_RANK_FALLBACK_CODES, kind, limit, page, "jp");
   }
 
-  /** 港股涨幅榜 / 跌幅榜（主板 + 创业板，分页） */
+  /**
+   * 港股涨幅榜 / 跌幅榜（优先东财 m:116；失败时用腾讯全量港股排行）
+   */
   async function loadHkStockRank(kind = "gainers", limit = 10, page = 1) {
-    return loadStockRankByFs("m:116+t:3,m:116+t:4", kind, limit, page, {
-      defaultMarket: 116
-    });
+    try {
+      const result = await loadStockRankByFs(
+        "m:116",
+        kind,
+        limit,
+        page,
+        { defaultMarket: 116 },
+        { hosts: [EAST_PUSH_HOSTS[0]], timeoutMs: 3500 }
+      );
+      if (result.list.length) return result;
+    } catch {
+      /* 东财港股列表不可用时走腾讯兜底 */
+    }
+    try {
+      const result = await loadHkStockRankFromTencent(kind, limit, page);
+      if (result.list.length) return result;
+    } catch {
+      /* 腾讯港股排行不可用时再用主要港股兜底 */
+    }
+    return loadTencentCuratedRank(HK_RANK_FALLBACK_CODES, kind, limit, page, "hk");
   }
 
   /**

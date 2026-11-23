@@ -134,6 +134,40 @@
   let eastRequestQueue = Promise.resolve();
   let eastLastRequestAt = 0;
 
+  /**
+   * 东财主机熔断：某主机网络失败 / 返回非 2xx 后，短时间内直接跳过，
+   * 避免每次请求都逐个重试死主机（push2 被断开时回退仍会等待）。
+   */
+  const EAST_HOST_DOWN_TTL_MS = 60000;
+  const eastHostDownUntil = new Map();
+
+  function markEastHostDown(host, ttlMs = EAST_HOST_DOWN_TTL_MS) {
+    try {
+      const until = Math.max(
+        Number(eastHostDownUntil.get(host)) || 0,
+        Date.now() + ttlMs
+      );
+      eastHostDownUntil.set(host, until);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function isEastHostDown(host) {
+    const until = Number(eastHostDownUntil.get(host)) || 0;
+    if (!until) return false;
+    if (until <= Date.now()) {
+      eastHostDownUntil.delete(host);
+      return false;
+    }
+    return true;
+  }
+
+  /** 仅把这些 HTTP 状态视为主机不可用（404/400 等多数为参数问题，不熔断） */
+  function isEastHostDownStatus(status) {
+    return status === 403 || status === 429 || status >= 500;
+  }
+
   function runEastRequestThrottled(task) {
     const run = eastRequestQueue.then(async () => {
       const wait = EAST_REQUEST_MIN_GAP_MS - (Date.now() - eastLastRequestAt);
@@ -153,17 +187,23 @@
    * @param {number} [timeoutMs] 单次请求超时
    */
   async function fetchEastMoneyJson(hosts, pathWithQuery, isValid, timeoutMs = 5000) {
+    const aliveHosts = (hosts || []).filter((host) => !isEastHostDown(host));
+    if (!aliveHosts.length) {
+      throw new Error("行情接口暂不可用");
+    }
     let lastError = null;
-    for (let i = 0; i < hosts.length; i++) {
+    for (let i = 0; i < aliveHosts.length; i++) {
+      const host = aliveHosts[i];
       try {
         const resp = await runEastRequestThrottled(() =>
-          fetch(hosts[i] + pathWithQuery, {
+          fetch(host + pathWithQuery, {
             headers: { Accept: "application/json" },
             signal: abortTimeout(timeoutMs)
           })
         );
         if (!resp.ok) {
           lastError = new Error("行情接口请求失败");
+          if (isEastHostDownStatus(resp.status)) markEastHostDown(host);
           continue;
         }
         const json = await resp.json();
@@ -174,6 +214,7 @@
         return json;
       } catch (err) {
         lastError = err;
+        markEastHostDown(host);
       }
     }
     throw lastError || new Error("行情接口请求失败");
@@ -531,14 +572,22 @@
     return rows;
   }
 
+  const tencentCuratedRankCache = new Map();
+  const TENCENT_CURATED_TTL_MS = 60000;
+
   async function loadTencentCuratedRank(codes, kind, limit, page, marketKind) {
     const meta = TENCENT_MARKET_META[marketKind];
     if (!meta) throw new Error("未知市场类型");
     const take = Math.max(1, Math.min(100, Number(limit) || 10));
     const pn = Math.max(1, Number(page) || 1);
-    const symbols = codes.map((code) => meta.prefix + code);
-    const text = await fetchTencentQuoteText(symbols);
-    const rows = parseTencentQuoteRows(text, marketKind).sort((a, b) =>
+    let cached = tencentCuratedRankCache.get(marketKind);
+    if (!cached || Date.now() - cached.at > TENCENT_CURATED_TTL_MS) {
+      const symbols = codes.map((code) => meta.prefix + code);
+      const text = await fetchTencentQuoteText(symbols);
+      cached = { at: Date.now(), rows: parseTencentQuoteRows(text, marketKind) };
+      tencentCuratedRankCache.set(marketKind, cached);
+    }
+    const rows = cached.rows.slice().sort((a, b) =>
       kind === "losers" ? a.change - b.change : b.change - a.change
     );
     return {
@@ -547,13 +596,20 @@
     };
   }
 
-  function loadTencentScriptVar(url) {
+  let hkTencentRankCache = { at: 0, rows: null };
+  let tencentVarSeq = 0;
+
+  function nextTencentVarName() {
+    tencentVarSeq += 1;
+    return "list_data_auto_" + tencentVarSeq + "_" + Date.now().toString(36);
+  }
+
+  /**
+   * 腾讯排行 JSONP（script 标签，可跨域）。
+   * varName 由 URL 的 var_name 指定，多个请求并行时互不覆盖。
+   */
+  function loadTencentScriptVar(url, varName) {
     return new Promise((resolve, reject) => {
-      try {
-        delete global.list_data;
-      } catch {
-        global.list_data = undefined;
-      }
       const script = document.createElement("script");
       script.charset = "utf-8";
       script.src = url + "&_=" + Date.now();
@@ -567,10 +623,15 @@
         script.onload = null;
         script.onerror = null;
         script.remove();
+        try {
+          delete global[varName];
+        } catch {
+          global[varName] = undefined;
+        }
       }
 
       script.onload = () => {
-        const data = global.list_data;
+        const data = global[varName];
         cleanup();
         resolve(data);
       };
@@ -582,22 +643,34 @@
     });
   }
 
-  let hkTencentRankCache = { at: 0, rows: null };
-
   async function fetchHkTencentRankRows() {
     const base =
-      "https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=1000&order=desc&var_name=list_data&reqPage=";
-    const first = await loadTencentScriptVar(base + "1");
+      "https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=2000&order=desc&var_name=";
+    const firstVar = nextTencentVarName();
+    const first = await loadTencentScriptVar(
+      base + firstVar + "&reqPage=1",
+      firstVar
+    );
     if (!first?.data || !Array.isArray(first.data.page_data)) {
       throw new Error("腾讯港股列表返回无效");
     }
     const pages = Math.max(1, Number(first.data.page_count) || 1);
     const pageData = first.data.page_data.slice();
-    for (let p = 2; p <= pages; p++) {
-      const next = await loadTencentScriptVar(base + p);
-      if (next?.data && Array.isArray(next.data.page_data)) {
-        pageData.push(...next.data.page_data);
-      }
+    if (pages > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, i) => {
+          const varName = nextTencentVarName();
+          return loadTencentScriptVar(
+            base + varName + "&reqPage=" + (i + 2),
+            varName
+          );
+        })
+      );
+      rest.forEach((json) => {
+        if (json?.data && Array.isArray(json.data.page_data)) {
+          pageData.push(...json.data.page_data);
+        }
+      });
     }
     return pageData
       .map((row) => {

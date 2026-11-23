@@ -2074,6 +2074,74 @@
       .sort((a, b) => b.change - a.change);
   }
 
+  /** 新浪板块分类 JSONP（script 标签可跨域；变量名固定，需单飞避免互相覆盖） */
+  const sinaBoardVarInflight = new Map();
+
+  function loadSinaBoardVar(url, varName) {
+    if (sinaBoardVarInflight.has(varName)) {
+      return sinaBoardVarInflight.get(varName);
+    }
+    const promise = loadJsonpScriptVar(url, varName);
+    sinaBoardVarInflight.set(varName, promise);
+    const clear = () => sinaBoardVarInflight.delete(varName);
+    promise.then(clear, clear);
+    setTimeout(clear, 120000);
+    return promise;
+  }
+
+  function parseSinaBoardRows(data) {
+    return Object.values(data || {})
+      .map((row) => String(row).split(","))
+      .filter((p) => p.length >= 10 && p[0]);
+  }
+
+  /** 行业板块新浪兜底（东财 clist 不通时） */
+  async function loadCnSectorBoardsFromSina() {
+    const data = await loadSinaBoardVar(
+      "https://money.finance.sina.com.cn/q/view/newSinaHy.php",
+      "S_Finance_bankuai_sinaindustry"
+    );
+    const boards = parseSinaBoardRows(data).map((p) => {
+      const change = Number(p[5]);
+      const leaderChange = Number(p[9]);
+      return {
+        code: String(p[0]),
+        name: String(p[1]),
+        change: Number.isFinite(change) ? round2(change) : 0,
+        mcap: 0,
+        upCount: 0,
+        downCount: 0,
+        leader: p[12] || "",
+        leaderChange: Number.isFinite(leaderChange) ? round2(leaderChange) : null
+      };
+    });
+    return groupCnIndustryBoards(
+      boards.sort((a, b) => b.change - a.change)
+    );
+  }
+
+  /** 地域板块新浪兜底（东财 clist 不通时） */
+  async function loadCnRegionBoardsFromSina() {
+    const data = await loadSinaBoardVar(
+      "https://money.finance.sina.com.cn/q/view/newFLJK.php?param=area",
+      "S_Finance_bankuai_area"
+    );
+    return parseSinaBoardRows(data)
+      .map((p) => {
+        const change = Number(p[5]);
+        return {
+          code: String(p[0]),
+          name: String(p[1]).replace(/板块$/u, ""),
+          change: Number.isFinite(change) ? round2(change) : null,
+          upCount: 0,
+          downCount: 0,
+          mcap: 0
+        };
+      })
+      .filter((b) => b.code && b.name)
+      .sort((a, b) => (b.change ?? -Infinity) - (a.change ?? -Infinity));
+  }
+
   /**
    * A 股行业板块涨跌幅列表（东方财富）
    * GET {push2|push2delay}/api/qt/clist/get  fs=m:90+t:2+f:!50
@@ -2089,43 +2157,50 @@
     const all = [];
     const seen = new Set();
 
-    for (let pn = 1; pn <= maxPages; pn++) {
-      const { list: page, total } = await fetchEastClist({
-        fs,
-        fields,
-        pn,
-        pz: pageSize
-      });
-
-      if (!page.length) break;
-
-      page.forEach((item) => {
-        if (!item || item.f14 == null || item.f3 == null || item.f3 === "-") {
-          return;
-        }
-        const code = String(item.f12 || "");
-        if (code && seen.has(code)) return;
-        const change = Number(item.f3);
-        if (Number.isNaN(change)) return;
-        if (code) seen.add(code);
-        const leaderChange = Number(item.f136);
-        const mcap = Number(item.f20);
-        all.push({
-          code,
-          name: String(item.f14),
-          change: round2(change),
-          mcap: !Number.isNaN(mcap) && mcap > 0 ? mcap : 0,
-          upCount: Number(item.f104) || 0,
-          downCount: Number(item.f105) || 0,
-          leader: item.f128 && item.f128 !== "-" ? String(item.f128) : "",
-          leaderChange: Number.isNaN(leaderChange) ? null : round2(leaderChange)
+    try {
+      for (let pn = 1; pn <= maxPages; pn++) {
+        const { list: page, total } = await fetchEastClist({
+          fs,
+          fields,
+          pn,
+          pz: pageSize
         });
-      });
 
-      if (page.length < pageSize || (total > 0 && all.length >= total)) break;
+        if (!page.length) break;
+
+        page.forEach((item) => {
+          if (!item || item.f14 == null || item.f3 == null || item.f3 === "-") {
+            return;
+          }
+          const code = String(item.f12 || "");
+          if (code && seen.has(code)) return;
+          const change = Number(item.f3);
+          if (Number.isNaN(change)) return;
+          if (code) seen.add(code);
+          const leaderChange = Number(item.f136);
+          const mcap = Number(item.f20);
+          all.push({
+            code,
+            name: String(item.f14),
+            change: round2(change),
+            mcap: !Number.isNaN(mcap) && mcap > 0 ? mcap : 0,
+            upCount: Number(item.f104) || 0,
+            downCount: Number(item.f105) || 0,
+            leader: item.f128 && item.f128 !== "-" ? String(item.f128) : "",
+            leaderChange: Number.isNaN(leaderChange) ? null : round2(leaderChange)
+          });
+        });
+
+        if (page.length < pageSize || (total > 0 && all.length >= total)) break;
+      }
+    } catch (_) {
+      /* 东财不通 → 新浪 */
     }
 
-    return groupCnIndustryBoards(all.sort((a, b) => b.change - a.change));
+    if (all.length) {
+      return groupCnIndustryBoards(all.sort((a, b) => b.change - a.change));
+    }
+    return loadCnSectorBoardsFromSina();
   }
 
   /**
@@ -2136,14 +2211,23 @@
    * @returns {Promise<Array<{code,name,change,upCount,downCount,mcap}>>}
    */
   async function loadCnRegionBoards() {
-    const { list } = await fetchEastClist({
-      fs: "m:90+t:1+f:!50",
-      fields: "f12,f14,f3,f20,f104,f105",
-      pn: 1,
-      pz: 50,
-      po: 1,
-      fid: "f3"
-    });
+    let list;
+    try {
+      ({ list } = await fetchEastClist({
+        fs: "m:90+t:1+f:!50",
+        fields: "f12,f14,f3,f20,f104,f105",
+        pn: 1,
+        pz: 50,
+        po: 1,
+        fid: "f3"
+      }));
+    } catch (_) {
+      return loadCnRegionBoardsFromSina();
+    }
+
+    if (!list || !list.length) {
+      return loadCnRegionBoardsFromSina();
+    }
 
     return list
       .map((item) => {
@@ -2177,38 +2261,98 @@
    * @param {"gainers"|"losers"} [kind="gainers"]
    * @returns {Promise<Array<{ code, name, price, change, market }>>}
    */
+  /** 新浪板块成分股（node 可以是 new_blhy / gn_hwqc / diyu_650000 等） */
+  async function fetchSinaNodeStocks(node, isLosers, num, page) {
+    const url =
+      "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData" +
+      "?page=" +
+      page +
+      "&num=" +
+      num +
+      "&sort=changepercent" +
+      "&asc=" +
+      (isLosers ? 1 : 0) +
+      "&node=" +
+      encodeURIComponent(node) +
+      "&_=" +
+      Date.now();
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: abortTimeout(8000)
+    });
+    if (!resp.ok) return [];
+    const rows = await resp.json();
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .map((item) => {
+        if (!item || item.code == null) return null;
+        const change = Number(item.changepercent);
+        const price = Number(item.trade);
+        if (!Number.isFinite(change)) return null;
+        const symbol = String(item.symbol || "");
+        return {
+          f12: String(item.code),
+          f13: symbol.startsWith("sh") ? 1 : 0,
+          f14: String(item.name || item.code),
+          f2: Number.isFinite(price) ? price : null,
+          f3: change
+        };
+      })
+      .filter(Boolean);
+  }
+
   async function loadCnSectorStocks(boardCodeOrCodes, limit = 20, kind = "gainers", page = 1) {
-    const codes = (Array.isArray(boardCodeOrCodes)
-      ? boardCodeOrCodes
-      : String(boardCodeOrCodes || "").split(",")
+    const rawCodes = (
+      Array.isArray(boardCodeOrCodes)
+        ? boardCodeOrCodes
+        : String(boardCodeOrCodes || "").split(",")
     )
-      .map((c) => String(c || "").trim().toUpperCase())
+      .map((c) => String(c || "").trim())
       .filter(Boolean);
 
-    if (!codes.length) throw new Error("缺少板块代码");
+    if (!rawCodes.length) throw new Error("缺少板块代码");
+
+    const isSinaNode = (c) => /^(new_|hangye_|gn_|diyu_)/i.test(c);
+    const eastCodes = rawCodes
+      .filter((c) => !isSinaNode(c))
+      .map((c) => c.toUpperCase());
+    const sinaCodes = rawCodes.filter(isSinaNode);
 
     const take = Math.max(1, Math.min(50, Number(limit) || 20));
     const pageNum = Math.max(1, Number(page) || 1);
     const isLosers = kind === "losers";
     // 多子板块时多取一些再合并去重，避免漏掉强弱股
-    const perBoard = codes.length === 1 ? take : Math.min(50, Math.max(take, 30));
+    const perBoard =
+      rawCodes.length === 1 ? take : Math.min(50, Math.max(take, 30));
 
-    const pages = await Promise.all(
-      codes.map(async (code) => {
-        try {
-          const { list } = await fetchEastClist({
-            fs: "b:" + code + "+f:!50",
-            fields: "f12,f13,f14,f2,f3",
-            pn: pageNum,
-            pz: perBoard,
-            po: isLosers ? 0 : 1
-          });
-          return list;
-        } catch (_) {
-          return [];
-        }
-      })
-    );
+    const pages = [];
+    if (eastCodes.length) {
+      const eastPages = await Promise.all(
+        eastCodes.map(async (code) => {
+          try {
+            const { list } = await fetchEastClist({
+              fs: "b:" + code + "+f:!50",
+              fields: "f12,f13,f14,f2,f3",
+              pn: pageNum,
+              pz: perBoard,
+              po: isLosers ? 0 : 1
+            });
+            return list;
+          } catch (_) {
+            return [];
+          }
+        })
+      );
+      pages.push(...eastPages);
+    }
+    if (sinaCodes.length) {
+      const sinaPages = await Promise.all(
+        sinaCodes.map((code) =>
+          fetchSinaNodeStocks(code, isLosers, perBoard, pageNum)
+        )
+      );
+      pages.push(...sinaPages);
+    }
 
     const seen = new Set();
     const list = [];

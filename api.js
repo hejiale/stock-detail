@@ -138,7 +138,7 @@
    * 东财主机熔断：某主机网络失败 / 返回非 2xx 后，短时间内直接跳过，
    * 避免每次请求都逐个重试死主机（push2 被断开时回退仍会等待）。
    */
-  const EAST_HOST_DOWN_TTL_MS = 60000;
+  const EAST_HOST_DOWN_TTL_MS = 15000;
   const eastHostDownUntil = new Map();
 
   function markEastHostDown(host, ttlMs = EAST_HOST_DOWN_TTL_MS) {
@@ -187,7 +187,12 @@
    * @param {number} [timeoutMs] 单次请求超时
    */
   async function fetchEastMoneyJson(hosts, pathWithQuery, isValid, timeoutMs = 5000) {
-    const aliveHosts = (hosts || []).filter((host) => !isEastHostDown(host));
+    const list = hosts || [];
+    let aliveHosts = list.filter((host) => !isEastHostDown(host));
+    if (!aliveHosts.length && list.length) {
+      // 半开探测：冷却期内也给一次机会，东财恢复后尽快可用
+      aliveHosts = list.slice();
+    }
     if (!aliveHosts.length) {
       throw new Error("行情接口暂不可用");
     }
@@ -211,6 +216,7 @@
           lastError = new Error("行情接口返回无效数据");
           continue;
         }
+        eastHostDownUntil.delete(host);
         return json;
       } catch (err) {
         lastError = err;
@@ -627,6 +633,10 @@
         if (!rawCode || !Number.isFinite(price) || !Number.isFinite(change)) {
           return;
         }
+        const n = (i) => {
+          const v = Number(parts[i]);
+          return Number.isFinite(v) ? v : null;
+        };
         rows.push({
           rawCode,
           name: String(parts[1] || rawCode),
@@ -634,7 +644,21 @@
           prev: Number.isFinite(prev) ? prev : null,
           open: Number.isFinite(open) ? open : null,
           changeAmt: Number.isFinite(changeAmt) ? changeAmt : null,
-          change: round2(change)
+          change: round2(change),
+          // 以下为 A 股快照字段（其他市场索引不同，仅在 CN 分支使用）
+          high: n(33),
+          low: n(34),
+          volume: n(36),
+          amountWan: n(37),
+          turnoverRate: n(38),
+          pe: n(39),
+          floatCap: n(44),
+          marketCap: n(45),
+          pb: n(46),
+          limitUp: n(47),
+          limitDown: n(48),
+          volumeRatio: n(49),
+          avg: n(51)
         });
       });
     return rows;
@@ -970,7 +994,7 @@
     const price = row.price !== 0 ? row.price : prev;
     if (price == null) throw new Error("暂无行情数据");
 
-    const code = row.rawCode.split(".")[0];
+    const code = row.rawCode.replace(/^\./, "").split(".")[0];
     const name = row.name || holding.name || code;
     const kind = getMarketKind({ code, market: holding.market });
 
@@ -982,7 +1006,7 @@
       limitDown = calcCnLimitPrice(prev, ratio, false);
     }
 
-    return {
+    const detail = {
       name,
       code,
       price,
@@ -1003,6 +1027,43 @@
       marketCap: null,
       floatCap: null
     };
+
+    if (kind === "CN") {
+      if (row.high != null && row.high !== 0) detail.high = row.high;
+      if (row.low != null && row.low !== 0) detail.low = row.low;
+      detail.turnoverRate = row.turnoverRate;
+      detail.pe = row.pe;
+      detail.pb = row.pb;
+      detail.volumeRatio = row.volumeRatio;
+      if (row.amountWan != null) detail.amount = row.amountWan * 1e4;
+      if (row.floatCap != null) detail.floatCap = row.floatCap * 1e8;
+      if (row.marketCap != null) detail.marketCap = row.marketCap * 1e8;
+      if (row.limitUp != null && row.limitUp > 0) detail.limitUp = row.limitUp;
+      if (row.limitDown != null && row.limitDown > 0) {
+        detail.limitDown = row.limitDown;
+      }
+
+      if (row.volume != null && row.volume !== 0) {
+        let shares = row.volume;
+        if (
+          row.avg != null &&
+          row.avg > 0 &&
+          detail.amount != null &&
+          detail.amount > 0
+        ) {
+          const estShares = detail.amount / row.avg;
+          if (
+            Math.abs(row.volume * 100 - estShares) <
+            Math.abs(row.volume - estShares)
+          ) {
+            shares = row.volume * 100;
+          }
+        }
+        detail.volume = Math.round(shares / 100);
+      }
+    }
+
+    return detail;
   }
 
   // ---------------------------------------------------------------------------
@@ -3229,7 +3290,7 @@
       };
     } catch (err) {
       // 东财海外列表连续失败时短暂停用，避免每次切页都等超时
-      overseasRankEastBlockedUntil = Date.now() + 120000;
+      overseasRankEastBlockedUntil = Date.now() + 30000;
       throw err;
     }
   }
@@ -3625,17 +3686,28 @@
     );
   }
 
+  const metalQuotesCache = {};
+  const METAL_CACHE_TTL_MS = 10 * 60 * 1000;
+
   async function loadMetalsQuotes(kind = "spotIntl") {
     const next = METAL_KIND_META[kind] ? kind : "spotIntl";
     const meta = METAL_KIND_META[next];
-    const { list, total } = await fetchEastClist({
-      fs: meta.fs,
-      fields: METAL_QUOTE_FIELDS,
-      pn: 1,
-      pz: meta.pz,
-      po: 1,
-      fid: "f3"
-    });
+    let list = [];
+    let total = 0;
+    try {
+      const result = await fetchEastClist({
+        fs: meta.fs,
+        fields: METAL_QUOTE_FIELDS,
+        pn: 1,
+        pz: meta.pz,
+        po: 1,
+        fid: "f3"
+      });
+      list = result.list || [];
+      total = result.total || 0;
+    } catch (_) {
+      /* 东财不通 → 下面兜底 */
+    }
     const mapped = (list || []).map(mapMetalQuoteRow).filter(Boolean);
     let rows = sortMetalRows(next, filterMetalRows(next, mapped));
     if (!rows.length) {
@@ -3645,13 +3717,21 @@
         rows = [];
       }
     }
-    return {
+    if (!rows.length) {
+      const cached = metalQuotesCache[next];
+      if (cached && Date.now() - cached.at < METAL_CACHE_TTL_MS) {
+        return cached.data;
+      }
+    }
+    const result = {
       kind: next,
       label: meta.label,
       sub: meta.sub,
       list: rows,
       total: total || rows.length
     };
+    if (rows.length) metalQuotesCache[next] = { at: Date.now(), data: result };
+    return result;
   }
 
   /**
@@ -4188,6 +4268,87 @@
     return { list: list || [], total: total || 0 };
   }
 
+  /** 东财可转债列表（datacenter，含代码/正股，无实时价） */
+  let cbListCache = { at: 0, rows: null };
+  const CB_LIST_TTL_MS = 24 * 3600 * 1000;
+
+  async function fetchConvertibleBondList() {
+    if (cbListCache.rows && Date.now() - cbListCache.at < CB_LIST_TTL_MS) {
+      return cbListCache.rows;
+    }
+    const url =
+      "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_BOND_CB_LIST&columns=SECURITY_CODE,SECUCODE,SECURITY_NAME_ABBR,CONVERT_STOCK_CODE,CORRECODE_NAME_ABBR&pageNumber=1&pageSize=1000&source=WEB&client=WEB&_=" +
+      Date.now();
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: abortTimeout(10000)
+    });
+    if (!resp.ok) throw new Error("可转债列表请求失败");
+    const json = await resp.json();
+    const rows = (json?.result?.data || [])
+      .map((row) => {
+        const code = String(row.SECURITY_CODE || "").trim();
+        const suffix = String(row.SECUCODE || "").split(".")[1] || "";
+        const prefix = suffix === "SH" ? "sh" : suffix === "SZ" ? "sz" : "";
+        if (!code || !prefix) return null;
+        return {
+          code,
+          symbol: prefix + code,
+          name: String(row.SECURITY_NAME_ABBR || code),
+          stockCode: String(row.CONVERT_STOCK_CODE || "").trim(),
+          stockName: String(row.CORRECODE_NAME_ABBR || "").trim()
+        };
+      })
+      .filter(Boolean);
+    cbListCache = { at: Date.now(), rows };
+    return rows;
+  }
+
+  /** 可转债回退：datacenter 代码列表 + 腾讯快照（东财 clist 不通时） */
+  async function loadConvertibleBondsFromTencent() {
+    const list = await fetchConvertibleBondList();
+    if (!list.length) return [];
+    const rows = [];
+    const batchSize = 80;
+    for (let i = 0; i < list.length; i += batchSize) {
+      const batch = list.slice(i, i + batchSize);
+      const text = await fetchTencentQuoteText(batch.map((r) => r.symbol));
+      const parsed = parseTencentSnapshotRows(text);
+      const byCode = new Map();
+      parsed.forEach((row) => {
+        byCode.set(row.rawCode.replace(/^\./, "").split(".")[0], row);
+      });
+      batch.forEach((item) => {
+        const q = byCode.get(item.code);
+        if (!q || q.price == null || q.price === 0) return;
+        rows.push({
+          code: item.code,
+          name: item.name,
+          kind: "convertible",
+          market: item.symbol.startsWith("sh") ? 1 : 0,
+          price: q.price,
+          change: q.change,
+          changeAmt: q.changeAmt,
+          volume: q.volume,
+          amount: q.amountWan != null ? q.amountWan * 1e4 : null,
+          turnover: q.turnoverRate,
+          high: q.high,
+          low: q.low,
+          open: q.open,
+          preClose: q.prev,
+          stockCode: item.stockCode || null,
+          stockName: item.stockName || null,
+          stockPrice: null,
+          stockChange: null
+        });
+      });
+    }
+    return rows.sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 50);
+  }
+
+  const bondQuotesCache = {};
+  const BOND_CACHE_TTL_MS = 10 * 60 * 1000;
+
   async function loadBondsQuotes(kind = "treasury") {
     const next = BOND_KIND_META[kind] ? kind : "treasury";
     const meta = BOND_KIND_META[next];
@@ -4212,18 +4373,42 @@
       }
     }
 
-    if (!mapped.length && lastError) {
-      throw lastError;
+    if (!mapped.length && next === "convertible") {
+      try {
+        const fallback = await loadConvertibleBondsFromTencent();
+        if (fallback.length) {
+          const result = {
+            kind: next,
+            label: meta.label,
+            sub: meta.sub,
+            list: fallback,
+            total: fallback.length
+          };
+          bondQuotesCache[next] = { at: Date.now(), data: result };
+          return result;
+        }
+      } catch (_) {
+        /* 回退失败则尝试缓存/空列表 */
+      }
+    }
+
+    if (!mapped.length) {
+      const cached = bondQuotesCache[next];
+      if (cached && Date.now() - cached.at < BOND_CACHE_TTL_MS) {
+        return cached.data;
+      }
     }
 
     const rows = sortBondRows(mapped).slice(0, next === "convertible" ? 50 : 40);
-    return {
+    const result = {
       kind: next,
       label: meta.label,
       sub: meta.sub,
       list: rows,
       total: total || rows.length
     };
+    if (rows.length) bondQuotesCache[next] = { at: Date.now(), data: result };
+    return result;
   }
 
   /**

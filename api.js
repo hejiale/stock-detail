@@ -339,6 +339,43 @@
   }
 
   /**
+   * 转为腾讯行情代码
+   * - A 股：sh600519 / sz000001 / bj920001
+   * - 港股：hk00700
+   * - 美股：usAAPL
+   * - 日股：jp7203
+   * - 韩股：kr005930
+   */
+  function toTencentSymbol(holding) {
+    const kind = getMarketKind(holding);
+    const code = String(holding.code || "").trim();
+    if (!code) return "";
+    if (kind === "US") {
+      return "us" + code.replace(/\.(O|N|AM|OB)$/i, "").toUpperCase();
+    }
+    if (kind === "HK") {
+      return "hk" + code.replace(/\D/g, "").padStart(5, "0");
+    }
+    if (kind === "JP") return "jp" + code.replace(/\D/g, "");
+    if (kind === "KR") return "kr" + code.replace(/\D/g, "");
+    if (kind === "CN") return resolveCnExchange(code) + code;
+    return "";
+  }
+
+  /** 腾讯返回代码 → 本地代码的候选（去后缀） */
+  function tencentRawCodeVariants(holding) {
+    const kind = getMarketKind(holding);
+    const code = String(holding.code || "").trim();
+    if (kind === "US") {
+      const base = code.replace(/\.(O|N|AM|OB)$/i, "").toUpperCase();
+      return [base, base + ".OQ", base + ".N", base + ".AM", base + ".OB"];
+    }
+    if (kind === "HK") return [code.replace(/\D/g, "").padStart(5, "0")];
+    if (kind === "JP" || kind === "KR") return [code.replace(/\D/g, "")];
+    return [code];
+  }
+
+  /**
    * 转为东方财富 secid：`{市场}.{代码}`
    * 优先用 holding.market；否则按 A 股代码规则推断
    */
@@ -572,6 +609,69 @@
     return rows;
   }
 
+  function parseTencentSnapshotRows(text) {
+    const rows = [];
+    String(text || "")
+      .split(";")
+      .forEach((line) => {
+        const m = line.match(/v_[^=]+="([^"]*)"/);
+        if (!m) return;
+        const parts = m[1].split("~");
+        if (parts.length < 33) return;
+        const rawCode = String(parts[2] || "").trim();
+        const price = Number(parts[3]);
+        const prev = Number(parts[4]);
+        const open = Number(parts[5]);
+        const changeAmt = Number(parts[31]);
+        const change = Number(parts[32]);
+        if (!rawCode || !Number.isFinite(price) || !Number.isFinite(change)) {
+          return;
+        }
+        rows.push({
+          rawCode,
+          name: String(parts[1] || rawCode),
+          price,
+          prev: Number.isFinite(prev) ? prev : null,
+          open: Number.isFinite(open) ? open : null,
+          changeAmt: Number.isFinite(changeAmt) ? changeAmt : null,
+          change: round2(change)
+        });
+      });
+    return rows;
+  }
+
+  /** 腾讯快照批量报价（东财 push2 不通时的通用回退） */
+  async function loadTencentQuotes(holdings) {
+    const meta = holdings.map((h) => ({ h, symbol: toTencentSymbol(h) }));
+    const symbols = meta.filter((m) => m.symbol).map((m) => m.symbol);
+    if (!symbols.length) return {};
+    const text = await fetchTencentQuoteText(symbols);
+    const rows = parseTencentSnapshotRows(text);
+    const map = {};
+    rows.forEach((row) => {
+      const rowBase = row.rawCode
+        .replace(/^\./, "")
+        .split(".")[0]
+        .toUpperCase();
+      for (const m of meta) {
+        if (!m.symbol) continue;
+        const variants = tencentRawCodeVariants(m.h).map((v) =>
+          v.replace(/^\./, "").split(".")[0].toUpperCase()
+        );
+        if (!variants.includes(rowBase)) continue;
+        const price = row.price !== 0 ? row.price : row.prev;
+        if (price == null || Number.isNaN(price)) continue;
+        map[String(m.h.code).toUpperCase()] = {
+          name: row.name,
+          price,
+          change: row.change
+        };
+        break;
+      }
+    });
+    return map;
+  }
+
   const tencentCuratedRankCache = new Map();
   const TENCENT_CURATED_TTL_MS = 60000;
 
@@ -608,7 +708,7 @@
    * 腾讯排行 JSONP（script 标签，可跨域）。
    * varName 由 URL 的 var_name 指定，多个请求并行时互不覆盖。
    */
-  function loadTencentScriptVar(url, varName) {
+  function loadJsonpScriptVar(url, varName) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.charset = "utf-8";
@@ -647,7 +747,7 @@
     const base =
       "https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=2000&order=desc&var_name=";
     const firstVar = nextTencentVarName();
-    const first = await loadTencentScriptVar(
+    const first = await loadJsonpScriptVar(
       base + firstVar + "&reqPage=1",
       firstVar
     );
@@ -660,7 +760,7 @@
       const rest = await Promise.all(
         Array.from({ length: pages - 1 }, (_, i) => {
           const varName = nextTencentVarName();
-          return loadTencentScriptVar(
+          return loadJsonpScriptVar(
             base + varName + "&reqPage=" + (i + 2),
             varName
           );
@@ -714,6 +814,12 @@
     if (!holdings.length) return {};
     try {
       const map = await loadEastMoneyQuotes(holdings);
+      if (Object.keys(map).length) return map;
+    } catch (_) {
+      // 回退腾讯
+    }
+    try {
+      const map = await loadTencentQuotes(holdings);
       if (Object.keys(map).length) return map;
     } catch (_) {
       // 回退新浪
@@ -801,10 +907,10 @@
     ]);
 
     if (ulistResult.status !== "fulfilled") {
-      throw ulistResult.reason || new Error("暂无行情数据");
+      return loadStockQuoteDetailFromTencent(holding);
     }
     const item = normalizeEastDiff(ulistResult.value)[0];
-    if (!item) throw new Error("暂无行情数据");
+    if (!item) return loadStockQuoteDetailFromTencent(holding);
 
     const limitData =
       limitResult.status === "fulfilled" ? limitResult.value?.data : null;
@@ -850,6 +956,52 @@
       pb: eastNum(item.f23),
       marketCap: eastNum(item.f20),
       floatCap: eastNum(item.f21)
+    };
+  }
+
+  /** 东财盘口不通时用腾讯快照兜底（字段较少，够基本行情） */
+  async function loadStockQuoteDetailFromTencent(holding) {
+    const symbol = toTencentSymbol(holding);
+    if (!symbol) throw new Error("暂无行情数据");
+    const text = await fetchTencentQuoteText([symbol]);
+    const row = parseTencentSnapshotRows(text)[0];
+    if (!row) throw new Error("暂无行情数据");
+    const prev = row.prev != null && row.prev !== 0 ? row.prev : null;
+    const price = row.price !== 0 ? row.price : prev;
+    if (price == null) throw new Error("暂无行情数据");
+
+    const code = row.rawCode.split(".")[0];
+    const name = row.name || holding.name || code;
+    const kind = getMarketKind({ code, market: holding.market });
+
+    let limitUp = null;
+    let limitDown = null;
+    if (kind === "CN" && prev != null) {
+      const ratio = cnLimitRatio(code, name);
+      limitUp = calcCnLimitPrice(prev, ratio, true);
+      limitDown = calcCnLimitPrice(prev, ratio, false);
+    }
+
+    return {
+      name,
+      code,
+      price,
+      change: row.change,
+      changeAmt: row.changeAmt,
+      open: row.open,
+      high: null,
+      low: null,
+      preClose: prev,
+      limitUp,
+      limitDown,
+      turnoverRate: null,
+      volumeRatio: null,
+      volume: null,
+      amount: null,
+      pe: null,
+      pb: null,
+      marketCap: null,
+      floatCap: null
     };
   }
 
@@ -1348,7 +1500,7 @@
     try {
       json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
     } catch (_) {
-      throw new Error("分时数据请求失败");
+      return loadIntradayTrendsFromTencent(holding);
     }
     const data = json?.data;
     if (!data || !Array.isArray(data.trends) || !data.trends.length) {
@@ -1387,6 +1539,69 @@
     };
   }
 
+  /** 东财分时不通时用腾讯分钟数据兜底 */
+  async function loadIntradayTrendsFromTencent(holding) {
+    const symbol = toTencentSymbol(holding);
+    if (!symbol) throw new Error("暂无当日分时数据");
+    const url =
+      "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=" +
+      encodeURIComponent(symbol) +
+      "&_=" +
+      Date.now();
+    const [minuteResp, snapshotText] = await Promise.all([
+      fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: abortTimeout(6000)
+      }),
+      fetchTencentQuoteText([symbol]).catch(() => "")
+    ]);
+    if (!minuteResp.ok) throw new Error("暂无当日分时数据");
+    const json = await minuteResp.json();
+    const block = json?.data?.[symbol];
+    const rows = block?.data?.data;
+    if (!Array.isArray(rows) || !rows.length) {
+      throw new Error("暂无当日分时数据");
+    }
+
+    const dateRaw = String(block?.data?.date || "").trim();
+    const date = /^\d{8}$/.test(dateRaw)
+      ? dateRaw.slice(0, 4) +
+        "-" +
+        dateRaw.slice(4, 6) +
+        "-" +
+        dateRaw.slice(6, 8)
+      : "";
+    const points = [];
+    rows.forEach((row) => {
+      const parts = String(row).split(/\s+/);
+      const time = parts[0];
+      const price = Number(parts[1]);
+      const volume = Number(parts[2]);
+      if (!time || time.length < 4 || Number.isNaN(price)) return;
+      const hh = time.slice(0, 2);
+      const mm = time.slice(2, 4);
+      points.push({
+        datetime: date ? date + " " + hh + ":" + mm : time,
+        time: hh + ":" + mm,
+        price,
+        avg: null,
+        volume: Number.isNaN(volume) ? 0 : volume
+      });
+    });
+    if (!points.length) throw new Error("暂无当日分时数据");
+
+    let preClose = null;
+    const snap = parseTencentSnapshotRows(snapshotText)[0];
+    if (snap && snap.prev != null && snap.prev !== 0) preClose = snap.prev;
+
+    return {
+      name: snap?.name || holding.name || symbol,
+      code: holding.code,
+      preClose,
+      points
+    };
+  }
+
   /**
    * 东方财富日 K 线（前复权）
    * GET {push2his|push2delay}/api/qt/stock/kline/get
@@ -1420,6 +1635,25 @@
         (j) => j?.data && Array.isArray(j.data.klines) && j.data.klines.length
       );
     } catch (_) {
+      const tencentResult = await loadDailyKlinesFromTencent(holding).catch(
+        () => null
+      );
+      if (tencentResult && tencentResult.klines.length >= 30) {
+        return tencentResult;
+      }
+      if (getMarketKind(holding) === "US") {
+        try {
+          const klines = await loadSinaUsDailyKlines(holding.code);
+          return {
+            name: holding.name || holding.code,
+            code: holding.code,
+            klines
+          };
+        } catch (_) {
+          /* 继续用腾讯结果 */
+        }
+      }
+      if (tencentResult) return tencentResult;
       throw new Error("暂无历史行情");
     }
 
@@ -1443,6 +1677,63 @@
       code: data.code || holding.code,
       klines
     };
+  }
+
+  /** 东财日 K 不通时用腾讯前复权日 K 兜底 */
+  async function loadDailyKlinesFromTencent(holding) {
+    const symbol = toTencentSymbol(holding);
+    if (!symbol) throw new Error("暂无历史行情");
+    const url =
+      "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=" +
+      encodeURIComponent(symbol) +
+      ",day,,,320,qfq&_=" +
+      Date.now();
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: abortTimeout(6000)
+    });
+    if (!resp.ok) throw new Error("暂无历史行情");
+    const json = await resp.json();
+    const block = json?.data?.[symbol];
+    const rows = block?.qfqday || block?.day;
+    if (!Array.isArray(rows) || !rows.length) throw new Error("暂无历史行情");
+
+    const klines = rows
+      .map((row) => ({
+        date: String(row[0] || ""),
+        close: Number(row[2]),
+        volume: Number(row[5])
+      }))
+      .filter((k) => k.date && Number.isFinite(k.close));
+    if (!klines.length) throw new Error("暂无历史行情");
+
+    return {
+      name: holding.name || symbol,
+      code: holding.code,
+      klines
+    };
+  }
+
+  /** 美股日 K 新浪兜底（腾讯对美股只给 1-2 根，东财不通时用） */
+  async function loadSinaUsDailyKlines(code, limit = 320) {
+    const varName = nextTencentVarName();
+    const url =
+      "https://stock.finance.sina.com.cn/usstock/api/jsonp.php/var%20" +
+      encodeURIComponent(varName) +
+      "=/US_MinKService.getDailyK?symbol=" +
+      encodeURIComponent(String(code).toUpperCase()) +
+      "&___qn=3";
+    const rows = await loadJsonpScriptVar(url, varName);
+    if (!Array.isArray(rows) || !rows.length) throw new Error("暂无历史行情");
+    const klines = rows
+      .map((row) => ({
+        date: String(row?.d || ""),
+        close: Number(row?.c),
+        volume: Number(row?.v)
+      }))
+      .filter((k) => k.date && Number.isFinite(k.close));
+    if (!klines.length) throw new Error("暂无历史行情");
+    return klines.slice(-limit);
   }
 
   // ---------------------------------------------------------------------------
@@ -1949,16 +2240,77 @@
    * @param {Array<{code:string, market:number, name?:string, label?:string}>} defs
    * @param {{ fields?: string, upperCode?: boolean, withBreadth?: boolean }} [opts]
    */
+  /** 指数代码 → 腾讯快照代码（东财 push2 不通时兜底） */
+  const TENCENT_INDEX_MAP = {
+    DJIA: { symbol: "usDJI", raw: "DJI" },
+    NDX: { symbol: "usNDX", raw: "NDX" },
+    SPX: { symbol: "usINX", raw: "INX" },
+    HSI: { symbol: "hkHSI", raw: "HSI" },
+    HSCEI: { symbol: "hkHSCEI", raw: "HSCEI" },
+    HSTECH: { symbol: "hkHSTECH", raw: "HSTECH" },
+    "000001": { symbol: "sh000001", raw: "000001" },
+    "399001": { symbol: "sz399001", raw: "399001" },
+    "399006": { symbol: "sz399006", raw: "399006" },
+    "000688": { symbol: "sh000688", raw: "000688" },
+    "899050": { symbol: "bj899050", raw: "899050" }
+  };
+
+  /** 腾讯指数快照兜底（无涨跌家数字段） */
+  async function loadIndicesFromTencent(defs, opts = {}) {
+    const { upperCode = false, withBreadth = false } = opts;
+    const meta = defs
+      .map((d) => ({ d, ...(TENCENT_INDEX_MAP[String(d.code).toUpperCase()] || {}) }))
+      .filter((m) => m.symbol);
+    if (!meta.length) return [];
+    const symbols = meta.map((m) => m.symbol);
+    const text = await fetchTencentQuoteText(symbols);
+    const rows = parseTencentSnapshotRows(text);
+    const rowByRaw = new Map();
+    rows.forEach((row) => {
+      rowByRaw.set(
+        row.rawCode.replace(/^\./, "").split(".")[0].toUpperCase(),
+        row
+      );
+    });
+    return meta
+      .map((m) => {
+        const row = rowByRaw.get(String(m.raw).toUpperCase());
+        if (!row) return null;
+        const code = upperCode ? String(m.d.code).toUpperCase() : m.d.code;
+        const out = {
+          code,
+          price: row.price,
+          change: row.change,
+          market: m.d.market
+        };
+        if (withBreadth) {
+          out.name = row.name || m.d.name || code;
+          out.upCount = 0;
+          out.downCount = 0;
+          out.flatCount = 0;
+        }
+        if (m.d.name != null) out.name = m.d.name;
+        if (m.d.label != null) out.label = m.d.label;
+        return out;
+      })
+      .filter(Boolean);
+  }
+
   async function loadIndicesByDefs(defs, opts = {}) {
     const {
       fields = "f2,f3,f12,f14",
       upperCode = false,
       withBreadth = false
     } = opts;
-    const json = await fetchEastUlist(
-      defs.map((d) => d.market + "." + d.code).join(","),
-      fields
-    );
+    let json;
+    try {
+      json = await fetchEastUlist(
+        defs.map((d) => d.market + "." + d.code).join(","),
+        fields
+      );
+    } catch (_) {
+      return loadIndicesFromTencent(defs, { upperCode, withBreadth });
+    }
     const byCode = new Map();
     normalizeEastDiff(json).forEach((item) => {
       if (!item || item.f12 == null || item.f3 == null || item.f3 === "-") return;
@@ -1980,6 +2332,10 @@
       }
       byCode.set(code, entry);
     });
+
+    if (!byCode.size) {
+      return loadIndicesFromTencent(defs, { upperCode, withBreadth });
+    }
 
     return defs
       .map((d) => {

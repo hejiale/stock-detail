@@ -1,6 +1,8 @@
 /**
  * 本地静态页服务
- * 用法：node serve.mjs
+ * 用法：
+ *   npm run build    # 生成 dist/
+ *   node serve.mjs   # 若有 dist/index.html 则直接服务构建产物
  * 然后打开 http://127.0.0.1:8787/
  */
 import http from "node:http";
@@ -10,7 +12,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;
-const ROOT = __dirname;
+const DIST_ROOT = path.join(__dirname, "dist");
+const ROOT = fs.existsSync(path.join(DIST_ROOT, "index.html"))
+  ? DIST_ROOT
+  : __dirname;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -77,6 +82,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Serving ${ROOT}`);
+  if (ROOT === __dirname) {
+    console.log("提示：尚未检测到 dist/，当前服务的是源码目录。");
+    console.log("     开发请用 npm run dev；生产请先 npm run build 再运行 node serve.mjs。");
+  }
   console.log(`Local  http://127.0.0.1:${PORT}/`);
   console.log(`LAN    http://<本机局域网IP>:${PORT}/  （手机需连同一 WiFi）`);
 });

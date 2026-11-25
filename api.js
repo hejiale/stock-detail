@@ -983,6 +983,65 @@
     };
   }
 
+  /**
+ * 批量盘口详情：一次 ulist 请求补全列表页的成交额 / 换手 / 市盈 / 市值等字段
+ * 用于涨跌榜表格的富数据展示（避免每行单独请求）
+ *
+ * @param {Array<{code:string, market?:number}>} holdings
+ * @returns {Promise<Object>} code(大写) -> 盘口字段
+ */
+  async function loadQuoteDetails(holdings) {
+    const list = (Array.isArray(holdings) ? holdings : []).filter(
+      (h) => h && h.code
+    );
+    if (!list.length) return {};
+
+    const fields =
+      "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23";
+    const secids = Array.from(new Set(list.map(toEastSecId))).join(",");
+
+    try {
+      const json = await fetchEastUlist(secids, fields);
+      const map = {};
+      normalizeEastDiff(json).forEach((item) => {
+        if (!item || item.f12 == null) return;
+        const code = String(item.f12).toUpperCase();
+        map[code] = {
+          name: item.f14 ? String(item.f14) : null,
+          price: eastNum(item.f2),
+          change: eastNum(item.f3),
+          changeAmt: eastNum(item.f4),
+          volume: eastNum(item.f5),
+          amount: eastNum(item.f6),
+          amplitude: eastNum(item.f7),
+          turnoverRate: eastNum(item.f8),
+          pe: eastNum(item.f9),
+          volumeRatio: eastNum(item.f10),
+          high: eastNum(item.f15),
+          low: eastNum(item.f16),
+          open: eastNum(item.f17),
+          preClose: eastNum(item.f18),
+          marketCap: eastNum(item.f20),
+          floatCap: eastNum(item.f21),
+          pb: eastNum(item.f23)
+        };
+      });
+      if (Object.keys(map).length) return map;
+    } catch {
+      /* 批量失败时逐只兜底 */
+    }
+
+    const results = await Promise.allSettled(
+      list.slice(0, 20).map((h) => loadStockQuoteDetail(h))
+    );
+    const map = {};
+    results.forEach((r, i) => {
+      if (r.status !== "fulfilled" || !r.value) return;
+      map[String(list[i].code).toUpperCase()] = r.value;
+    });
+    return map;
+  }
+
   /** 东财盘口不通时用腾讯快照兜底（字段较少，够基本行情） */
   async function loadStockQuoteDetailFromTencent(holding) {
     const symbol = toTencentSymbol(holding);
@@ -3244,7 +3303,22 @@
           price:
             price == null || (zeroPriceNull && price === 0) ? null : price,
           change: round2(change),
-          market: Number.isNaN(market) ? defaultMarket : market
+          market: Number.isNaN(market) ? defaultMarket : market,
+          /** 以下为详情字段，接口未返回时为 null（列表仍可展示为 --） */
+          changeAmt: eastNum(item.f4),
+          volume: eastNum(item.f5),
+          amount: eastNum(item.f6),
+          amplitude: eastNum(item.f7),
+          turnoverRate: eastNum(item.f8),
+          pe: eastNum(item.f9),
+          volumeRatio: eastNum(item.f10),
+          high: eastNum(item.f15),
+          low: eastNum(item.f16),
+          open: eastNum(item.f17),
+          preClose: eastNum(item.f18),
+          marketCap: eastNum(item.f20),
+          floatCap: eastNum(item.f21),
+          pb: eastNum(item.f23)
         };
       })
       .filter(Boolean)
@@ -3278,7 +3352,7 @@
     try {
       const { list, total } = await fetchEastClist({
         fs,
-        fields: "f12,f13,f14,f2,f3",
+        fields: "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f9,f10,f15,f16,f17,f18,f20,f21,f23",
         pn,
         pz: take,
         po: kind === "losers" ? 0 : 1,
@@ -3403,7 +3477,7 @@
     try {
       const { list, total } = await fetchEastClist({
         fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
-        fields: "f12,f13,f14,f2,f3,f18,f31,f32",
+        fields: "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f9,f10,f15,f16,f17,f18,f20,f21,f23",
         pn,
         pz: take,
         po: isLosers ? 0 : 1
@@ -5739,6 +5813,7 @@
     loadIntradayTrends,
     loadDailyKlines,
     loadStockQuoteDetail,
+    loadQuoteDetails,
     loadStockProfile,
     getMarketKind,
     loadCnSectorBoards,

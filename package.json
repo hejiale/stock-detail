@@ -1,0 +1,25 @@
+{
+  "name": "western-wealth-dashboard",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "西方财富 · React + Ant Design 行情工作台",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "node serve.mjs"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "antd": "^5.29.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "playwright-core": "^1.65.1",
+    "vite": "^6.4.1"
+  }
+}

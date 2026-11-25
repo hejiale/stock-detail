@@ -5,7 +5,7 @@
  *   <script src="api.js"></script>
  *   之后通过 window.MarketAPI 调用
  *
- * 自选 / 登录见 watchlist-api.js → window.WatchlistAPI
+ * 自选见 watchlist-api.js → window.WatchlistAPI
  *
  * 数据源：
  *   1. 东方财富 push2 / push2delay / push2his（实时报价、分时、日 K；push2 不可达时回退 delay）

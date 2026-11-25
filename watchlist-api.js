@@ -1,5 +1,5 @@
 /**
- * 自选个股 / 自选基金 / 用户登录（自有后端）
+ * 自选个股 / 自选基金（本地存储）
  *
  * 引用方式：
  *   <script src="api.js"></script>
@@ -10,14 +10,11 @@
  *
  * 数据源：
  *   自选个股 / 自选基金：localStorage（参考 go-stock-dev 的本地数据查询）
- *   登录 / 注册：stock-backdev-production.up.railway.app
  *   type：1 A股 / 2 美股 / 3 港股 / 4 韩股 / 5 日股
  */
 (function (global) {
   "use strict";
 
-  const WATCHLIST_BASE = "https://stock-backdev-production.up.railway.app";
-  const AUTH_USER_KEY = "watch_user_v1";
   const LOCAL_WATCH_STOCKS_KEY = "local_watch_stocks_v1";
   const LOCAL_FOCUS_FUNDS_KEY = "local_focus_funds_v1";
   const VALID_WATCH_TYPES = [1, 2, 3, 4, 5];
@@ -31,48 +28,6 @@
   function normalizeWatchType(type) {
     const n = Number(type);
     return VALID_WATCH_TYPES.includes(n) ? n : 1;
-  }
-
-  /** @returns {{ userId: number, name: string } | null} */
-  function getAuthUser() {
-    try {
-      const raw = localStorage.getItem(AUTH_USER_KEY);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      const userId = Number(data?.userId ?? data?.id);
-      const name = String(data?.name || "").trim();
-      if (!Number.isInteger(userId) || userId <= 0) return null;
-      return { userId, name };
-    } catch {
-      return null;
-    }
-  }
-
-  function getUserId() {
-    return getAuthUser()?.userId || null;
-  }
-
-  function saveAuthUser(user) {
-    const userId = Number(user?.userId ?? user?.id);
-    const name = String(user?.name || "").trim();
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new Error("无效的用户信息");
-    }
-    localStorage.setItem(
-      AUTH_USER_KEY,
-      JSON.stringify({ userId, name: name || String(userId) }),
-    );
-    return { userId, name: name || String(userId) };
-  }
-
-  function clearAuthUser() {
-    localStorage.removeItem(AUTH_USER_KEY);
-  }
-
-  function requireUserId() {
-    const userId = getUserId();
-    if (!userId) throw new Error("请先登录");
-    return userId;
   }
 
   /**
@@ -108,55 +63,6 @@
     }
     const c = m.normalizeJpCode(code);
     return { code: c, market: 176, name: c, watchType: t };
-  }
-
-  async function watchlistFetch(path, options = {}) {
-    const resp = await fetch(WATCHLIST_BASE + path, {
-      headers: { Accept: "application/json", ...(options.headers || {}) },
-      ...options,
-    });
-    let json = null;
-    try {
-      json = await resp.json();
-    } catch {
-      json = null;
-    }
-    const apiCode = json && json.code != null ? Number(json.code) : null;
-    const okHttp = resp.ok;
-    const okApi = apiCode == null || (apiCode >= 200 && apiCode < 300);
-    if (!okHttp || !okApi) {
-      throw new Error(
-        (json && json.message) || "自选接口请求失败（" + resp.status + "）",
-      );
-    }
-    return json || {};
-  }
-
-  /** POST /api/users/login  { name, password } */
-  async function loginUser(name, password) {
-    const username = String(name || "").trim();
-    if (!username) throw new Error("请输入用户名");
-    if (!password) throw new Error("请输入密码");
-    const json = await watchlistFetch("/api/users/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: username, password: String(password) }),
-    });
-    const user = json.data || {};
-    return saveAuthUser(user);
-  }
-
-  /** POST /api/users/register  { name, password } */
-  async function registerUser(name, password) {
-    const username = String(name || "").trim();
-    if (!username) throw new Error("请输入用户名");
-    if (!password) throw new Error("请输入密码");
-    const json = await watchlistFetch("/api/users/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: username, password: String(password) }),
-    });
-    return json.data || { name: username };
   }
 
   /** 本地自选股票原始记录 */
@@ -201,7 +107,6 @@
         tag: exists.tag || null,
         type: t,
         created_at: exists.created_at || exists.createdAt || null,
-        userId: getUserId(),
       };
     }
 
@@ -214,7 +119,7 @@
     };
     rows.push(row);
     saveLocalWatchStocks(rows);
-    return { ...row, userId: getUserId() };
+    return { ...row };
   }
 
   /** 自选股票列表（本地存储，按 type 过滤） */
@@ -283,7 +188,7 @@
     saveLocalFocusFunds(defaultFunds);
   }
 
-  /** GET /api/focus-list?userId= (改为本地数据) */
+  /** 获取自选基金列表（本地存储） */
   async function listFocusFunds() {
     initLocalFocusFunds();
     const rows = getLocalFocusFunds();
@@ -301,7 +206,7 @@
       .filter(Boolean);
   }
 
-  /** POST /api/focus-list  { code, userId } (改为本地存储) */
+  /** 新增自选基金（本地存储） */
   async function addFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("基金代码无效");
@@ -324,7 +229,7 @@
     return { code: fundCode, created_at: newFund.created_at };
   }
 
-  /** DELETE /api/focus-list/:code?userId= (改为本地存储) */
+  /** 删除自选基金（本地存储） */
   async function removeFocusFund(code) {
     const fundCode = normalizeFocusFundCode(code);
     if (!fundCode) throw new Error("缺少基金代码");
@@ -429,15 +334,8 @@
   }
 
   global.WatchlistAPI = {
-    AUTH_USER_KEY,
     LOCAL_WATCH_STOCKS_KEY,
     LOCAL_FOCUS_FUNDS_KEY,
-    getAuthUser,
-    getUserId,
-    saveAuthUser,
-    clearAuthUser,
-    loginUser,
-    registerUser,
     VALID_WATCH_TYPES,
     normalizeWatchType,
     holdingFromWatchType,

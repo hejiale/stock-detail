@@ -406,26 +406,6 @@
     });
 
     document.addEventListener("click", (e) => {
-      if (e.target.closest("[data-login-close]")) {
-        closeLoginModal();
-        return;
-      }
-
-      if (e.target.closest("[data-register-close]")) {
-        closeRegisterModal();
-        return;
-      }
-
-      if (e.target.closest("[data-open-login]")) {
-        openLoginModal();
-        return;
-      }
-
-      if (e.target.closest("[data-open-register]")) {
-        openRegisterModal();
-        return;
-      }
-
       if (e.target.closest("[data-us-board-close]")) {
         closeUsBoardModal();
         return;
@@ -832,28 +812,8 @@
       }
     });
 
-    document.addEventListener("submit", (e) => {
-      if (e.target?.id === "loginForm") {
-        handleLoginSubmit(e);
-        return;
-      }
-      if (e.target?.id === "registerForm") {
-        handleRegisterSubmit(e);
-      }
-    });
-
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        const loginModal = document.getElementById("loginModal");
-        if (loginModal?.classList.contains("show")) {
-          closeLoginModal();
-          return;
-        }
-        const registerModal = document.getElementById("registerModal");
-        if (registerModal?.classList.contains("show")) {
-          closeRegisterModal();
-          return;
-        }
         const profileModal = document.getElementById("profileModal");
         if (profileModal?.classList.contains("show")) {
           closeProfileModal();

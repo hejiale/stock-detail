@@ -57,13 +57,7 @@
       removeFocusFund,
       normalizeWatchType,
       holdingFromWatchType,
-      VALID_WATCH_TYPES,
-      getAuthUser,
-      getUserId,
-      saveAuthUser,
-      clearAuthUser,
-      loginUser,
-      registerUser
+      VALID_WATCH_TYPES
     } = window.WatchlistAPI;
 
     const STORAGE_KEY = "fund_daily_returns_v1";
@@ -145,14 +139,8 @@
       "usBoardStocksModal",
       "hkBoardModal",
       "jpBoardModal",
-      "krBoardModal",
-      "loginModal",
-      "registerModal"
+      "krBoardModal"
     ];
-
-    function isLoggedIn() {
-      return !!getUserId();
-    }
 
     function loadJson(key, fallback) {
       try {

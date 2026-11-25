@@ -169,7 +169,7 @@ export default function WatchStocksPage() {
           </h1>
           <div className="page-sub">
             <span>{meta.label} · {rows.length} 只</span>
-            <span>自选数据保存在本机，登录后可同步账号</span>
+            <span>自选数据保存在本机</span>
           </div>
         </div>
         <div className="page-head-actions">

@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  App as AntApp,
   AutoComplete,
-  Avatar,
   Button,
   Drawer,
-  Dropdown,
   Input,
   Layout,
-  Menu,
-  Tooltip
+  Menu
 } from "antd";
 import {
   BankOutlined,
@@ -19,13 +15,11 @@ import {
   GlobalOutlined,
   GoldOutlined,
   LeftOutlined,
-  LogoutOutlined,
   MenuOutlined,
   RightOutlined,
   SearchOutlined,
   StarFilled,
-  ThunderboltOutlined,
-  UserOutlined
+  ThunderboltOutlined
 } from "@ant-design/icons";
 
 import MarketPage from "./pages/MarketPage";
@@ -41,7 +35,6 @@ import StockDetailDrawer from "./components/StockDetailDrawer";
 import FundDetailModal from "./components/FundDetailModal";
 import CryptoDetailModal from "./components/CryptoDetailModal";
 import BoardsDrawer from "./components/BoardsDrawer";
-import AuthModal from "./components/AuthModal";
 
 import { AppContext } from "./lib/AppContext";
 import {
@@ -53,9 +46,7 @@ import {
   OIL_KINDS,
   formatDateTime,
   searchFunds,
-  searchStocks,
-  user as getStoredUser,
-  watchApi
+  searchStocks
 } from "./lib/market";
 
 const { Sider, Content } = Layout;
@@ -227,10 +218,7 @@ function SidebarBody({
   pageKey,
   openKeys,
   onOpenChange,
-  onSelect,
-  user,
-  onLogin,
-  onLogout
+  onSelect
 }) {
   return (
     <>
@@ -258,58 +246,22 @@ function SidebarBody({
           onClick={({ key }) => onSelect(key)}
         />
       </div>
-      <div className={`sider-footer ${collapsed ? "compact" : ""}`}>
-        {collapsed ? (
-          <Tooltip title={user ? user.name : "登录"} placement="right">
-            <Avatar
-              size={34}
-              style={{ background: "rgba(76,157,255,.18)", color: "var(--accent)", cursor: "pointer" }}
-              onClick={user ? undefined : onLogin}
-            >
-              {user ? (user.name || "U").slice(0, 1) : <UserOutlined />}
-            </Avatar>
-          </Tooltip>
-        ) : (
-          <>
-            <div className="user-card">
-              <Avatar
-                size={34}
-                style={{ background: "rgba(76,157,255,.18)", color: "var(--accent)" }}
-              >
-                {user ? (user.name || "U").slice(0, 1) : <UserOutlined />}
-              </Avatar>
-              <div className="user-card-main">
-                <div className="user-card-name">{user ? user.name : "未登录"}</div>
-                <div className="user-card-sub">
-                  {user ? "自选数据已同步账号" : "登录后同步自选"}
-                </div>
-              </div>
-              <Button
-                size="small"
-                type="text"
-                icon={user ? <LogoutOutlined /> : <UserOutlined />}
-                onClick={user ? onLogout : onLogin}
-                title={user ? "退出登录" : "登录"}
-              />
-            </div>
-            <div className="sider-tip">
-              行情数据来自东方财富 / 新浪 / 腾讯 / 币安，仅供参考
-            </div>
-          </>
-        )}
-      </div>
+      {!collapsed ? (
+        <div className="sider-footer">
+          <div className="sider-tip">
+            行情数据来自东方财富 / 新浪 / 腾讯 / 币安，仅供参考
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
 
 export default function App() {
-  const { message } = AntApp.useApp();
   const [pageKey, setPageKey] = useState(initialPageKey);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openKeys, setOpenKeys] = useState([groupKeyOf(initialPageKey())]);
-  const [user, setUser] = useState(() => getStoredUser());
-  const [authOpen, setAuthOpen] = useState(false);
   const [stockSel, setStockSel] = useState(null);
   const [fundSel, setFundSel] = useState(null);
   const [cryptoSel, setCryptoSel] = useState(null);
@@ -447,12 +399,6 @@ export default function App() {
     setBoardMarket(marketId || (pageKey.startsWith("market:") ? pageKey.split(":")[1] : "cn"));
   };
 
-  const logout = () => {
-    watchApi().clearAuthUser();
-    setUser(null);
-    message.success("已退出登录");
-  };
-
   const pageNode = useMemo(() => {
     if (pageKey === "watch:stocks") return <WatchStocksPage />;
     if (pageKey === "watch:funds") return <FocusFundsPage />;
@@ -517,22 +463,16 @@ export default function App() {
       openBoard,
       navigate: nav,
       refreshKey,
-      bumpRefresh: () => setRefreshKey((k) => k + 1),
-      user,
-      setUser,
-      openAuth: () => setAuthOpen(true)
+      bumpRefresh: () => setRefreshKey((k) => k + 1)
     }),
-    [pageKey, refreshKey, user]
+    [pageKey, refreshKey]
   );
 
   const sidebarProps = {
     pageKey,
     openKeys,
     onOpenChange: setOpenKeys,
-    onSelect: nav,
-    user,
-    onLogin: () => setAuthOpen(true),
-    onLogout: logout
+    onSelect: nav
   };
 
   return (
@@ -600,29 +540,6 @@ export default function App() {
                 <span className="live-dot" />
                 {clock}
               </div>
-              {user ? (
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: [
-                      {
-                        key: "logout",
-                        icon: <LogoutOutlined />,
-                        label: "退出登录",
-                        onClick: logout
-                      }
-                    ]
-                  }}
-                >
-                  <Button type="text" icon={<UserOutlined />}>
-                    {user.name}
-                  </Button>
-                </Dropdown>
-              ) : (
-                <Button type="primary" icon={<UserOutlined />} onClick={() => setAuthOpen(true)}>
-                  登录
-                </Button>
-              )}
             </div>
           </header>
 
@@ -667,14 +584,6 @@ export default function App() {
         marketId={boardMarket || "cn"}
         onClose={() => setBoardMarket(null)}
         onOpenStock={(row) => openStock(row, boardMarket)}
-      />
-      <AuthModal
-        open={authOpen}
-        onClose={() => setAuthOpen(false)}
-        onSuccess={(u) => {
-          setUser(u);
-          setRefreshKey((k) => k + 1);
-        }}
       />
     </AppContext.Provider>
   );

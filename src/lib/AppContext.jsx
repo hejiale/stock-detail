@@ -7,10 +7,7 @@ export const AppContext = createContext({
   openBoard: () => {},
   navigate: () => {},
   refreshKey: 0,
-  bumpRefresh: () => {},
-  user: null,
-  setUser: () => {},
-  openAuth: () => {}
+  bumpRefresh: () => {}
 });
 
 export function useAppNav() {

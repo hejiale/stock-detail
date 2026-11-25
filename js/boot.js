@@ -14,9 +14,7 @@
     "tabs/modals/kr-board.html",
     "tabs/modals/profile.html",
     "tabs/modals/fund-detail.html",
-    "tabs/modals/crypto-detail.html",
-    "tabs/modals/login.html",
-    "tabs/modals/register.html"
+    "tabs/modals/crypto-detail.html"
   ];
   const htmls = await Promise.all(
     partials.map(async (url) => {

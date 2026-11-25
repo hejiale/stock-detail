@@ -212,7 +212,7 @@ export default function FocusFundsPage() {
         <div className="stat-card">
           <div className="stat-label">自选基金</div>
           <div className="stat-value">{rows.length}</div>
-          <div className="stat-sub">本机保存，登录后同步</div>
+          <div className="stat-sub">本机保存</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">上涨 / 下跌</div>

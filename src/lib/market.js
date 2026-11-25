@@ -131,14 +131,6 @@ export function watchApi() {
   return api;
 }
 
-export function user() {
-  return watchApi().getAuthUser();
-}
-
-export function isLoggedIn() {
-  return !!watchApi().getUserId();
-}
-
 /* ------------------------------------------------------------------ */
 /* 格式化                                                              */
 /* ------------------------------------------------------------------ */

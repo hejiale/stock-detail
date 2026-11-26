@@ -2981,6 +2981,282 @@
     return { up, down, flat, total };
   }
 
+  /** 非 A 股各市场全量标的 fs（与各自涨跌家数口径保持一致） */
+  const MARKET_BREADTH_FS = {
+    us: "m:105,m:106,m:107",
+    hk: "m:116+t:3,m:116+t:4",
+    jp: "m:176",
+    kr: "m:177"
+  };
+
+  /** A 股全市场 fs（沪深主板 / 创业板 / 科创板 / 北交所） */
+  const CN_MARKET_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048";
+
+  /** A 股三大市场指数 secid：上证 / 深证 / 北证（f6 成交额，f104/f105/f106 涨跌家数） */
+  const CN_MARKET_INDEX_SECIDS = ["1.000001", "0.399001", "0.899050"];
+
+  /**
+   * A 股全市场涨跌分布（东财涨跌停集群）
+   * 返回 [{ "-1": 1465 }, { "0": 246 }, { "1": 1192 }, ...]
+   * 桶按整数涨跌幅划分（每桶 1%，±11 表示 > |10.5%|）
+   */
+  async function loadCnChangeDistribution() {
+    const path =
+      "/getTopicZDFenBu?" +
+      buildQuery({
+        ut: EAST_POOL_UT,
+        dpt: "wz.ztzt",
+        date: chinaDateYmd(),
+        _: Date.now()
+      });
+    const json = await fetchEastMoneyJson(EAST_POOL_HOSTS, path, undefined, 6000);
+    const fenbu = json?.data?.fenbu;
+    return Array.isArray(fenbu) ? fenbu : [];
+  }
+
+  /** 从涨跌分布桶统计全市场上涨 / 下跌 / 平盘家数 */
+  function breadthFromDistribution(fenbu) {
+    let up = 0;
+    let down = 0;
+    let flat = 0;
+    (fenbu || []).forEach((group) => {
+      Object.keys(group || {}).forEach((key) => {
+        const bucket = Number(key);
+        const n = Number(group[key]) || 0;
+        if (!n || !Number.isFinite(bucket)) return;
+        if (bucket > 0) up += n;
+        else if (bucket < 0) down += n;
+        else flat += n;
+      });
+    });
+    return { up, down, flat, total: up + down + flat };
+  }
+
+  /**
+   * 用涨跌分布估算全市场算术平均涨跌幅（每桶取整数中心值）。
+   * ±11 桶为开区间，用榜单实际涨跌幅修正，避免 20cm 涨停被按 11% 计。
+   */
+  function avgChangeFromDistribution(fenbu, topChanges, bottomChanges) {
+    let sum = 0;
+    let count = 0;
+    let extremeUp = null;
+    let extremeDown = null;
+    (fenbu || []).forEach((group) => {
+      Object.keys(group || {}).forEach((key) => {
+        const bucket = Number(key);
+        const n = Number(group[key]) || 0;
+        if (!n || !Number.isFinite(bucket)) return;
+        count += n;
+        if (bucket === 11) {
+          if (extremeUp == null) {
+            extremeUp = (topChanges || []).filter((c) => c > 10.5);
+          }
+          const use = Math.min(extremeUp.length, n);
+          const known = extremeUp.slice(0, use).reduce((a, b) => a + b, 0);
+          sum += known;
+          // 榜首未覆盖到的极值股按已知极值均值估算，避免按 11% 低估
+          sum += (n - use) * (use ? known / use : 11);
+        } else if (bucket === -11) {
+          if (extremeDown == null) {
+            extremeDown = (bottomChanges || []).filter((c) => c < -10.5);
+          }
+          const use = Math.min(extremeDown.length, n);
+          const known = extremeDown.slice(0, use).reduce((a, b) => a + b, 0);
+          sum += known;
+          sum += (n - use) * (use ? known / use : -11);
+        } else {
+          sum += bucket * n;
+        }
+      });
+    });
+    return count ? { avg: round2(sum / count), count } : null;
+  }
+
+  /** 从榜单页解析有效涨跌幅（保持降序或升序由调用方决定） */
+  function rankPageChanges(list) {
+    return (list || [])
+      .map((item) => eastNum(item?.f3))
+      .filter((v) => v != null);
+  }
+
+  /** 从榜单页取涨跌幅最高（或最低）的标的作为领涨 / 领跌 */
+  function extremeRankItem(list, highest = true) {
+    let best = null;
+    (list || []).forEach((item) => {
+      if (!item || item.f12 == null) return;
+      const change = eastNum(item.f3);
+      if (change == null) return;
+      if (!best || (highest ? change > best.change : change < best.change)) {
+        best = {
+          code: String(item.f12),
+          name: String(item.f14 || item.f12),
+          change: round2(change),
+          price: eastNum(item.f2)
+        };
+      }
+    });
+    return best;
+  }
+
+  /**
+   * A 股全市场概览：涨跌家数、平均涨跌幅、总成交额、领涨股
+   * 只用聚合接口（涨跌分布 + 三大指数 + 榜首页），无需逐页拉全量个股。
+   */
+  async function loadCnMarketOverview() {
+    const [distResult, topResult, bottomResult, indexResult] =
+      await Promise.allSettled([
+        loadCnChangeDistribution(),
+        fetchEastClist({
+          fs: CN_MARKET_FS,
+          fields: "f2,f3,f12,f14",
+          pn: 1,
+          pz: 100,
+          po: 1,
+          fid: "f3",
+          timeoutMs: 6000
+        }),
+        fetchEastClist({
+          fs: CN_MARKET_FS,
+          fields: "f2,f3,f12,f14",
+          pn: 1,
+          pz: 100,
+          po: 0,
+          fid: "f3",
+          timeoutMs: 6000
+        }),
+        fetchEastUlist(
+          CN_MARKET_INDEX_SECIDS.join(","),
+          "f2,f3,f6,f12,f14,f104,f105,f106"
+        )
+      ]);
+
+    const out = {
+      up: null,
+      down: null,
+      flat: null,
+      total: null,
+      avgChange: null,
+      amount: null,
+      leader: null
+    };
+
+    const dist = distResult.status === "fulfilled" ? distResult.value : [];
+    const topList = topResult.status === "fulfilled" ? topResult.value.list : [];
+    const bottomList =
+      bottomResult.status === "fulfilled" ? bottomResult.value.list : [];
+
+    if (dist.length) {
+      const breadth = breadthFromDistribution(dist);
+      if (breadth.total) {
+        out.up = breadth.up;
+        out.down = breadth.down;
+        out.flat = breadth.flat;
+        out.total = breadth.total;
+      }
+      const est = avgChangeFromDistribution(
+        dist,
+        rankPageChanges(topList).sort((a, b) => b - a),
+        rankPageChanges(bottomList).sort((a, b) => a - b)
+      );
+      if (est) out.avgChange = est.avg;
+    }
+
+    // 成交额：上证 + 深证 + 北证指数成交额之和；同时兜底涨跌家数
+    if (indexResult.status === "fulfilled") {
+      const items = normalizeEastDiff(indexResult.value);
+      const byCode = new Map(
+        items.filter((item) => item?.f12 != null).map((item) => [String(item.f12), item])
+      );
+      const hasMainIndexes = byCode.has("000001") && byCode.has("399001");
+      if (hasMainIndexes) {
+        let amount = 0;
+        CN_MARKET_INDEX_SECIDS.forEach((secid) => {
+          const item = byCode.get(secid.split(".")[1]);
+          const amt = eastNum(item?.f6);
+          if (amt != null && amt > 0) amount += amt;
+        });
+        if (amount > 0) out.amount = amount;
+
+        if (out.up == null) {
+          let up = 0;
+          let down = 0;
+          let flat = 0;
+          CN_MARKET_INDEX_SECIDS.forEach((secid) => {
+            const item = byCode.get(secid.split(".")[1]);
+            up += eastNum(item?.f104) || 0;
+            down += eastNum(item?.f105) || 0;
+            flat += eastNum(item?.f106) || 0;
+          });
+          if (up || down || flat) {
+            out.up = up;
+            out.down = down;
+            out.flat = flat;
+            out.total = up + down + flat;
+          }
+        }
+      }
+    }
+
+    out.leader = extremeRankItem(topList, true);
+    return out;
+  }
+
+  /**
+   * 全市场概览统计（整个市场，而非当前页）
+   * - A 股：涨跌家数 / 平均涨跌幅 / 总成交额 / 领涨股
+   * - 美股 / 港股 / 日股 / 韩股：涨跌家数 / 领涨股（成交额与均值暂无稳定聚合源）
+   *
+   * @param {"cn"|"us"|"hk"|"jp"|"kr"} [marketId="cn"]
+   * @returns {Promise<{up:number|null,down:number|null,flat:number|null,total:number|null,avgChange:number|null,amount:number|null,leader:object|null}>}
+   */
+  async function loadMarketOverview(marketId = "cn") {
+    if (marketId === "cn") return loadCnMarketOverview();
+
+    const fs = MARKET_BREADTH_FS[marketId];
+    if (!fs) throw new Error("未知市场");
+
+    const [breadthResult, topResult] = await Promise.allSettled([
+      loadMarketBreadth(fs),
+      fetchEastClist({
+        fs,
+        fields: "f2,f3,f12,f14",
+        pn: 1,
+        pz: 100,
+        po: 1,
+        fid: "f3",
+        timeoutMs: 6000
+      })
+    ]);
+
+    const out = {
+      up: null,
+      down: null,
+      flat: null,
+      total: null,
+      avgChange: null,
+      amount: null,
+      leader: null
+    };
+
+    if (breadthResult.status === "fulfilled") {
+      const breadth = breadthResult.value;
+      if (breadth && breadth.total && (breadth.up || breadth.down)) {
+        out.up = breadth.up;
+        out.down = breadth.down;
+        out.flat = breadth.flat;
+        out.total = breadth.total;
+      }
+    }
+
+    if (topResult.status === "fulfilled") {
+      const leader = extremeRankItem(topResult.value.list, true);
+      if (leader && marketId === "us") leader.code = leader.code.toUpperCase();
+      out.leader = leader;
+    }
+
+    return out;
+  }
+
   /** 东财涨停/跌停池的查询串（date 为北京时间 YYYYMMDD） */
   function buildPoolPath(apiPath, date, sort) {
     const q = buildQuery({
@@ -6072,6 +6348,7 @@
     loadCnIndexDayRank,
     loadCnIndexMarketCapRank,
     loadCnLimitUpDown,
+    loadMarketOverview,
     resolveCnIndexBoard,
     loadUsIndices,
     loadUsFamousSectorStats,

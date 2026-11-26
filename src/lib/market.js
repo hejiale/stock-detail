@@ -270,6 +270,14 @@ export async function fetchRank(marketId, kind = "gainers", limit = 20, page = 1
   };
 }
 
+export async function fetchMarketOverview(marketId = "cn") {
+  const api = marketApi();
+  if (typeof api.loadMarketOverview !== "function") {
+    throw new Error("行情接口不支持全市场统计");
+  }
+  return api.loadMarketOverview(marketId);
+}
+
 const intradayCache = new Map();
 const intradayInflight = new Map();
 

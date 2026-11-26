@@ -21,6 +21,7 @@ import { useAppNav } from "../lib/AppContext";
 import {
   MARKET_CONFIG,
   clearIntradayCache,
+  fetchMarketOverview,
   fetchRank,
   formatMarketCap,
   formatPct,
@@ -45,6 +46,7 @@ export default function MarketPage({ marketId }) {
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
   const [added, setAdded] = useState(() => new Set());
+  const [overview, setOverview] = useState(null);
 
   useEffect(() => {
     setKind("gainers");
@@ -87,6 +89,20 @@ export default function MarketPage({ marketId }) {
     };
   }, [marketId, kind, page, version]);
 
+  useEffect(() => {
+    let alive = true;
+    fetchMarketOverview(marketId)
+      .then((data) => {
+        if (alive) setOverview({ ...data, marketId });
+      })
+      .catch(() => {
+        // 全市场统计失败时保留已有数据；没有则回退为当前页统计
+      });
+    return () => {
+      alive = false;
+    };
+  }, [marketId, version]);
+
   const refresh = () => {
     clearIntradayCache();
     setVersion((v) => v + 1);
@@ -102,7 +118,7 @@ export default function MarketPage({ marketId }) {
     }
   };
 
-  const stats = useMemo(() => {
+  const pageStats = useMemo(() => {
     const list = rows.filter((r) => isNum(r.change));
     const up = list.filter((r) => Number(r.change) > 0).length;
     const down = list.filter((r) => Number(r.change) < 0).length;
@@ -119,6 +135,54 @@ export default function MarketPage({ marketId }) {
     );
     return { up, down, avg, amount, leader };
   }, [rows]);
+
+  /** 全市场统计优先；某一项缺失时该卡片回退为当前页统计 */
+  const stats = useMemo(() => {
+    const whole =
+      overview && overview.marketId === marketId ? overview : null;
+    const hasBreadth = !!whole && isNum(whole.up) && isNum(whole.down);
+    const hasAvg = !!whole && isNum(whole.avgChange);
+    const hasAmount = !!whole && isNum(whole.amount);
+    const hasLeader = !!(whole && whole.leader);
+
+    return {
+      breadth: hasBreadth
+        ? {
+            scope: "全市场",
+            up: whole.up,
+            down: whole.down,
+            count: isNum(whole.total) ? whole.total : Number(whole.up) + Number(whole.down)
+          }
+        : {
+            scope: "当前页",
+            up: pageStats.up,
+            down: pageStats.down,
+            count: rows.length
+          },
+      avg: {
+        scope: hasAvg ? "全市场" : "当前页",
+        value: hasAvg ? whole.avgChange : pageStats.avg
+      },
+      amount: {
+        scope: hasAmount ? "全市场" : "当前页",
+        value: hasAmount ? whole.amount : pageStats.amount,
+        sub: hasAmount ? "沪深京合计" : "剔除无成交额标的"
+      },
+      leader: hasLeader
+        ? {
+            scope: "全市场",
+            name: whole.leader.name || whole.leader.code || "--",
+            sub: `${whole.leader.code} · ${formatPct(whole.leader.change)}`
+          }
+        : {
+            scope: "当前页",
+            name: pageStats.leader?.name || "--",
+            sub: pageStats.leader
+              ? `${pageStats.leader.code} · ${formatPct(pageStats.leader.change)}`
+              : "--"
+          }
+    };
+  }, [overview, marketId, pageStats, rows.length]);
 
   const columns = useMemo(() => {
     const cols = [
@@ -339,30 +403,32 @@ export default function MarketPage({ marketId }) {
         <div className="stat-card">
           <div className="stat-label">上涨 / 下跌</div>
           <div className="stat-value">
-            <span className="up">{stats.up}</span>
+            <span className="up">{stats.breadth.up}</span>
             <span style={{ color: "var(--muted-2)", fontSize: 15, margin: "0 6px" }}>/</span>
-            <span className="down">{stats.down}</span>
+            <span className="down">{stats.breadth.down}</span>
           </div>
-          <div className="stat-sub">当前页 {rows.length} 只</div>
+          <div className="stat-sub">
+            {stats.breadth.scope} {Number(stats.breadth.count || 0).toLocaleString()} 只
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">平均涨跌幅</div>
-          <div className={`stat-value ${toneOf(stats.avg)}`}>{formatPct(stats.avg)}</div>
-          <div className="stat-sub">当前页算术平均</div>
+          <div className={`stat-value ${toneOf(stats.avg.value)}`}>
+            {formatPct(stats.avg.value)}
+          </div>
+          <div className="stat-sub">{stats.avg.scope}算术平均</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">当前页成交额</div>
-          <div className="stat-value">{formatMarketCap(stats.amount)}</div>
-          <div className="stat-sub">剔除无成交额标的</div>
+          <div className="stat-label">{stats.amount.scope}成交额</div>
+          <div className="stat-value">{formatMarketCap(stats.amount.value)}</div>
+          <div className="stat-sub">{stats.amount.sub}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">当前页领涨</div>
+          <div className="stat-label">{stats.leader.scope}领涨</div>
           <div className="stat-value" style={{ fontSize: 17 }}>
-            {stats.leader?.name || "--"}
+            {stats.leader.name}
           </div>
-          <div className="stat-sub">
-            {stats.leader ? `${stats.leader.code} · ${formatPct(stats.leader.change)}` : "--"}
-          </div>
+          <div className="stat-sub">{stats.leader.sub}</div>
         </div>
       </div>
 

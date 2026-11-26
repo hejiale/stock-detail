@@ -81,6 +81,87 @@
     return signal;
   }
 
+  /* ------------------------------------------------------------------ */
+  /* 本地行情代理                                                        */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * 浏览器直连行情源时可能被系统代理 / CORS / Referer 拦截（表现为 Failed to fetch）。
+   * npm run dev / node serve.mjs 会在同源提供 /api/market-proxy；
+   * 探测到该接口时统一走本地代理，静态托管或代理不可用时仍回退直连。
+   */
+  const MARKET_PROXY_PATH = "/api/market-proxy";
+  const PROXY_HOST_SUFFIXES = [
+    "eastmoney.com",
+    "sina.com.cn",
+    "sinajs.cn",
+    "gtimg.cn",
+    "newyorkfed.org",
+    "binance.vision",
+    "binance.com"
+  ];
+  const nativeFetch =
+    typeof global.fetch === "function" ? global.fetch.bind(global) : null;
+  let proxyAvailability = null;
+
+  function isProxyTarget(url) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return false;
+      }
+      if (parsed.origin === global.location?.origin) return false;
+      const host = parsed.hostname.toLowerCase();
+      return PROXY_HOST_SUFFIXES.some(
+        (suffix) => host === suffix || host.endsWith("." + suffix)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function proxyIsAvailable() {
+    if (proxyAvailability) return proxyAvailability;
+    proxyAvailability = nativeFetch(MARKET_PROXY_PATH + "?ping=1", {
+      signal: abortTimeout(1500)
+    })
+      .then((resp) => {
+        if (!resp.ok) return false;
+        return resp
+          .json()
+          .then((json) => !!json && json.ok === true)
+          .catch(() => false);
+      })
+      .catch(() => false);
+    return proxyAvailability;
+  }
+
+  async function fetch(input, init) {
+    if (!nativeFetch) return global.fetch(input, init);
+    const url = typeof input === "string" ? input : input && input.url;
+    if (!url || !isProxyTarget(url) || !(await proxyIsAvailable())) {
+      return nativeFetch(input, init);
+    }
+
+    const target = MARKET_PROXY_PATH + "?url=" + encodeURIComponent(url);
+    let resp;
+    try {
+      resp = await nativeFetch(target, init);
+    } catch (_) {
+      return nativeFetch(input, init);
+    }
+    // 本地代理取不到数据时再直连一次，避免代理本身成为单点故障
+    if (resp.status === 502 || resp.status === 504) {
+      try {
+        if (resp.body) await resp.body.cancel();
+      } catch (_) {
+        /* ignore */
+      }
+      return nativeFetch(input, init);
+    }
+    return resp;
+  }
+
   /** 拼接 query：k=encode(v)&... */
   function buildQuery(params) {
     return Object.keys(params)

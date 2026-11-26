@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleFundHoldingsRequest } from "./server/fund-holdings.mjs";
+import { handleMarketProxyRequest } from "./server/market-proxy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;
@@ -67,6 +68,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/fund-holdings") {
       await handleFundHoldingsRequest(url, res);
+      return;
+    }
+
+    if (url.pathname === "/api/market-proxy") {
+      await handleMarketProxyRequest(url, res);
       return;
     }
 

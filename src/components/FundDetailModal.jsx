@@ -311,7 +311,7 @@ export default function FundDetailModal({ open, code, presetName, onClose }) {
                   },
                   {
                     title: "涨跌幅",
-                    dataIndex: "change",
+                    dataIndex: "dayChange",
                     align: "right",
                     width: 100,
                     render: (v) => (

@@ -18,7 +18,19 @@ function drawSpark(canvas, points, baseline) {
   const prices = (points || [])
     .map((p) => Number(p.price))
     .filter((n) => Number.isFinite(n));
-  if (!prices.length) return;
+  if (!prices.length) {
+    // 未悬停加载时给一条极淡的占位线，避免整列看起来是空的
+    ctx.save();
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = "rgba(148,163,184,0.16)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, cssH / 2);
+    ctx.lineTo(cssW, cssH / 2);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
 
   const padY = 2;
   let minP = Math.min(...prices);
@@ -85,22 +97,50 @@ function drawSpark(canvas, points, baseline) {
   ctx.stroke();
 }
 
-/** 列表行内分时走势：进入视口后才拉取数据，同一代码全站共享缓存 */
+/** 列表行内分时走势：行悬停后才拉取数据，同一代码全站共享缓存 */
 export function TrendSparkline({ holding, baseline, width = 92, height = 30, version = 0 }) {
   const canvasRef = useRef(null);
   const [data, setData] = useState(null);
+  const [active, setActive] = useState(false);
   const key = intradayKey(holding);
+  const hasBaseline = baseline != null && Number.isFinite(Number(baseline));
+
+  // 只有鼠标停留在这一行时才加载，避免整页 20 行同时请求分时接口
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const row = canvas.closest("tr") || canvas;
+    let timer = null;
+    const enter = () => {
+      if (active) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setActive(true), 220);
+    };
+    const leave = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    row.addEventListener("pointerenter", enter);
+    row.addEventListener("pointerleave", leave);
+    return () => {
+      if (timer) clearTimeout(timer);
+      row.removeEventListener("pointerenter", enter);
+      row.removeEventListener("pointerleave", leave);
+    };
+  }, [active]);
 
   useEffect(() => {
-    if (!holding?.code) return undefined;
+    if (!active || !holding?.code) return undefined;
     let alive = true;
-    loadIntradayCached(holding).then((trend) => {
+    loadIntradayCached(holding, { skipSnapshot: hasBaseline }).then((trend) => {
       if (alive) setData(trend);
     });
     return () => {
       alive = false;
     };
-  }, [key, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, version, active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;

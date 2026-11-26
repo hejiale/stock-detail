@@ -9,6 +9,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleFundHoldingsRequest } from "./server/fund-holdings.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;
@@ -61,6 +62,11 @@ const server = http.createServer(async (req, res) => {
         "Access-Control-Allow-Methods": "GET,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type"
       });
+      return;
+    }
+
+    if (url.pathname === "/api/fund-holdings") {
+      await handleFundHoldingsRequest(url, res);
       return;
     }
 

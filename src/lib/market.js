@@ -251,9 +251,10 @@ const RANK_LOADERS = {
 export async function fetchRank(marketId, kind = "gainers", limit = 20, page = 1) {
   const loader = RANK_LOADERS[marketId];
   if (!loader) throw new Error("未知市场");
-  const cfg = MARKET_CONFIG[marketId] || MARKET_CONFIG.cn;
   const result = await loader(kind, limit, page);
-  const rows = (result?.list || []).map((item) => ({
+  // 主源（东财 clist）已自带成交额 / 换手 / 市值等字段；兜底源只保证基础行情。
+  // 这里不再额外补一次 ulist，避免兜底时又被限流拖慢整页。
+  const list = (result?.list || []).map((item) => ({
     ...item,
     changeAmt:
       item.changeAmt != null
@@ -262,25 +263,6 @@ export async function fetchRank(marketId, kind = "gainers", limit = 20, page = 1
           ? (item.price * item.change) / (100 + item.change)
           : null
   }));
-
-  // 批量补全成交额 / 换手 / 市值等富字段（东财 ulist 一次请求）
-  let details = {};
-  try {
-    details = await marketApi().loadQuoteDetails(
-      rows.map((row) => ({ code: row.code, market: row.market ?? cfg.marketCode }))
-    );
-  } catch {
-    details = {};
-  }
-
-  const list = rows.map((row) => {
-    const d = details[String(row.code).toUpperCase()] || {};
-    const merged = { ...row };
-    Object.keys(d).forEach((key) => {
-      if (d[key] != null && merged[key] == null) merged[key] = d[key];
-    });
-    return merged;
-  });
 
   return {
     list,
@@ -302,15 +284,20 @@ export function clearIntradayCache() {
 
 /**
  * 分时走势：同一代码只请求一次，失败也缓存避免列表内反复重试。
+ * 列表缩略图按需（行悬停）触发，避免一页 20 行同时打爆分时接口。
+ * @param {object} holding
+ * @param {{ skipSnapshot?: boolean }} [options] 已知昨收时可省掉腾讯快照请求
  */
-export function loadIntradayCached(holding) {
+export function loadIntradayCached(holding, options = {}) {
   const key = intradayKey(holding);
   if (!key || key === ":") return Promise.resolve(null);
   if (intradayCache.has(key)) return intradayCache.get(key);
   if (intradayInflight.has(key)) return intradayInflight.get(key);
 
   const task = marketApi()
-    .loadIntradayTrends(holding)
+    .loadIntradayTrends(holding, {
+      skipSnapshot: options.skipSnapshot === true
+    })
     .catch(() => null)
     .then((data) => {
       intradayCache.set(key, data);

@@ -1,8 +1,36 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { handleFundHoldingsRequest } from "./server/fund-holdings.mjs";
+
+/** 本地开发 / 预览时代理基金持仓，绕开天天基金的 Referer 防盗链 */
+function fundHoldingsProxy() {
+  const middleware = (req, res, next) => {
+    let url;
+    try {
+      url = new URL(req.url || "/", "http://localhost");
+    } catch {
+      next();
+      return;
+    }
+    if (url.pathname !== "/api/fund-holdings") {
+      next();
+      return;
+    }
+    handleFundHoldingsRequest(url, res);
+  };
+  return {
+    name: "fund-holdings-proxy",
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    }
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), fundHoldingsProxy()],
   base: "./",
   server: {
     host: "0.0.0.0",

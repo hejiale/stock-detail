@@ -1028,18 +1028,10 @@
       });
       if (Object.keys(map).length) return map;
     } catch {
-      /* 批量失败时逐只兜底 */
+      /* 批量 ulist 失败时不再逐只重试：一次失败通常是被限流，逐只会放大等待 */
     }
 
-    const results = await Promise.allSettled(
-      list.slice(0, 20).map((h) => loadStockQuoteDetail(h))
-    );
-    const map = {};
-    results.forEach((r, i) => {
-      if (r.status !== "fulfilled" || !r.value) return;
-      map[String(list[i].code).toUpperCase()] = r.value;
-    });
-    return map;
+    return {};
   }
 
   /** 东财盘口不通时用腾讯快照兜底（字段较少，够基本行情） */
@@ -1607,7 +1599,12 @@
    * @returns {Promise<{ name, code, preClose, points }>}
    *   points: [{ datetime, time, price, avg, volume }]
    */
-  async function loadIntradayTrends(holding) {
+  async function loadIntradayTrends(holding, options = {}) {
+    // 列表内缩略图数量多，东财分时接口对短时并发很敏感，优先走腾讯更稳
+    if (options.preferTencent) {
+      return loadIntradayTrendsFromTencent(holding, options);
+    }
+
     const path = buildEastPath("/api/qt/stock/trends2/get", {
       fields1: "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
       fields2: "f51,f52,f53,f54,f55,f56,f57,f58",
@@ -1620,7 +1617,7 @@
     try {
       json = await fetchEastMoneyJson(EAST_PUSH_HOSTS, path);
     } catch (_) {
-      return loadIntradayTrendsFromTencent(holding);
+      return loadIntradayTrendsFromTencent(holding, options);
     }
     const data = json?.data;
     if (!data || !Array.isArray(data.trends) || !data.trends.length) {
@@ -1660,7 +1657,7 @@
   }
 
   /** 东财分时不通时用腾讯分钟数据兜底 */
-  async function loadIntradayTrendsFromTencent(holding) {
+  async function loadIntradayTrendsFromTencent(holding, options = {}) {
     const symbol = toTencentSymbol(holding);
     if (!symbol) throw new Error("暂无当日分时数据");
     const url =
@@ -1668,12 +1665,15 @@
       encodeURIComponent(symbol) +
       "&_=" +
       Date.now();
+    const skipSnapshot = options.skipSnapshot === true;
     const [minuteResp, snapshotText] = await Promise.all([
       fetch(url, {
         headers: { Accept: "application/json" },
         signal: abortTimeout(6000)
       }),
-      fetchTencentQuoteText([symbol]).catch(() => "")
+      skipSnapshot
+        ? Promise.resolve("")
+        : fetchTencentQuoteText([symbol]).catch(() => "")
     ]);
     if (!minuteResp.ok) throw new Error("暂无当日分时数据");
     const json = await minuteResp.json();
@@ -3429,12 +3429,36 @@
         const code = normalizeCnCode(item.code);
         if (!code) return null;
         const ex = resolveCnExchange(code);
+        const high = Number(item.high);
+        const low = Number(item.low);
+        const amplitude =
+          Number.isFinite(high) &&
+          Number.isFinite(low) &&
+          Number.isFinite(settle) &&
+          settle !== 0
+            ? ((high - low) / settle) * 100
+            : null;
         return {
           code,
           name: String(item.name || code),
           price,
           change: round2(change),
-          market: ex === "sh" ? 1 : 0
+          market: ex === "sh" ? 1 : 0,
+          changeAmt: Number.isFinite(Number(item.pricechange))
+            ? round2(item.pricechange)
+            : null,
+          open: Number.isFinite(Number(item.open)) ? Number(item.open) : null,
+          high: Number.isFinite(high) ? high : null,
+          low: Number.isFinite(low) ? low : null,
+          preClose:
+            Number.isFinite(settle) && settle !== 0 ? settle : null,
+          volume: Number.isFinite(Number(item.volume))
+            ? Number(item.volume)
+            : null,
+          amount: Number.isFinite(Number(item.amount))
+            ? Number(item.amount)
+            : null,
+          amplitude: amplitude == null ? null : round2(amplitude)
         };
       })
       .filter(Boolean)
@@ -3480,7 +3504,8 @@
         fields: "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f9,f10,f15,f16,f17,f18,f20,f21,f23",
         pn,
         pz: take,
-        po: isLosers ? 0 : 1
+        po: isLosers ? 0 : 1,
+        timeoutMs: 3500
       });
       const mapped = mapEastRankItems(list, take, {
         allowAuctionQuote: true
@@ -5603,6 +5628,204 @@
     return { asOf: "", list };
   }
 
+  /** 按市场号规范化基金持仓代码 */
+  function normalizeFundHoldingCode(raw, market) {
+    let code = String(raw || "").trim();
+    if (!code) return "";
+    if (market === 105 || market === 106 || market === 107) {
+      code = code.toUpperCase();
+    } else if (market === 116) {
+      code = normalizeHkCode(code);
+    } else if (market === 176) {
+      code = normalizeJpCode(code);
+    } else if (market === 177) {
+      code = normalizeKrCode(code);
+    } else if (market === 0 || market === 1) {
+      code = normalizeCnCode(code);
+    }
+    return code;
+  }
+
+  /** 基金持仓接口的市场号兜底（TEXCH 为老市场号） */
+  function fundStockMarketOf(row, marketByCode) {
+    const rawCode = String(row?.GPDM || "").trim();
+    const fromPingzhong = rawCode
+      ? marketByCode?.get(rawCode.toUpperCase())
+      : null;
+    if (fromPingzhong != null) return fromPingzhong;
+
+    const newTexch = Number(row?.NEWTEXCH);
+    if (Number.isFinite(newTexch) && newTexch > 0) return newTexch;
+
+    const texch = Number(row?.TEXCH);
+    if (Number.isFinite(texch) && texch > 0) {
+      if (texch === 1) return 1;
+      if (texch === 5) return 116;
+      if (texch === 7) return 105;
+    }
+
+    // 末级兜底：按代码形态推断（东财韩股/日股常不带市场前缀）
+    if (/^\d{6}$/.test(rawCode)) return 177;
+    if (/^\d{1,5}$/.test(rawCode)) return 176;
+    return 105;
+  }
+
+  /** 基金持仓（天天基金 App 接口）：名称、占比、行业、披露日期一次拿全 */
+  function mapFundHoldingsFromPosition(json, fallbackHoldings) {
+    const rows = Array.isArray(json?.Datas?.fundStocks)
+      ? json.Datas.fundStocks
+      : [];
+    const marketByCode = new Map(
+      (fallbackHoldings?.list || []).map((h) => [
+        String(h.code || "").toUpperCase(),
+        h.market
+      ])
+    );
+
+    const list = rows
+      .map((row, i) => {
+        const raw = String(row?.GPDM || "").trim();
+        if (!raw) return null;
+        const market = fundStockMarketOf(row, marketByCode);
+        const code = normalizeFundHoldingCode(raw, market);
+        if (!code) return null;
+
+        const ratio = Number(String(row?.JZBL ?? "").replace("%", ""));
+        const sector = String(row?.INDEXNAME || "").trim();
+        return {
+          rank: i + 1,
+          code,
+          name: String(row?.GPJC || code),
+          market,
+          ratio: Number.isFinite(ratio) ? ratio : null,
+          sector: sector && sector !== "--" ? sector : "",
+          changeType:
+            row?.PCTNVCHGTYPE && row.PCTNVCHGTYPE !== "--"
+              ? String(row.PCTNVCHGTYPE)
+              : ""
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      asOf: String(json?.Expansion || "").slice(0, 10),
+      list
+    };
+  }
+
+  /** 解析东财基金档案页返回的持仓 HTML 片段 */
+  function parseFundHoldingsFromF10Content(content) {
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(String(content || ""), "text/html");
+    } catch (_) {
+      return { asOf: "", list: [] };
+    }
+    if (!doc) return { asOf: "", list: [] };
+
+    const dateEl = doc.querySelector("font.px12");
+    const asOf = String(dateEl?.textContent || "").trim().slice(0, 10);
+    // fundf10 会同时返回最近几个季度，只取第一张表（最新报告期）
+    const table = doc.querySelector("table");
+    const rows = table ? Array.from(table.querySelectorAll("tbody tr")) : [];
+    const list = rows
+      .map((tr, i) => {
+        const tds = tr.querySelectorAll("td");
+        if (tds.length < 7) return null;
+        const rawCode = String(tds[1].textContent || "").trim();
+        if (!rawCode) return null;
+        const name = String(tds[2].textContent || "").trim();
+        const ratio = Number(
+          String(tds[6].textContent || "").replace("%", "").trim()
+        );
+
+        let market = null;
+        const link =
+          tds[1].querySelector("a[href*='/r/']") ||
+          tds[2].querySelector("a[href*='/r/']");
+        if (link) {
+          const matched = String(link.getAttribute("href") || "").match(
+            /\/r\/(\d+)\./
+          );
+          if (matched) market = Number(matched[1]);
+        }
+        if (market == null) {
+          const texch = tds[1]
+            .querySelector("[data-texch]")
+            ?.getAttribute("data-texch");
+          const n = Number(texch);
+          if (texch && Number.isFinite(n) && n > 0) market = n;
+        }
+        if (market == null) {
+          market = fundStockMarketOf({ GPDM: rawCode }, null);
+        }
+
+        const code = normalizeFundHoldingCode(rawCode, market);
+        if (!code) return null;
+        return {
+          rank: i + 1,
+          code,
+          name: name || code,
+          market,
+          ratio: Number.isFinite(ratio) ? ratio : null,
+          sector: "",
+          changeType: ""
+        };
+      })
+      .filter(Boolean);
+
+    return { asOf, list };
+  }
+
+  /**
+   * 基金档案持仓：经本地 /api/fund-holdings 代理取 fundf10（避开 Referer 防盗链）
+   * 返回名称、代码、市场、占净值比例、披露日期
+   */
+  async function loadFundHoldingsFromF10(fundCode, timeoutMs = 7000) {
+    const resp = await fetch(
+      "/api/fund-holdings?code=" + encodeURIComponent(fundCode),
+      {
+        headers: { Accept: "text/html" },
+        signal: abortTimeout(timeoutMs)
+      }
+    );
+    if (!resp.ok) {
+      let message = "基金持仓加载失败（" + resp.status + "）";
+      try {
+        const body = await resp.json();
+        if (body?.error) message = body.error;
+      } catch (_) {
+        /* ignore */
+      }
+      throw new Error(message);
+    }
+    const html = await resp.text();
+    return parseFundHoldingsFromF10Content(html);
+  }
+
+  /** 用实时报价补全持仓股的最新价 / 涨跌幅（批量 ulist，一次请求） */
+  async function enrichFundHoldingsQuotes(holdings) {
+    const list = holdings?.list || [];
+    if (!list.length) return holdings;
+    try {
+      const quotes = await loadQuotes(
+        list.map((h) => ({ code: h.code, market: h.market, name: h.name }))
+      );
+      list.forEach((h) => {
+        const q = quotes[quoteKey(h.code)] || quotes[h.code];
+        if (!q) return;
+        if (q.price != null) h.price = q.price;
+        if (q.change != null && !Number.isNaN(Number(q.change))) {
+          h.dayChange = Number(q.change);
+        }
+        if ((!h.name || h.name === h.code) && q.name) h.name = q.name;
+      });
+    } catch {
+      /* 报价失败时保留持仓名称与占比，价格显示 -- */
+    }
+    return holdings;
+  }
+
   function withTimeout(promise, ms, label) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
@@ -5677,11 +5900,18 @@
     const fundCode = raw.padStart(6, "0").slice(-6);
     const warnings = [];
 
-    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码
-    const [dcSettled, pzSettled] = await Promise.allSettled([
-      fetchFundDcDetailRow(fundCode),
-      loadFundPingzhongPack(fundCode)
-    ]);
+    // 1) 先直连稳妥源：数据中心概况 + pingzhong 净值/持仓代码 + 档案持仓明细
+    const [dcSettled, pzSettled, f10Settled, positionSettled] =
+      await Promise.allSettled([
+        fetchFundDcDetailRow(fundCode),
+        loadFundPingzhongPack(fundCode),
+        loadFundHoldingsFromF10(fundCode),
+        withTimeout(
+          fetchFundMobJson("FundMNInverstPosition", { FCODE: fundCode }),
+          6000,
+          "基金持仓"
+        )
+      ]);
 
     if (dcSettled.status !== "fulfilled" && pzSettled.status !== "fulfilled") {
       throw new Error(
@@ -5719,23 +5949,40 @@
       history = fromPz.slice().reverse().slice(0, 30);
     }
 
-    const holdings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
+    const fallbackHoldings = mapFundHoldingsFromPingzhong(pz?.stockCodesNew);
+    let holdings = null;
+    if (f10Settled.status === "fulfilled" && f10Settled.value?.list?.length) {
+      holdings = f10Settled.value;
+    } else if (positionSettled.status === "fulfilled") {
+      holdings = mapFundHoldingsFromPosition(
+        positionSettled.value,
+        fallbackHoldings
+      );
+    }
+    if (!holdings || !holdings.list.length) {
+      holdings = fallbackHoldings;
+    }
 
-    // 2) 短超时直连 App 接口增强累计净值（失败不影响主流程）
-    const mobBoost = await Promise.allSettled([
-      withTimeout(
-        fetchFundMobJson("FundMNHisNetList", {
-          FCODE: fundCode,
-          pageIndex: "1",
-          pageSize: "40"
-        }),
-        4500,
-        "净值"
-      ),
-      withTimeout(
-        fetchFundMobJson("FundMNPeriodIncrease", { FCODE: fundCode }),
-        4500,
-        "阶段涨幅"
+    // 2) 短超时直连 App 接口增强累计净值（失败不影响主流程），同时补全持仓行情
+    const [mobBoost] = await Promise.all([
+      Promise.allSettled([
+        withTimeout(
+          fetchFundMobJson("FundMNHisNetList", {
+            FCODE: fundCode,
+            pageIndex: "1",
+            pageSize: "40"
+          }),
+          4500,
+          "净值"
+        ),
+        withTimeout(
+          fetchFundMobJson("FundMNPeriodIncrease", { FCODE: fundCode }),
+          4500,
+          "阶段涨幅"
+        )
+      ]),
+      withTimeout(enrichFundHoldingsQuotes(holdings), 5000, "持仓行情").catch(
+        () => holdings
       )
     ]);
 

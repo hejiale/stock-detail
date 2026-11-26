@@ -233,7 +233,7 @@ function SidebarBody({
           </div>
         )}
       </div>
-      <div className={`sider-menu-wrap ${collapsed ? "collapsed" : ""}`}>
+      <div className="sider-menu-wrap">
         <Menu
           className="sider-menu"
           mode="inline"
@@ -246,14 +246,7 @@ function SidebarBody({
           onClick={({ key }) => onSelect(key)}
         />
       </div>
-      {!collapsed ? (
-        <div className="sider-footer">
-          <div className="sider-tip">
-            行情数据来自东方财富 / 新浪 / 腾讯 / 币安，仅供参考
-          </div>
-        </div>
-      ) : null}
-    </>
+      </>
   );
 }
 

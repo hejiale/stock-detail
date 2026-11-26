@@ -481,6 +481,11 @@ body {
   margin-bottom: 16px;
 }
 
+/* 卡片数量随市场变化（A 股 3 张 / 海外 2 张），自适应等分 */
+.stat-strip.stat-strip-dynamic {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
 .stat-card {
   border-radius: var(--radius);
   border: 1px solid var(--border);

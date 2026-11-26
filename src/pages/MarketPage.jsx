@@ -118,71 +118,40 @@ export default function MarketPage({ marketId }) {
     }
   };
 
-  const pageStats = useMemo(() => {
-    const list = rows.filter((r) => isNum(r.change));
-    const up = list.filter((r) => Number(r.change) > 0).length;
-    const down = list.filter((r) => Number(r.change) < 0).length;
-    const avg = list.length
-      ? list.reduce((sum, r) => sum + Number(r.change), 0) / list.length
-      : null;
-    const amount = list.reduce(
-      (sum, r) => sum + (isNum(r.amount) ? Number(r.amount) : 0),
-      0
-    );
-    const leader = list.reduce(
-      (best, r) => (!best || Number(r.change) > Number(best.change) ? r : best),
-      null
-    );
-    return { up, down, avg, amount, leader };
-  }, [rows]);
-
-  /** 全市场统计优先；某一项缺失时该卡片回退为当前页统计 */
+  /** 全市场统计：接口缺失时显示 --，不混入当前页数据 */
   const stats = useMemo(() => {
     const whole =
       overview && overview.marketId === marketId ? overview : null;
     const hasBreadth = !!whole && isNum(whole.up) && isNum(whole.down);
-    const hasAvg = !!whole && isNum(whole.avgChange);
-    const hasAmount = !!whole && isNum(whole.amount);
-    const hasLeader = !!(whole && whole.leader);
+    const hasLimits = !!whole && (isNum(whole.limitUp) || isNum(whole.limitDown));
 
     return {
-      breadth: hasBreadth
-        ? {
-            scope: "全市场",
-            up: whole.up,
-            down: whole.down,
-            count: isNum(whole.total) ? whole.total : Number(whole.up) + Number(whole.down)
-          }
-        : {
-            scope: "当前页",
-            up: pageStats.up,
-            down: pageStats.down,
-            count: rows.length
-          },
-      avg: {
-        scope: hasAvg ? "全市场" : "当前页",
-        value: hasAvg ? whole.avgChange : pageStats.avg
+      breadth: {
+        up: hasBreadth ? whole.up : "--",
+        down: hasBreadth ? whole.down : "--",
+        sub: hasBreadth
+          ? `全市场 ${Number(
+              isNum(whole.total) ? whole.total : Number(whole.up) + Number(whole.down)
+            ).toLocaleString()} 只`
+          : "全市场 · 暂无数据"
       },
       amount: {
-        scope: hasAmount ? "全市场" : "当前页",
-        value: hasAmount ? whole.amount : pageStats.amount,
-        sub: hasAmount ? "沪深京合计" : "剔除无成交额标的"
+        value: whole && isNum(whole.amount) ? whole.amount : null
       },
-      leader: hasLeader
-        ? {
-            scope: "全市场",
-            name: whole.leader.name || whole.leader.code || "--",
-            sub: `${whole.leader.code} · ${formatPct(whole.leader.change)}`
-          }
-        : {
-            scope: "当前页",
-            name: pageStats.leader?.name || "--",
-            sub: pageStats.leader
-              ? `${pageStats.leader.code} · ${formatPct(pageStats.leader.change)}`
-              : "--"
-          }
+      limits: {
+        up: whole && isNum(whole.limitUp) ? whole.limitUp : "--",
+        down: whole && isNum(whole.limitDown) ? whole.limitDown : "--",
+        sub: hasLimits ? "全市场" : "全市场 · 暂无数据"
+      },
+      leader:
+        whole && whole.leader
+          ? {
+              name: whole.leader.name || whole.leader.code || "--",
+              sub: `${whole.leader.code} · ${formatPct(whole.leader.change)}`
+            }
+          : { name: "--", sub: "全市场 · 暂无数据" }
     };
-  }, [overview, marketId, pageStats, rows.length]);
+  }, [overview, marketId]);
 
   const columns = useMemo(() => {
     const cols = [
@@ -399,7 +368,7 @@ export default function MarketPage({ marketId }) {
         </div>
       </div>
 
-      <div className="stat-strip">
+      <div className="stat-strip stat-strip-dynamic">
         <div className="stat-card">
           <div className="stat-label">上涨 / 下跌</div>
           <div className="stat-value">
@@ -407,29 +376,36 @@ export default function MarketPage({ marketId }) {
             <span style={{ color: "var(--muted-2)", fontSize: 15, margin: "0 6px" }}>/</span>
             <span className="down">{stats.breadth.down}</span>
           </div>
-          <div className="stat-sub">
-            {stats.breadth.scope} {Number(stats.breadth.count || 0).toLocaleString()} 只
+          <div className="stat-sub">{stats.breadth.sub}</div>
+        </div>
+        {marketId === "cn" ? (
+          <>
+            <div className="stat-card">
+              <div className="stat-label">全市场成交额</div>
+              <div className="stat-value">{formatMarketCap(stats.amount.value)}</div>
+              <div className="stat-sub">
+                {isNum(stats.amount.value) ? "沪深京合计" : "全市场 · 暂无数据"}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">涨停 / 跌停</div>
+              <div className="stat-value">
+                <span className="up">{stats.limits.up}</span>
+                <span style={{ color: "var(--muted-2)", fontSize: 15, margin: "0 6px" }}>/</span>
+                <span className="down">{stats.limits.down}</span>
+              </div>
+              <div className="stat-sub">{stats.limits.sub}</div>
+            </div>
+          </>
+        ) : (
+          <div className="stat-card">
+            <div className="stat-label">全市场领涨</div>
+            <div className="stat-value" style={{ fontSize: 17 }}>
+              {stats.leader.name}
+            </div>
+            <div className="stat-sub">{stats.leader.sub}</div>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">平均涨跌幅</div>
-          <div className={`stat-value ${toneOf(stats.avg.value)}`}>
-            {formatPct(stats.avg.value)}
-          </div>
-          <div className="stat-sub">{stats.avg.scope}算术平均</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{stats.amount.scope}成交额</div>
-          <div className="stat-value">{formatMarketCap(stats.amount.value)}</div>
-          <div className="stat-sub">{stats.amount.sub}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{stats.leader.scope}领涨</div>
-          <div className="stat-value" style={{ fontSize: 17 }}>
-            {stats.leader.name}
-          </div>
-          <div className="stat-sub">{stats.leader.sub}</div>
-        </div>
+        )}
       </div>
 
       <div className="panel-card">

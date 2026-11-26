@@ -5,12 +5,10 @@ import { ChangeCell, NameCell } from "../components/Cells";
 import { useAppNav } from "../lib/AppContext";
 import {
   addFocusFund,
-  formatPct,
   isNum,
   loadFocusFunds,
   marketApi,
-  removeFocusFund,
-  toneOf
+  removeFocusFund
 } from "../lib/market";
 
 export default function FocusFundsPage() {
@@ -48,10 +46,7 @@ export default function FocusFundsPage() {
     const valid = rows.filter((r) => isNum(r.dayChange));
     const up = valid.filter((r) => Number(r.dayChange) > 0).length;
     const down = valid.filter((r) => Number(r.dayChange) < 0).length;
-    const avg = valid.length
-      ? valid.reduce((s, r) => s + Number(r.dayChange), 0) / valid.length
-      : null;
-    return { up, down, avg };
+    return { up, down };
   }, [rows]);
 
   const addByKeyword = async (raw) => {
@@ -210,11 +205,6 @@ export default function FocusFundsPage() {
 
       <div className="stat-strip">
         <div className="stat-card">
-          <div className="stat-label">自选基金</div>
-          <div className="stat-value">{rows.length}</div>
-          <div className="stat-sub">本机保存</div>
-        </div>
-        <div className="stat-card">
           <div className="stat-label">上涨 / 下跌</div>
           <div className="stat-value">
             <span className="up">{stats.up}</span>
@@ -222,18 +212,6 @@ export default function FocusFundsPage() {
             <span className="down">{stats.down}</span>
           </div>
           <div className="stat-sub">按今日涨幅统计</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">平均日涨幅</div>
-          <div className={`stat-value ${toneOf(stats.avg)}`}>{formatPct(stats.avg)}</div>
-          <div className="stat-sub">自选基金算术平均</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">最近净值日期</div>
-          <div className="stat-value" style={{ fontSize: 18 }}>
-            {rows.find((r) => r.date)?.date || "--"}
-          </div>
-          <div className="stat-sub">基金净值通常 T+1 更新</div>
         </div>
       </div>
 
